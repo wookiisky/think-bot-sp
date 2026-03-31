@@ -7,7 +7,7 @@
 产品形态：
 
 - Chrome Manifest V3 扩展
-- 当前版本：`1.2.5`
+
 - 主要入口：
   - 侧边栏：`sidebar/sidebar.html`
   - 设置页：`options/options.html`
@@ -721,6 +721,5 @@ Provider 专属配置能力覆盖了 Base URL、API Key、Model、Deployment、T
 - 当前黑名单以正则配置为主，更偏高级用户
 - 当前历史会话主要按“页面 URL + 内部标签”组织，尚无项目或文件夹层级
 
-## 15. 一句话总结
-
-当前实现的 Think Bot 已经形成“网页提取 + 模板化提问 + 多模型分支 + 历史工作台 + 配置同步”的完整产品闭环。
+## 15. 菜单
+扩展栏邮件菜单包含conversation项点击后跳转到历史对话页面

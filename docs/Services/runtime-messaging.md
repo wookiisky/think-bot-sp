@@ -1,0 +1,168 @@
+# 运行时消息服务
+
+## 1. 模块定位
+
+运行时消息服务负责统一管理 extension pages、content script 和 background 之间的 typed command 与长连接流式事件。
+
+## 2. 核心抽象
+
+- `CommandMap`
+- `EventMap`
+- `PortStreamEvent`
+- `MessageSenderContext`
+
+## 3. 能力边界
+
+负责：
+
+- one-shot command 编解码。
+- long-lived port 生命周期管理。
+- sender 校验。
+- 背景页重启后的恢复握手。
+
+不负责：
+
+- 业务数据持久化。
+- UI 组件渲染。
+- Provider 调用。
+
+## 4. 对外接口
+
+one-shot command：
+
+- `GET_PAGE_INFO`
+- `CONFIRM_BLACKLIST_BYPASS`
+- `SWITCH_EXTRACTION_METHOD`
+- `RE_EXTRACT_CONTENT`
+- `SEND_CHAT`
+- `STOP_SESSION`
+- `STOP_BRANCH`
+- `DELETE_BRANCH`
+- `EDIT_USER_MESSAGE`
+- `RETRY_MESSAGE`
+- `EXPAND_MESSAGE_BRANCHES`
+- `CLEAR_TAB_CONVERSATION`
+- `EXPORT_CONVERSATION`
+- `GET_CONFIG`
+- `SAVE_CONFIG`
+- `RESET_CONFIG`
+- `IMPORT_CONFIG`
+- `EXPORT_CONFIG`
+- `TEST_SYNC_CONNECTION`
+- `SYNC_NOW`
+- `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
+- `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
+- `LIST_PAGES`
+- `SEARCH_PAGES`
+- `GET_PAGE_DETAIL`
+- `UPDATE_PAGE_TITLE`
+- `DELETE_PAGE`
+
+long-lived port 事件：
+
+- `STREAM_CHUNK`
+- `STREAM_DONE`
+- `STREAM_ERROR`
+- `STREAM_CANCELLED`
+- `LOADING_STATE_UPDATE`
+- `BLACKLIST_DETECTED`
+- `RESTORE_LOADING`
+
+命令分组约束：
+
+- 侧边栏页面使用：
+  - `GET_PAGE_INFO`
+  - `CONFIRM_BLACKLIST_BYPASS`
+  - `SWITCH_EXTRACTION_METHOD`
+  - `RE_EXTRACT_CONTENT`
+  - `SEND_CHAT`
+  - `STOP_SESSION`
+  - `STOP_BRANCH`
+  - `DELETE_BRANCH`
+  - `EDIT_USER_MESSAGE`
+  - `RETRY_MESSAGE`
+  - `EXPAND_MESSAGE_BRANCHES`
+  - `CLEAR_TAB_CONVERSATION`
+  - `EXPORT_CONVERSATION`
+- 设置页使用：
+  - `GET_CONFIG`
+  - `SAVE_CONFIG`
+  - `RESET_CONFIG`
+  - `IMPORT_CONFIG`
+  - `EXPORT_CONFIG`
+  - `TEST_SYNC_CONNECTION`
+  - `SYNC_NOW`
+  - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
+  - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
+- 对话管理页使用：
+  - `LIST_PAGES`
+  - `SEARCH_PAGES`
+  - `GET_PAGE_DETAIL`
+  - `UPDATE_PAGE_TITLE`
+  - `DELETE_PAGE`
+  - `SEND_CHAT`
+  - `STOP_SESSION`
+  - `STOP_BRANCH`
+  - `DELETE_BRANCH`
+  - `EDIT_USER_MESSAGE`
+  - `RETRY_MESSAGE`
+  - `EXPAND_MESSAGE_BRANCHES`
+  - `CLEAR_TAB_CONVERSATION`
+  - `EXPORT_CONVERSATION`
+
+## 5. 关键流程
+
+- extension page 发 one-shot command 到 background。
+- 流式任务创建后，UI 建立 port 订阅。
+- background 按 `sessionId` 路由事件。
+- side panel 重开后，通过 `RESTORE_LOADING` 重新订阅。
+- 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
+- `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
+
+## 6. 错误与异常处理
+
+- sender 非法：
+  - 直接拒绝请求。
+- 参数结构非法：
+  - 返回 schema 错误。
+- port 断开：
+  - 不视为任务终止，loading state 继续保留。
+- service worker 重启：
+  - 新建端口后按持久化状态恢复。
+- 黑名单确认超时或页面上下文失效：
+  - 拒绝本次放行请求，要求 UI 重新获取页面上下文。
+
+## 7. 数据与状态
+
+- 短生命周期内存：
+  - 当前已连接端口映射。
+- 持久化依赖：
+  - `LoadingStateRecord`
+
+## 8. 依赖与协作模块
+
+- `Platform/chrome-mv3-runtime.md`
+- `Services/llm-dispatch.md`
+- `Services/extraction.md`
+
+## 9. 约束与禁止事项
+
+- 流式消息必须走 long-lived port，不走 one-shot message 轮询。
+- 所有 content script 消息都视为不可信输入。
+- 不依赖 service worker 全局变量保存恢复关键状态。
+- 不把消息名写死在多个 UI 页面。
+- 页面列表、页面详情、标题编辑、消息编辑、分支操作都必须有独立命令名，不允许用“万能命令 + 任意 payload”逃避 schema。
+
+## 10. 测试要求
+
+- 职责测试：command 路由、port 流式事件、恢复握手。
+- 边界测试：非法 sender、非法参数、重复连接。
+- 错误流测试：port 中断、service worker 重启。
+- 异常流测试：side panel 关闭重连、conversations 页面恢复。
+- 不变量测试：同一 `sessionId` 的事件顺序正确。
+
+## 11. 相关文档
+
+- `Platform/chrome-mv3-runtime.md`
+- `test/llm-and-streaming.md`
+- `test/browser-automation.md`
