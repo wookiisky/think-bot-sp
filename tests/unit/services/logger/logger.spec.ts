@@ -17,5 +17,7 @@ describe('logger', () => {
       tabId: 7,
       apiKey: '[REDACTED]',
     });
+
+    spy.mockRestore();
   });
 });

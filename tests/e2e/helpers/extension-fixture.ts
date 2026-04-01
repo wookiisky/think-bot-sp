@@ -24,7 +24,13 @@ export const test = base.extend<ExtensionFixtures>({
   extensionId: async ({ context }, use) => {
     const serviceWorker =
       context.serviceWorkers()[0] ??
-      (await context.waitForEvent('serviceworker'));
+      (await context.waitForEvent('serviceworker', {
+        timeout: 3000,
+      }).catch(() => {
+        throw new Error(
+          'service worker never appeared; extension build did not expose background entrypoint yet',
+        );
+      }));
     const extensionId = new URL(serviceWorker.url()).host;
 
     await use(extensionId);
