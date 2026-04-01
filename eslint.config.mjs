@@ -1,10 +1,11 @@
 import js from '@eslint/js';
-import rawTsPlugin from '@typescript-eslint/eslint-plugin/use-at-your-own-risk/raw-plugin';
+import tsPluginImport from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 
 const baseConfigs = [js.configs.recommended];
-const tsFlatRecommended = rawTsPlugin.flatConfigs?.['flat/recommended'] ?? [];
-const tsFlatRecommendedConfigs = Array.isArray(tsFlatRecommended) ? tsFlatRecommended : [tsFlatRecommended];
+const tsPlugin = tsPluginImport['module.exports'] ?? tsPluginImport;
+const tsFlatRecommended = tsPlugin?.flatConfigs?.['flat/recommended'] ?? [];
+const tsFlatRecommendedConfigs = Array.isArray(tsFlatRecommended) ? tsFlatRecommended : tsFlatRecommended ? [tsFlatRecommended] : [];
 
 const ignoreConfig = {
   ignores: [
