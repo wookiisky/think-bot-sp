@@ -1,0 +1,11 @@
+import { expect, test } from './helpers/extension-fixture';
+
+test('loads the MV3 extension and opens options/conversations shells', async ({ context, extensionId }) => {
+  const options = await context.newPage();
+  await options.goto(`chrome-extension://${extensionId}/options.html`);
+  await expect(options.getByRole('heading', { name: 'Options' })).toBeVisible();
+
+  const conversations = await context.newPage();
+  await conversations.goto(`chrome-extension://${extensionId}/conversations.html`);
+  await expect(conversations.getByRole('heading', { name: 'Conversations' })).toBeVisible();
+});
