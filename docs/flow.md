@@ -4,6 +4,7 @@
 
 涉及模块：
 
+- `browser-entry.md`
 - `Platform/chrome-mv3-runtime.md`
 - `Services/runtime-messaging.md`
 - `Services/extraction.md`
@@ -13,26 +14,44 @@
 流程：
 
 1. 用户点击扩展图标。
-2. background 判断当前 tab 是否为可用普通网页。
-3. 可用时调用 `sidePanel.open()` 并发送页面初始化命令。
-4. side panel 通过 one-shot command 请求当前页面基础信息和缓存状态。
+2. background 判断当前 `browserTab` 是否为可用普通网页。
+3. 可用时，background 为当前 `browserTab` 设置 side panel 选项并调用 `sidePanel.open({ tabId })`。
+4. side panel 完成挂载后，通过 one-shot command 主动请求当前页面基础信息和缓存状态。
 5. background 读取页面缓存。
-6. 有缓存则先返回页面内容与页面状态，再决定是否后台补刷新。
+6. 有缓存则先返回页面内容、页面状态和 `promptTab` 去重状态，不重复提取。
 7. 无缓存则驱动 content script 读取 DOM，并进入正文提取流程。
 
 状态变化：
 
-- 页面上下文进入“已绑定当前 tab”。
+- 页面上下文进入“已绑定当前 `browserTab`”。
 - 侧边栏进入“已打开”。
 - 页面记录可能从“无缓存”变为“已缓存”。
 
 关键验证点：
 
 - `sidePanel.open()` 只能由用户点击链路触发。
+- side panel 初始化只能由 side panel 自己拉起，background 不主动推送首屏初始化命令。
 - 普通页打开时优先显示缓存而不是空白页。
 - content script 不可用时必须进入异常流而不是静默失败。
 
-## 2. 异常流：受限页面退化
+## 2. 主流程：切换浏览器标签页后自动隐藏
+
+流程：
+
+1. 用户在 `browserTab A` 打开 side panel。
+2. 用户切换到 `browserTab B`。
+3. 若 `browserTab B` 未启用 side panel，浏览器自动隐藏 side panel。
+4. background 根据 `tabs.onActivated` 清理 `browserTab A` 的 side panel 启用态。
+5. 用户切回 `browserTab A` 时，side panel 不自动恢复。
+6. 用户再次点击扩展图标后，side panel 才重新打开。
+
+关键验证点：
+
+- 产品语义是“自动隐藏，不自动恢复”，不是“切回即自动显示”。
+- 清理 `browserTab A` 启用态后，重新打开仍能命中缓存和恢复 loading。
+- 切换 `browserTab` 不会导致已有会话或进行中的 `promptTab` 重复自动触发。
+
+## 3. 异常流：受限页面退化
 
 流程：
 
@@ -46,7 +65,44 @@
 - 不尝试对受限页面执行脚本。
 - 用户有明确可继续工作的入口。
 
-## 3. 主流程：页面内容提取
+## 4. 主流程：扩展图标右键菜单打开历史页
+
+涉及模块：
+
+- `browser-entry.md`
+- `Workspace/conversations.md`
+
+流程：
+
+1. background 在安装阶段注册扩展图标右键菜单。
+2. 用户点击菜单中的 `Conversations` 入口。
+3. background 直接打开 conversations 页面。
+4. conversations 页面自行加载历史页面列表。
+
+关键验证点：
+
+- 右键菜单入口不依赖当前网页是否可注入。
+- 右键菜单入口不会误触发 side panel 初始化。
+
+## 5. 主流程：首次安装打开快速上手
+
+涉及模块：
+
+- `browser-entry.md`
+
+流程：
+
+1. 扩展首次安装完成。
+2. background 读取浏览器语言。
+3. 在中文和英文快速上手文档之间做选择。
+4. 在新标签页打开对应文档。
+
+关键验证点：
+
+- 首次安装只触发一次默认打开动作。
+- 文档语言选择与浏览器语言一致。
+
+## 6. 主流程：页面内容提取
 
 涉及模块：
 
@@ -55,13 +111,16 @@
 
 流程：
 
-1. UI 发起 `GET_PAGE_INFO` 或 `RE_EXTRACT_CONTENT`。
-2. background 请求 content script 提供页面 HTML 和元数据。
-3. 提取服务优先使用 Readability。
-4. Readability 成功则保存页面内容、提取方式、更新时间。
-5. Readability 失败且允许回退时，调用 Jina 提取。
-6. Jina 成功则保存新内容和方法。
-7. 全部失败则返回错误态，并保留当前页面上下文。
+1. side panel 在初始化时发起 `GET_PAGE_INFO`，用户手动点击时发起 `RE_EXTRACT_CONTENT`。
+2. background 先返回缓存、页面状态、`promptTab` 会话摘要和 loading 状态。
+3. 若页面已有有效缓存，则不重复提取。
+4. 若页面无缓存且允许继续流程，background 请求 content script 提供页面 HTML 和元数据。
+5. 提取服务优先使用 Readability。
+6. Readability 成功则保存页面内容、提取方式、更新时间。
+7. Readability 失败且允许回退时，调用 Jina 提取。
+8. Jina 成功则保存新内容和方法。
+9. side panel 将提取结果显示在常驻独立的提取内容区。
+10. 全部失败则返回错误态，并保留当前页面上下文。
 
 错误流：
 
@@ -75,13 +134,16 @@
 
 - 重新提取始终沿用当前选择的方法。
 - 已有可用缓存时，失败不清空旧内容。
+- 切换 `promptTab` 不会隐藏提取内容区，也不会改变页面提取结果。
+- side panel 再次打开时，若缓存仍有效则不重复提取。
 
 关键验证点：
 
 - 切换提取方法只影响当前页面。
 - 页面级 `includePageContent` 不受提取失败影响。
+- 提取内容区与聊天区必须并存，不能把提取内容降级为某个 `promptTab` 的临时内容。
 
-## 4. 主流程：发送消息与流式输出
+## 7. 主流程：发送消息与流式输出
 
 涉及模块：
 
@@ -115,26 +177,28 @@
 - API Key 只在 background 服务层使用。
 - side panel 关闭再打开后，仍能基于持久化 loading state 恢复 UI。
 
-## 5. 主流程：快捷输入与自动触发
+## 8. 主流程：快捷输入与自动触发
 
 流程：
 
 1. 页面内容加载完成后，background 读取快捷输入配置。
 2. 过滤 `autoTrigger=true` 的快捷输入。
-3. 对每个候选标签检查：
+3. 对每个候选 `promptTab` 检查：
    - 页面内容是否存在。
-   - 当前标签是否已有历史。
-   - 当前标签是否已初始化。
-4. 满足条件时后台发起发送，不切换当前可见标签。
-5. 对应标签进入 loading，完成后切为 `has-content`。
+   - 当前 `promptTab` 是否已有历史。
+   - 当前 `promptTab` 是否正在 loading。
+   - 当前 `promptTab` 是否已初始化。
+4. 满足条件时后台发起发送，不切换当前可见 `promptTab`。
+5. 对应 `promptTab` 进入 loading，完成后切为 `has-content`。
 
 关键验证点：
 
-- 自动触发不打断用户当前标签。
+- 自动触发不打断用户当前 `promptTab`。
 - 自动触发不会因重开侧边栏而重复执行。
-- 清空当前标签后，该标签自动触发状态会被重置，后续重新进入页面时可再次自动触发。
+- side panel 再次打开时，已有历史或仍在执行中的 `promptTab` 不重复自动触发。
+- 清空当前 `promptTab` 后，该 `promptTab` 自动触发状态会被重置，后续重新进入页面时可再次自动触发。
 
-## 6. 主流程：分支并发分析
+## 9. 主流程：分支并发分析
 
 流程：
 
@@ -155,7 +219,7 @@
 - 分支必须保留模型身份。
 - 分支预览依赖完整 Markdown 内容。
 
-## 7. 主流程：历史恢复与继续对话
+## 10. 主流程：历史恢复与继续对话
 
 涉及模块：
 
@@ -169,18 +233,38 @@
 2. 用户选中某个页面。
 3. 页面读取：
    - 页面记录
-   - 标签结构
-   - 标签会话
+   - `promptTab` 结构
+   - `promptTab` 会话
    - loading state
-4. UI 恢复提取内容、标签、消息、图片区和输入区。
+4. UI 恢复页面标题、URL、提取内容、`promptTab`、消息、图片区和输入区。
 5. 用户可继续发送消息，行为与侧边栏一致。
 
 关键验证点：
 
 - 历史页左栏以页面元数据为 source of truth。
+- 右侧工作区同时保留提取内容区和聊天区。
+- loading 恢复要覆盖主会话和分支状态。
 - 删除页面只影响目标页面。
 
-## 8. 主流程：同步与删除
+## 11. 主流程：页面级清空与 promptTab 级清空
+
+流程：
+
+1. 用户触发顶部垃圾桶按钮时，UI 发起页面级清空命令。
+2. background 取消该页面仍在进行中的请求。
+3. background 清理当前页面缓存、页面级状态、`promptTab` 会话和 loading state。
+4. side panel 保留当前布局骨架，并回到“页面待重新提取、`promptTab` 待重新初始化”的初始态。
+5. 用户触发底部清空按钮时，UI 发起当前 `promptTab` 会话清空命令。
+6. background 只清理当前 `promptTab` 会话和该 `promptTab` 相关 loading state。
+7. UI 保留页面提取内容、其他 `promptTab` 历史和页面级状态不变。
+
+关键验证点：
+
+- 顶部清空和底部清空必须作用于不同数据范围。
+- 页面级清空后，重新进入页面可以重新提取并重新自动触发。
+- `promptTab` 级清空后，不影响页面提取内容和其他 `promptTab`。
+
+## 12. 主流程：同步与删除
 
 涉及模块：
 
@@ -207,12 +291,12 @@
 - 同步失败不覆盖本地有效数据。
 - 本地和远端同时修改不同对象时，不允许整份快照互相覆盖。
 
-## 9. 主流程：消息编辑与分支操作
+## 13. 主流程：消息编辑与分支操作
 
 流程：
 
 1. UI 对目标消息或分支发起 typed command。
-2. background 校验目标对象属于当前页面和标签。
+2. background 校验目标对象属于当前页面和 `promptTab`。
 3. 用户消息编辑：
    - 更新目标用户消息内容
    - 裁剪其后的依赖回答和分支
@@ -232,7 +316,7 @@
 - 重试和继续新增分支都不能覆盖已有分支。
 - 停止和删除必须局部生效。
 
-## 10. 主流程：黑名单确认
+## 14. 主流程：黑名单确认
 
 流程：
 

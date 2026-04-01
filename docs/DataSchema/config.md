@@ -32,6 +32,63 @@
   - 必填：是
   - 默认值：空数组
   - 含义：全部模型配置。
+  - 字段约束：
+    - `id`
+      - 类型：`string`
+      - 必填：是
+      - 含义：模型稳定 ID，用于引用、排序和软删除。
+    - `name`
+      - 类型：`string`
+      - 必填：是
+      - 含义：设置页与其他入口展示的模型名称。
+    - `provider`
+      - 类型：`"openai-compatible" | "gemini" | "azure-openai" | "anthropic"`
+      - 必填：是
+      - 含义：Provider 类型，决定字段显隐、校验和调度适配器。
+    - `enabled`
+      - 类型：`boolean`
+      - 必填：是
+      - 含义：是否允许进入默认模型候选和发送入口。
+    - `model`
+      - 类型：`string`
+      - 必填：条件必填
+      - 含义：Provider 使用的模型标识。
+    - `baseUrl`
+      - 类型：`string`
+      - 必填：条件必填
+      - 含义：兼容 OpenAI 或代理场景的请求入口地址。
+    - `apiKey`
+      - 类型：`string`
+      - 必填：条件必填
+      - 含义：模型访问凭证，仅存于本地配置和用户显式启用的同步目标。
+    - `deployment`
+      - 类型：`string`
+      - 必填：条件必填
+      - 含义：Azure OpenAI 的 deployment 标识。
+    - `temperature`
+      - 类型：`number`
+      - 必填：否
+      - 含义：采样温度。
+    - `tools`
+      - 类型：`string[]`
+      - 必填：否
+      - 含义：模型启用的工具能力列表，例如 URL Context。
+    - `thinkingBudget`
+      - 类型：`number`
+      - 必填：否
+      - 含义：支持思考预算的模型专属参数。
+    - `maxOutputTokens`
+      - 类型：`number`
+      - 必填：否
+      - 含义：单次输出的 token 上限。
+    - `order`
+      - 类型：`number`
+      - 必填：是
+      - 含义：列表展示顺序和拖拽结果。
+    - `deletedAt`
+      - 类型：`number | null`
+      - 必填：否
+      - 含义：软删除时间，存在时表示不再对外展示，但保留历史引用。
 - `quickInputs`
   - 类型：`QuickInput[]`
   - 必填：是
@@ -52,6 +109,8 @@
 - 单一主记录，不做拆散多 key 写入。
 - 模型、快捷输入、黑名单内部对象必须带稳定 `id`。
 - 删除模型和快捷输入采用软删除标记，不直接丢失历史引用。
+- 设置页中的模型项采用“列表摘要 + 展开编辑”形态，但持久化仍以完整对象保存，不拆分多 key。
+- Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。
 
 ## 4. 读写路径
 
@@ -71,6 +130,18 @@
   - 恢复默认。
   - 导入配置替换。
 
+“启用且配置完整”的模型定义：
+
+- `enabled = true`
+- `deletedAt` 为空
+- `name` 非空
+- `provider` 合法
+- Provider 关键字段完整：
+  - `openai-compatible`：`baseUrl`、`apiKey`、`model`
+  - `gemini`：`apiKey`、`model`
+  - `azure-openai`：`baseUrl`、`apiKey`、`deployment`
+  - `anthropic`：`apiKey`、`model`
+
 ## 5. 生命周期与风险
 
 - 首次安装时写入默认值。
@@ -80,11 +151,13 @@
 - 风险：
   - 大对象整体保存可能覆盖并发修改。
   - 不完整模型进入默认模型候选会导致发送失败。
+  - Provider 切换后如果旧字段校验残留，会导致用户无法保存合法配置。
   - 缺少 `updatedAt` 会导致同步时无法稳定判定本地配置和远端配置谁更新。
 
 ## 6. 测试要求
 
 - 字段约束测试：主题、语言、默认模型、Provider 字段校验。
+- Provider 测试：字段显隐、完整性判定、切换后残留字段兼容。
 - 唯一性测试：模型 ID、快捷输入 ID、黑名单 ID。
 - 读写一致性测试：保存后跨页面读取一致。
 - 并发写入测试：快速保存配置不丢字段。

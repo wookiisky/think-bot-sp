@@ -7,6 +7,7 @@
 ## 2. 顶层文档
 
 - `app.md`：项目总览、运行单元、模块关系、关键约束。
+- `browser-entry.md`：浏览器入口、受限页退化、首次安装生命周期。
 - `tech_stack.md`：技术选型、核心库、版本基线、兼容约束。
 - `decision_log.md`：关键产品和技术决策记录。
 - `flow.md`：跨模块主流程、异常流、恢复策略、验证点。
@@ -52,6 +53,7 @@
 ## 6. 常见任务导航
 
 - 想看整体重写边界：`app.md`、`decision_log.md`。
+- 想确认扩展入口与安装行为：`browser-entry.md`、`flow.md`。
 - 想确认 MV3 限制：`Platform/chrome-mv3-runtime.md`、`Services/runtime-messaging.md`。
 - 想实现页面提取：`Services/extraction.md`、`flow.md`。
 - 想实现模型调用与流式：`Services/llm-dispatch.md`、`test/llm-and-streaming.md`。

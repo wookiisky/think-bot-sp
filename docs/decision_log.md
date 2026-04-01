@@ -129,3 +129,58 @@
   - 以单测为主、人工回归为辅。
 - 后续同步：
   - 全部测试文档。
+
+## 2026-04-01：对话管理页沿用侧边栏工作台语义
+
+- 背景：
+  - 对话管理页虽然处理历史页面，但从设计图和产品目标看，它不是只读归档页，而是恢复后继续工作的主入口。
+- 决策：
+  - 对话管理页在右侧工作区沿用侧边栏的核心工作台语义，固定保留提取内容区、快捷输入标签区、聊天区和底部输入区。
+  - 对话管理页继续复用侧边栏的模型选择、图片输入、停止、清空、导出、分支消息和 Markdown 渲染规则。
+- 原因：
+  - 保证用户在当前网页和历史网页之间切换时心智一致。
+  - 降低两套交互语义长期漂移带来的实现和测试成本。
+  - 保持历史恢复后的继续工作能力，而不是退化为单纯浏览器历史页。
+- 影响范围：
+  - `Workspace/conversations.md`
+  - `Workspace/sidebar.md`
+  - `test/conversations-core.md`
+- 放弃方案：
+  - 对话管理页只展示聊天记录，不保留提取内容区。
+  - 对话管理页单独设计一套轻量输入和消息交互。
+- 后续同步：
+  - `flow.md`
+  - `app.md`
+
+## 2026-04-01：side panel 采用 browserTab 级显隐，内部标签统一命名为 promptTab
+
+- 背景：
+  - 文档中同时使用“tab”表示 Chrome 浏览器标签页和侧边栏内快捷输入标签，已经产生初始化责任和生命周期歧义。
+  - Chrome 官方 side panel 对 `browserTab` 的默认行为是切到未启用页时自动隐藏、切回已打开页时自动再次显示，这与当前产品语义不一致。
+- 决策：
+  - 文档中统一使用 `browserTab` 表示 Chrome 标签页，使用 `promptTab` 表示 `Chat` 与快捷输入标签。
+  - side panel 只按 `browserTab` 维度启用，不使用全局 panel 语义。
+  - 用户切换到其他 `browserTab` 时允许浏览器自动隐藏 side panel，但切回原 `browserTab` 时不自动恢复，必须再次点击扩展图标后重新打开。
+  - side panel 初始化由 side panel 自己在挂载后主动拉取 `GET_PAGE_INFO`，background 不主动推送首屏初始化命令。
+  - side panel 再次打开时，有页面缓存不重复提取；已有历史或仍在执行中的 `promptTab` 不重复自动触发。
+- 原因：
+  - 避免 `browserTab` 与 `promptTab` 混淆导致的实现偏差。
+  - 降低 `sidePanel.open()` 后首屏消息丢失的竞态风险。
+  - 让 side panel 生命周期与产品预期一致，并保持自动触发幂等。
+- 影响范围：
+  - `browser-entry.md`
+  - `flow.md`
+  - `Platform/chrome-mv3-runtime.md`
+  - `Workspace/sidebar.md`
+  - `DataSchema/page.md`
+  - `DataSchema/conversation.md`
+  - `DataSchema/loading-state.md`
+  - `test/browser-automation.md`
+  - `test/sidebar-core.md`
+- 放弃方案：
+  - 使用“tab”同时指代两类对象。
+  - 依赖 Chrome 默认行为让 side panel 在切回原 `browserTab` 时自动恢复。
+  - 由 background 在 `sidePanel.open()` 后立即推送初始化消息。
+- 后续同步：
+  - `dao/page-repository.md`
+  - `dao/conversation-repository.md`

@@ -4,13 +4,20 @@
 
 本文件描述 Think Bot 重开发必须遵守的 Chrome MV3 运行时事实、权限边界和限制条件。
 
+术语约定：
+
+- `browserTab`：Chrome 浏览器标签页。
+- `promptTab`：side panel 或 conversations 中的 `Chat` / 快捷输入标签。
+
 ## 2. 运行单元限制
 
 ### 2.1 Side Panel
 
 - `sidePanel.open()` 需要用户手势。
 - side panel 是 extension page，可访问 Chrome API。
-- side panel 打开状态、当前 tab 关联关系由浏览器控制，不可假设长期稳定。
+- side panel 默认存在全局 panel 和 `browserTab` 级 panel 两种语义，业务侧必须显式使用 `browserTab` 级 panel。
+- 切换到未启用 side panel 的 `browserTab` 时，浏览器会自动隐藏 side panel。
+- Chrome 官方默认行为是切回已打开过的 `browserTab` 时 side panel 会自动再次显示；产品若要求“不自动恢复”，必须在 `browserTab` 切换后主动清理上一 `browserTab` 的启用态。
 
 ### 2.2 Content Script
 
@@ -46,10 +53,16 @@
 权限用途：
 
 - `sidePanel`：打开和管理侧边栏。
-- `activeTab`：用户显式触发下访问当前标签页。
+- `activeTab`：用户显式触发下访问当前 `browserTab`。
 - `scripting`：按需执行脚本或注入桥接。
 - `downloads`：导出 Markdown 与配置文件。
 - `storage`：本地持久化。
+
+权限约束：
+
+- 自动提取只允许发生在 side panel 已打开后的初始化流程中。
+- 不能把“打开 `browserTab`”理解成“任意网页标签页一创建就后台自动提取”。
+- `promptTab` 自动触发去重必须依赖持久化状态，不能只依赖 UI 内存。
 
 ## 5. 通信限制
 
@@ -73,6 +86,7 @@
 ## 8. 测试要求
 
 - 侧边栏只能在用户操作链路中打开。
+- `browserTab` 切换后 side panel 自动隐藏，切回原 `browserTab` 不自动恢复。
 - 受限页不能尝试注入脚本。
 - service worker 重启后 loading 恢复正确。
 - host permissions 缺失时错误可诊断。
