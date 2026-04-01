@@ -1,11 +1,11 @@
 import js from '@eslint/js';
 import tsPluginImport from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 
 const baseConfigs = [js.configs.recommended];
 const tsPlugin = tsPluginImport['module.exports'] ?? tsPluginImport;
 const tsFlatRecommended = tsPlugin?.flatConfigs?.['flat/recommended'] ?? [];
 const tsFlatRecommendedConfigs = Array.isArray(tsFlatRecommended) ? tsFlatRecommended : tsFlatRecommended ? [tsFlatRecommended] : [];
+const tsParser = tsPlugin.parser;
 
 const ignoreConfig = {
   ignores: [
@@ -29,7 +29,6 @@ export default [
       'tests/**/*.{js,ts,tsx}',
       'entrypoints/**/*.{js,ts,tsx}'
     ],
-    ignores: ['.output/.wxt/playwright-report/test-results'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
