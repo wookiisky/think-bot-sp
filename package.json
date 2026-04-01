@@ -1,0 +1,36 @@
+{
+  "name": "phase-1-wxt",
+  "private": true,
+  "scripts": {
+    "dev": "wxt dev",
+    "build": "wxt build",
+    "test:unit": "vitest run --dir=tests/unit --reporter=dots",
+    "test:component": "vitest run --dir=tests/component --reporter=dots",
+    "test:e2e": "playwright test --config=./playwright.config.ts",
+    "lint": "eslint --ignore-pattern \".wxt/**\" --ignore-pattern \".output/**\" --ignore-pattern \"playwright-report/**\" --ignore-pattern \"test-results/**\" .",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@types/chrome": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@wxt-dev/module-react": "latest",
+    "@eslint/js": "latest",
+    "eslint": "latest",
+    "globals": "latest",
+    "jsdom": "latest",
+    "typescript": "latest",
+    "@typescript-eslint/parser": "latest",
+    "@typescript-eslint/eslint-plugin": "latest",
+    "vitest": "latest",
+    "wxt": "latest"
+  }
+}

@@ -71,3 +71,13 @@ Thumbs.db
 .agents
 skills-lock.json
 .worktrees/
+.output/
+.wxt/
+node_modules/
+playwright-report/
+test-results/
+.output/
+.wxt/
+node_modules/
+playwright-report/
+test-results/
