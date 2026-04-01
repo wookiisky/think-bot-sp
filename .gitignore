@@ -76,8 +76,3 @@ skills-lock.json
 node_modules/
 playwright-report/
 test-results/
-.output/
-.wxt/
-node_modules/
-playwright-report/
-test-results/

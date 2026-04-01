@@ -1,11 +1,6 @@
 import js from '@eslint/js';
-import tsPluginImport from '@typescript-eslint/eslint-plugin';
-
-const baseConfigs = [js.configs.recommended];
-const tsPlugin = tsPluginImport['module.exports'] ?? tsPluginImport;
-const tsFlatRecommended = tsPlugin?.flatConfigs?.['flat/recommended'] ?? [];
-const tsFlatRecommendedConfigs = Array.isArray(tsFlatRecommended) ? tsFlatRecommended : tsFlatRecommended ? [tsFlatRecommended] : [];
-const tsParser = tsPlugin.parser;
+import tseslint from 'typescript-eslint';
+import globals from 'globals';
 
 const ignoreConfig = {
   ignores: [
@@ -18,8 +13,8 @@ const ignoreConfig = {
 
 export default [
   ignoreConfig,
-  ...baseConfigs,
-  ...tsFlatRecommendedConfigs,
+  js.configs.recommended,
+  ...(Array.isArray(tseslint.configs.recommended) ? tseslint.configs.recommended : [tseslint.configs.recommended]),
   {
     files: [
       '*.js',
@@ -30,16 +25,15 @@ export default [
       'entrypoints/**/*.{js,ts,tsx}'
     ],
     languageOptions: {
-      parser: tsParser,
+      parser: tseslint.parser,
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
         ecmaFeatures: { jsx: true }
       },
       globals: {
-        browser: 'readonly',
-        process: 'readonly',
-        document: 'readonly'
+        ...globals.browser,
+        ...globals.node
       }
     },
     rules: {

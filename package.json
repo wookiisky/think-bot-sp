@@ -9,7 +9,7 @@
     "test:unit": "vitest run tests/unit --passWithNoTests",
     "test:component": "vitest run tests/component --passWithNoTests",
     "test:e2e": "playwright test --config=./playwright.config.ts --pass-with-no-tests",
-    "lint": "eslint --ignore-pattern \".wxt/**\" --ignore-pattern \".output/**\" --ignore-pattern \"playwright-report/**\" --ignore-pattern \"test-results/**\" .",
+    "lint": "eslint .",
     "postinstall": "wxt prepare"
   },
   "dependencies": {
@@ -30,7 +30,7 @@
     "globals": "^16.0.0",
     "jsdom": "^26.0.0",
     "typescript": "^5.8.3",
-    "@typescript-eslint/eslint-plugin": "^8.29.0",
+    "typescript-eslint": "^8.29.0",
     "vitest": "^3.1.1",
     "wxt": "^0.20.6"
   }
