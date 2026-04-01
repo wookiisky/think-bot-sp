@@ -157,6 +157,12 @@
 
 重构时，消息名、载荷结构和触发时序都属于高风险兼容点。
 
+说明：
+
+- 本节中的旧消息名来自现有实现扫描结果，只作为遗留兼容风险参考。
+- 重开发后的统一消息契约以 `/docs/Services/runtime-messaging.md` 为准。
+- 侧边栏首屏初始化不再以 `SIDEBAR_OPENED` 为新方案协议，而采用 side panel 挂载后主动拉取 bootstrap。
+
 ### 5.1 前台到 background 的关键请求
 
 - `GET_PAGE_INFO`

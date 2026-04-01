@@ -43,9 +43,10 @@
 1. 用户点击扩展图标。
 2. background 读取当前活动 `browserTab` 与 URL。
 3. 若页面可注入，则先调用 `sidePanel.setOptions({ tabId: browserTabId, path, enabled: true })`，再调用 `sidePanel.open({ tabId: browserTabId })`。
-4. side panel 完成挂载后主动发起 `GET_PAGE_INFO`。
-5. background 返回页面缓存、提取状态和自动触发去重所需状态。
-6. side panel 再进入黑名单判断、内容提取和自动触发流程。
+4. side panel 完成挂载后主动发起 `GET_SIDEBAR_BOOTSTRAP`。
+5. background 返回当前页面缓存、会话恢复数据、loading 状态、黑名单判定结果和是否需要继续提取的初始化摘要。
+6. side panel 先渲染恢复态；若命中黑名单，则只展示确认层，不直接执行提取和自动触发。
+7. 用户确认继续后，side panel 再发起 `CONFIRM_BLACKLIST_CONTINUE`，随后进入提取和自动触发流程。
 
 ### 4.2 切换浏览器标签页
 
@@ -97,6 +98,8 @@
 - 右键菜单入口只能打开 conversations，不能隐式进入 side panel。
 - 首次安装只负责打开快速上手文档，不预热页面提取和模型调用。
 - 受限页判断失败不能降级为“先尝试注入，失败再说”。
+- side panel 首屏初始化必须由 side panel 主动拉取 bootstrap，background 不主动推送首屏命令。
+- 黑名单未放行前，不能开始提取或自动触发。
 - side panel 再次打开时，有缓存不重复提取；已有会话或 loading 的 `promptTab` 不重复自动触发。
 
 ## 7. 测试要求

@@ -25,12 +25,14 @@
   - 首次安装会按浏览器语言打开快速上手文档。
 - P0 主流程：
   - 普通网页打开 side panel。
+  - side panel 挂载后主动拉取 `GET_SIDEBAR_BOOTSTRAP`，首屏不依赖 background 主动推送初始化消息。
   - `browserTab A` 打开 side panel，切到 `browserTab B` 自动隐藏，切回 `browserTab A` 不自动恢复，再次点击扩展图标后重新打开。
   - 右键菜单打开 conversations 页面。
   - 提取、发送、快捷输入、分支、取消、恢复、消息编辑。
   - 设置页模型与语言配置、远端快捷输入模板导入。
   - conversations 页面恢复、继续对话、打开原网页不改变当前选中。
   - 黑名单与受限页退化。
+  - 黑名单命中时先展示确认层，未放行前不执行提取和自动触发。
 - 可观测性：
   - 关键流程可在浏览器 console 中观察到稳定日志事件名。
   - 调试日志不输出 API Key、同步密钥、完整页面正文和完整用户输入。
@@ -46,6 +48,7 @@
 - 右键菜单不依赖当前页面是否可注入。
 - service worker 在测试中被回收后重新唤起。
 - content script 注入失败。
+- 自动触发只在黑名单已放行且页面内容有效后才允许开始。
 
 ## 5. 测试环境要求
 
@@ -57,9 +60,11 @@
 ## 6. 必须长期回归的高风险场景
 
 - side panel 打开时机错误。
+- side panel 首屏 bootstrap 请求丢失或返回后直接抢跑提取。
 - `browserTab` 切换后 side panel 自动恢复，违背产品语义。
 - 流式过程中关闭 side panel 后无法恢复。
 - service worker 重启导致消息丢失。
 - content script 与 background 消息不通。
 - 重新打开 side panel 后重复提取页面内容。
 - 自动触发在 side panel 重开后重复执行。
+- 黑名单确认和提取/自动触发发生竞态。

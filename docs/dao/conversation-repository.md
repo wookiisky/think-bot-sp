@@ -16,6 +16,7 @@
 
 - 获取单 `promptTab` 会话。
 - 按页面批量获取全部 `promptTab` 会话。
+- 为 side panel bootstrap 和对话页恢复批量返回页面下会话摘要与 loading 关联数据。
 - 追加用户消息。
 - 追加或更新主回答。
 - 编辑用户消息并裁剪其后的依赖消息。
@@ -44,3 +45,4 @@
 - 用户消息编辑后后续结果裁剪正确。
 - 停止/删除分支局部生效。
 - side panel 重开后 loading 恢复。
+- bootstrap 恢复链路中会话摘要、完整消息和 loading 关联正确。

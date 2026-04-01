@@ -7,10 +7,10 @@
 ## 2. 顶层文档
 
 - `app.md`：项目总览、运行单元、模块关系、关键约束。
-- `browser-entry.md`：浏览器入口、受限页退化、首次安装生命周期。
+- `browser-entry.md`：浏览器入口、受限页退化、首次安装生命周期、side panel bootstrap 初始化入口。
 - `tech_stack.md`：技术选型、核心库、版本基线、兼容约束。
 - `decision_log.md`：关键产品和技术决策记录。
-- `flow.md`：跨模块主流程、异常流、恢复策略、验证点。
+- `flow.md`：跨模块主流程、两阶段 bootstrap、异常流、恢复策略、验证点。
 
 ## 3. 数据与访问
 
@@ -35,7 +35,7 @@
 - `Services/extraction.md`：Readability/Jina 提取服务。
 - `Services/logger.md`：运行时结构化调试日志服务。
 - `Services/llm-dispatch.md`：Vercel AI SDK 模型调度与流式协议。
-- `Services/runtime-messaging.md`：typed command/port 通信层。
+- `Services/runtime-messaging.md`：typed command/port 通信层与 `GET_SIDEBAR_BOOTSTRAP` 首屏协议。
 - `Services/sync.md`：Gist/WebDAV 同步服务。
 - `Services/blacklist.md`：黑名单判定与确认流。
 - `Services/i18n.md`：轻量语言资源服务。
@@ -55,12 +55,15 @@
 
 - 想看整体重写边界：`app.md`、`decision_log.md`。
 - 想确认扩展入口与安装行为：`browser-entry.md`、`flow.md`。
+- 想确认 side panel 两阶段 bootstrap 初始化：`browser-entry.md`、`flow.md`、`Services/runtime-messaging.md`、`decision_log.md`。
+- 想确认黑名单为何先于提取和自动触发：`Services/blacklist.md`、`flow.md`、`Workspace/sidebar.md`。
 - 想确认 MV3 限制：`Platform/chrome-mv3-runtime.md`、`Services/runtime-messaging.md`。
 - 想实现页面提取：`Services/extraction.md`、`flow.md`。
 - 想实现模型调用与流式：`Services/llm-dispatch.md`、`test/llm-and-streaming.md`。
 - 想排查关键流程和运行时异常：`Services/logger.md`、`flow.md`。
 - 想实现侧边栏或历史页：`Workspace/sidebar.md`、`Workspace/conversations.md`。
 - 想实现配置、语言、图标：`Workspace/settings.md`、`Services/i18n.md`、`Services/icon-assets.md`。
+- 想确认缓存占用、快捷输入预览和导出边界：`Workspace/settings.md`、`dao/page-repository.md`、`test/llm-and-streaming.md`、`test/conversations-core.md`。
 - 想实现本地存储与同步：`DataSchema/`、`dao/`、`Services/sync.md`。
 - 想规划自动化测试：`test/browser-automation.md`、`test/sidebar-core.md`。
 

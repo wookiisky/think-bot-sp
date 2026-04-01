@@ -32,8 +32,9 @@
 ## 5. 关键流程
 
 - side panel 初始化前匹配 URL。
-- 命中则发送 `BLACKLIST_DETECTED`。
-- 用户确认继续后才放行后续流程。
+- side panel bootstrap 阶段完成 URL 匹配并返回阻断结果。
+- 命中则发送 `BLACKLIST_DETECTED` 或在 bootstrap 结果中标记 `blocked`。
+- 用户确认继续并发送 `CONFIRM_BLACKLIST_CONTINUE` 后才放行后续流程。
 
 ## 6. 错误与异常处理
 

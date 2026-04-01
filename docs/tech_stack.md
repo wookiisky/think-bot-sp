@@ -15,6 +15,7 @@
 - 所有实现以 MV3 service worker 和 extension page 语义为准。
 - 不依赖 Firefox 专属 WebExtension 行为。
 - 不设计需要常驻后台内存的能力。
+- side panel 首屏初始化按“挂载后主动拉取 bootstrap”设计，不依赖 background 主动推送首屏消息。
 
 ## 2. UI 与交互库
 
@@ -38,6 +39,10 @@
 - `zod`
   - Provider 配置、快捷输入、同步配置、黑名单、导入结构校验。
 
+约束：
+
+- side panel bootstrap、黑名单放行、导出请求、同步快照都必须走稳定 schema 校验。
+
 ## 4. 模型调用与文本处理
 
 - `ai`（Vercel AI SDK Core）
@@ -52,6 +57,7 @@
 - 统一 stream 和 non-stream 接口。
 - 减少 UI 对各 Provider 差异字段的理解负担。
 - 便于后续通过 provider registry 扩展新模型。
+- 便于把“自动触发请求级强制带入页面内容”收口在调度层，而不是散落到 UI 状态中。
 
 ## 5. 内容提取与资源
 
@@ -84,6 +90,10 @@
   - 组件与交互测试。
 - `Playwright`
   - MV3 扩展端到端自动化。
+
+测试基线要求：
+
+- 自动化用例必须覆盖 side panel 两阶段 bootstrap、黑名单先确认后提取、`browserTab` 切换后不自动恢复、空导出失败。
 
 ## 8. 调试与可观测性
 
@@ -119,3 +129,4 @@ Manifest 权限基线：
 - 不使用在线字体或在线图标资源。
 - 不在 UI 直接写各 Provider SDK 调用。
 - 不把调试日志做成持久化历史功能。
+- 不把黑名单放行、loading、首屏 bootstrap 结果这类短时运行态混入同步快照。

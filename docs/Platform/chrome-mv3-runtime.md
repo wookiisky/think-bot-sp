@@ -18,6 +18,7 @@
 - side panel 默认存在全局 panel 和 `browserTab` 级 panel 两种语义，业务侧必须显式使用 `browserTab` 级 panel。
 - 切换到未启用 side panel 的 `browserTab` 时，浏览器会自动隐藏 side panel。
 - Chrome 官方默认行为是切回已打开过的 `browserTab` 时 side panel 会自动再次显示；产品若要求“不自动恢复”，必须在 `browserTab` 切换后主动清理上一 `browserTab` 的启用态。
+- side panel 首屏初始化更安全的方式是“挂载后主动拉取 bootstrap”；不要依赖 `sidePanel.open()` 之后 background 立即推送初始化消息。
 
 ### 2.2 Content Script
 
@@ -63,6 +64,7 @@
 - 自动提取只允许发生在 side panel 已打开后的初始化流程中。
 - 不能把“打开 `browserTab`”理解成“任意网页标签页一创建就后台自动提取”。
 - `promptTab` 自动触发去重必须依赖持久化状态，不能只依赖 UI 内存。
+- 黑名单命中时，提取与自动触发必须等待当前打开行为被显式放行后才能开始。
 
 ## 5. 通信限制
 

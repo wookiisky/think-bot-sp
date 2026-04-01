@@ -39,10 +39,10 @@
 1. 用户点击扩展图标。
 2. background 判断当前 `browserTab` 是否为可用普通网页。
 3. 可用时，background 为当前 `browserTab` 设置 side panel 选项并调用 `sidePanel.open({ tabId })`。
-4. side panel 完成挂载后，通过 one-shot command 主动请求当前页面基础信息和缓存状态。
-5. background 读取页面缓存。
-6. 有缓存则先返回页面内容、页面状态和 `promptTab` 去重状态，不重复提取。
-7. 无缓存则驱动 content script 读取 DOM，并进入正文提取流程。
+4. side panel 完成挂载后，通过 one-shot command 主动请求 `GET_SIDEBAR_BOOTSTRAP`。
+5. background 读取页面缓存、会话恢复数据、loading 状态和黑名单判定结果。
+6. side panel 先渲染恢复态；有缓存则优先展示页面内容、页面状态和 `promptTab` 去重状态。
+7. 若命中黑名单，则先停在确认层；若未命中或用户已放行，才继续进入提取和自动触发流程。
 
 状态变化：
 
@@ -53,7 +53,7 @@
 关键验证点：
 
 - `sidePanel.open()` 只能由用户点击链路触发。
-- side panel 初始化只能由 side panel 自己拉起，background 不主动推送首屏初始化命令。
+- side panel 初始化只能由 side panel 自己拉取 `GET_SIDEBAR_BOOTSTRAP`，background 不主动推送首屏初始化命令。
 - 普通页打开时优先显示缓存而不是空白页。
 - content script 不可用时必须进入异常流而不是静默失败。
 - 初始化链路应能通过调试日志串联打开请求、页面信息读取和提取分支选择。
@@ -135,10 +135,10 @@
 
 流程：
 
-1. side panel 在初始化时发起 `GET_PAGE_INFO`，用户手动点击时发起 `RE_EXTRACT_CONTENT`。
-2. background 先返回缓存、页面状态、`promptTab` 会话摘要和 loading 状态。
+1. side panel 在初始化时先发起 `GET_SIDEBAR_BOOTSTRAP`，用户手动点击时发起 `RE_EXTRACT_CONTENT`。
+2. background 先返回缓存、页面状态、`promptTab` 会话摘要、loading 状态和黑名单判定结果。
 3. 若页面已有有效缓存，则不重复提取。
-4. 若页面无缓存且允许继续流程，background 请求 content script 提供页面 HTML 和元数据。
+4. 若页面无缓存且当前打开流程已通过黑名单校验，background 请求 content script 提供页面 HTML 和元数据。
 5. 提取服务优先使用 Readability。
 6. Readability 成功则保存页面内容、提取方式、更新时间。
 7. Readability 失败且允许回退时，调用 Jina 提取。
@@ -166,6 +166,7 @@
 - 切换提取方法只影响当前页面。
 - 页面级 `includePageContent` 不受提取失败影响。
 - 提取内容区与聊天区必须并存，不能把提取内容降级为某个 `promptTab` 的临时内容。
+- 黑名单未放行前不能触发提取。
 - 提取链路应记录 Readability 失败、Jina 回退和最终完成状态。
 
 ## 7. 主流程：发送消息与流式输出
@@ -214,7 +215,7 @@
    - 当前 `promptTab` 是否已有历史。
    - 当前 `promptTab` 是否正在 loading。
    - 当前 `promptTab` 是否已初始化。
-4. 满足条件时后台发起发送，不切换当前可见 `promptTab`。
+4. 满足条件时后台发起发送，不切换当前可见 `promptTab`；若该快捷输入要求强制带入页面内容，只对本次请求注入 `forceIncludePageContent=true`，不改写页面级 `includePageContent`。
 5. 对应 `promptTab` 进入 loading，完成后切为 `has-content`。
 
 关键验证点：
@@ -223,6 +224,7 @@
 - 自动触发不会因重开侧边栏而重复执行。
 - side panel 再次打开时，已有历史或仍在执行中的 `promptTab` 不重复自动触发。
 - 清空当前 `promptTab` 后，该 `promptTab` 自动触发状态会被重置，后续重新进入页面时可再次自动触发。
+- 自动触发的“强制带入页面内容”只作用于该次请求，不修改页面级开关。
 
 ## 9. 主流程：分支并发分析
 
@@ -349,8 +351,9 @@
 
 1. 页面初始化时 background 校验当前 URL 是否命中黑名单。
 2. 命中时 side panel 展示确认层。
-3. 用户确认继续才进入提取与会话流程。
-4. 用户取消则关闭侧边栏或返回安全状态。
+3. 用户确认继续后，side panel 通过 `CONFIRM_BLACKLIST_CONTINUE` 放行本次打开行为。
+4. 放行后才进入提取与会话流程。
+5. 用户取消则关闭侧边栏或返回安全状态。
 
 关键验证点：
 

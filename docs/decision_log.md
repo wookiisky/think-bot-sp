@@ -189,7 +189,7 @@
   - 文档中统一使用 `browserTab` 表示 Chrome 标签页，使用 `promptTab` 表示 `Chat` 与快捷输入标签。
   - side panel 只按 `browserTab` 维度启用，不使用全局 panel 语义。
   - 用户切换到其他 `browserTab` 时允许浏览器自动隐藏 side panel，但切回原 `browserTab` 时不自动恢复，必须再次点击扩展图标后重新打开。
-  - side panel 初始化由 side panel 自己在挂载后主动拉取 `GET_PAGE_INFO`，background 不主动推送首屏初始化命令。
+  - side panel 初始化由 side panel 自己在挂载后主动拉取 `GET_SIDEBAR_BOOTSTRAP`，background 不主动推送首屏初始化命令。
   - side panel 再次打开时，有页面缓存不重复提取；已有历史或仍在执行中的 `promptTab` 不重复自动触发。
 - 原因：
   - 避免 `browserTab` 与 `promptTab` 混淆导致的实现偏差。
@@ -212,3 +212,29 @@
 - 后续同步：
   - `dao/page-repository.md`
   - `dao/conversation-repository.md`
+
+## 2026-04-01：side panel 采用两阶段 bootstrap 初始化，黑名单先于提取与自动触发
+
+- 背景：
+  - 用户期望点击扩展按钮后打开 side panel，但切换 `browserTab` 时自动关闭，切回原页后仍保持关闭。
+  - Chrome side panel 受用户手势和 `browserTab` 级显隐约束，首屏恢复、黑名单拦截、缓存展示与自动触发之间容易产生竞态。
+- 决策：
+  - side panel 首屏初始化统一采用“两阶段 bootstrap”协议。
+  - 第一阶段由 side panel 挂载后主动请求 `GET_SIDEBAR_BOOTSTRAP`，只恢复缓存、会话、loading、黑名单判定和初始化摘要。
+  - 第二阶段在 side panel 完成首屏恢复后受控执行：黑名单命中时先展示确认层，只有用户通过 `CONFIRM_BLACKLIST_CONTINUE` 放行后，才允许提取和自动触发。
+  - 自动触发若需要强制带入页面内容，只作为请求级 override，不改写页面级 `includePageContent`。
+- 原因：
+  - 避免 background 主动推送首屏消息带来的竞态和丢包风险。
+  - 保证黑名单不会被提取和自动触发抢跑。
+  - 让缓存恢复、提取和自动触发的顺序与产品语义一致。
+- 影响范围：
+  - `browser-entry.md`
+  - `flow.md`
+  - `Workspace/sidebar.md`
+  - `Services/runtime-messaging.md`
+  - `Services/blacklist.md`
+  - `DataSchema/page.md`
+  - `test/sidebar-core.md`
+- 放弃方案：
+  - 在打开 side panel 后立即开始提取，再由 UI 补弹黑名单确认层。
+  - 自动触发直接复用页面级 `includePageContent` 持久状态改写。

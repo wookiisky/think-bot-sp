@@ -67,3 +67,6 @@ Thumbs.db
 # ===== Misc =====
 *.bak
 *.tmp
+
+.agents
+skills-lock.json
