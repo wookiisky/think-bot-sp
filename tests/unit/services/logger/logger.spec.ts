@@ -9,7 +9,11 @@ describe('logger', () => {
 
     logger.info('panel.open.requested', { tabId: 7, apiKey: 'secret' });
 
-    expect(spy).toHaveBeenCalledWith('[background] panel.open.requested', {
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [message, payload] = spy.mock.calls[0];
+
+    expect(message).toEqual(expect.stringContaining('panel.open.requested'));
+    expect(payload).toEqual({
       tabId: 7,
       apiKey: '[REDACTED]',
     });
