@@ -33,6 +33,7 @@
 - `Workspace/settings.md`：设置页能力边界、状态和测试要求。
 - `Workspace/conversations.md`：对话管理页能力边界、状态和测试要求。
 - `Services/extraction.md`：Readability/Jina 提取服务。
+- `Services/logger.md`：运行时结构化调试日志服务。
 - `Services/llm-dispatch.md`：Vercel AI SDK 模型调度与流式协议。
 - `Services/runtime-messaging.md`：typed command/port 通信层。
 - `Services/sync.md`：Gist/WebDAV 同步服务。
@@ -57,6 +58,7 @@
 - 想确认 MV3 限制：`Platform/chrome-mv3-runtime.md`、`Services/runtime-messaging.md`。
 - 想实现页面提取：`Services/extraction.md`、`flow.md`。
 - 想实现模型调用与流式：`Services/llm-dispatch.md`、`test/llm-and-streaming.md`。
+- 想排查关键流程和运行时异常：`Services/logger.md`、`flow.md`。
 - 想实现侧边栏或历史页：`Workspace/sidebar.md`、`Workspace/conversations.md`。
 - 想实现配置、语言、图标：`Workspace/settings.md`、`Services/i18n.md`、`Services/icon-assets.md`。
 - 想实现本地存储与同步：`DataSchema/`、`dao/`、`Services/sync.md`。

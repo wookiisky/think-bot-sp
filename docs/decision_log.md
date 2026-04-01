@@ -1,5 +1,33 @@
 # 决策记录
 
+## 2026-04-01：debug 日志采用运行时结构化 console，不做持久化
+
+- 背景：
+  - side panel、content script、service worker、流式输出和同步链路跨上下文协作，排障需要统一日志口径。
+  - 当前目标只是记录流程关键点用于 debug，不引入日志管理产品能力。
+- 决策：
+  - 新版本提供统一调试日志服务，基于运行时结构化 `console` 记录关键流程节点。
+  - 调试日志不写入 `chrome.storage.local`，不参与同步，不提供设置页开关、日志查看页或导出能力。
+- 原因：
+  - 满足跨模块排障需求，同时避免把调试能力扩展成新的持久化和产品功能面。
+  - 保持 MV3 架构简单，不把日志误用为恢复状态或历史数据来源。
+- 影响范围：
+  - `Services/logger.md`
+  - `Services/runtime-messaging.md`
+  - `Services/extraction.md`
+  - `Services/llm-dispatch.md`
+  - `Services/sync.md`
+  - `flow.md`
+- 放弃方案：
+  - 持久化到本地存储。
+  - 同步到远端。
+  - 在设置页提供日志开关和导出入口。
+- 后续同步：
+  - `index.md`
+  - `app.md`
+  - `tech_stack.md`
+  - `test/browser-automation.md`
+
 ## 2026-03-20：采用一次性重写而不是并行双轨
 
 - 背景：
