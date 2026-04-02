@@ -1,0 +1,12 @@
+settings.title: Settings
+settings.language: Language
+settings.theme: Theme
+settings.save: Save
+settings.reset: Reset
+settings.import: Import Config
+settings.export: Export Config
+settings.models: Models
+settings.promptTabs: Tabs
+settings.blacklist: Blacklist
+settings.sync: Sync
+settings.cache: Local Cache

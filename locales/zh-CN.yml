@@ -1,0 +1,12 @@
+settings.title: 设置
+settings.language: 语言
+settings.theme: 主题
+settings.save: 保存
+settings.reset: 恢复默认
+settings.import: 导入配置
+settings.export: 导出配置
+settings.models: 模型
+settings.promptTabs: 标签页
+settings.blacklist: 黑名单
+settings.sync: 同步
+settings.cache: 本地缓存
