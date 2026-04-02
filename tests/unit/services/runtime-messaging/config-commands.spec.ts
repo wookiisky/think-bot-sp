@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { createDefaultConfig } from '../../../../src/domain/config/config-schema';
+import {
+  createConfigCommandHandler,
+  isConfigCommandMessage,
+  supportedCommandTypes,
+} from '../../../../src/services/runtime-messaging/config-commands';
+
+describe('config-commands', () => {
+  it('暴露统一的命令识别能力', () => {
+    expect(Array.from(supportedCommandTypes)).toEqual([
+      'GET_CONFIG',
+      'SAVE_CONFIG',
+      'RESET_CONFIG',
+      'IMPORT_CONFIG',
+      'EXPORT_CONFIG',
+      'GET_LOCAL_CACHE_STATS',
+      'CLEAR_LOCAL_CACHE',
+    ]);
+    expect(isConfigCommandMessage({ type: 'GET_CONFIG' })).toBe(true);
+    expect(isConfigCommandMessage({ type: 'UNKNOWN' })).toBe(false);
+    expect(isConfigCommandMessage({})).toBe(false);
+  });
+
+  it('按命令路由到对应仓储', async () => {
+    const config = createDefaultConfig();
+    const configRepository = {
+      getConfig: vi.fn().mockResolvedValue(config),
+      saveConfig: vi.fn().mockResolvedValue(config),
+      resetConfig: vi.fn().mockResolvedValue(config),
+      importConfig: vi.fn().mockResolvedValue(config),
+      exportConfig: vi.fn().mockResolvedValue('{"version":"2.0.0"}'),
+    };
+    const pageRepository = {
+      getCacheStats: vi.fn().mockResolvedValue({ entryCount: 2, bytes: 128 }),
+      clearCache: vi.fn().mockResolvedValue({ removedKeys: 2 }),
+    };
+    const handler = createConfigCommandHandler({
+      configRepository,
+      pageRepository,
+    });
+
+    await expect(handler({ type: 'GET_CONFIG' })).resolves.toEqual({
+      type: 'GET_CONFIG_SUCCESS',
+      config,
+    });
+    expect(configRepository.getConfig).toHaveBeenCalledTimes(1);
+    expect(configRepository.saveConfig).not.toHaveBeenCalled();
+    expect(configRepository.resetConfig).not.toHaveBeenCalled();
+    expect(configRepository.importConfig).not.toHaveBeenCalled();
+    expect(configRepository.exportConfig).not.toHaveBeenCalled();
+    expect(pageRepository.getCacheStats).not.toHaveBeenCalled();
+    expect(pageRepository.clearCache).not.toHaveBeenCalled();
+
+    await expect(handler({ type: 'SAVE_CONFIG', config })).resolves.toEqual({
+      type: 'SAVE_CONFIG_SUCCESS',
+      config,
+    });
+    expect(configRepository.saveConfig).toHaveBeenCalledTimes(1);
+    expect(configRepository.saveConfig).toHaveBeenCalledWith(config);
+
+    await expect(handler({ type: 'RESET_CONFIG' })).resolves.toEqual({
+      type: 'RESET_CONFIG_SUCCESS',
+      config,
+    });
+    expect(configRepository.resetConfig).toHaveBeenCalledTimes(1);
+
+    await expect(handler({ type: 'IMPORT_CONFIG', payload: JSON.stringify(config) })).resolves.toEqual({
+      type: 'IMPORT_CONFIG_SUCCESS',
+      config,
+    });
+    expect(configRepository.importConfig).toHaveBeenCalledTimes(1);
+    expect(configRepository.importConfig).toHaveBeenCalledWith(JSON.stringify(config));
+
+    await expect(handler({ type: 'EXPORT_CONFIG' })).resolves.toEqual({
+      type: 'EXPORT_CONFIG_SUCCESS',
+      payload: '{"version":"2.0.0"}',
+    });
+    expect(configRepository.exportConfig).toHaveBeenCalledTimes(1);
+
+    await expect(handler({ type: 'GET_LOCAL_CACHE_STATS' })).resolves.toEqual({
+      type: 'GET_LOCAL_CACHE_STATS_SUCCESS',
+      stats: { entryCount: 2, bytes: 128 },
+    });
+    expect(pageRepository.getCacheStats).toHaveBeenCalledTimes(1);
+
+    await expect(handler({ type: 'CLEAR_LOCAL_CACHE' })).resolves.toEqual({
+      type: 'CLEAR_LOCAL_CACHE_SUCCESS',
+      result: { removedKeys: 2 },
+    });
+    expect(pageRepository.clearCache).toHaveBeenCalledTimes(1);
+  });
+
+  it('拒绝未知命令和非法保存参数', async () => {
+    const handler = createConfigCommandHandler({
+      configRepository: {
+        getConfig: vi.fn(),
+        saveConfig: vi.fn(),
+        resetConfig: vi.fn(),
+        importConfig: vi.fn(),
+        exportConfig: vi.fn(),
+      },
+      pageRepository: {
+        getCacheStats: vi.fn(),
+        clearCache: vi.fn(),
+      },
+    });
+
+    await expect(handler({ type: 'UNKNOWN' } as never)).rejects.toThrow(/unsupported command/i);
+    await expect(handler({ type: 'SAVE_CONFIG', config: {} })).rejects.toThrow();
+  });
+});

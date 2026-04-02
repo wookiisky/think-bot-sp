@@ -1,5 +1,11 @@
+/// <reference types="chrome" />
+
 import { defineBackground } from 'wxt/utils/define-background';
+import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapter';
+import { createConfigRepository } from '../src/repositories/config-repository';
+import { createPageRepository } from '../src/repositories/page-repository';
 import { createLogger } from '../src/services/logger/logger';
+import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
 import { EXTENSION_PAGES } from '../src/shared/extension-pages';
 import { isRestrictedUrl, resolveWelcomeLocale } from '../src/shared/browser-entry';
 
@@ -28,6 +34,13 @@ const getUiLocale = () => {
 
 export default defineBackground(() => {
   const logger = createLogger('background');
+  const storage = createChromeLocalAdapter(chrome.storage.local);
+  const configRepository = createConfigRepository(storage);
+  const pageRepository = createPageRepository(storage);
+  const handleConfigCommand = createConfigCommandHandler({
+    configRepository,
+    pageRepository,
+  });
 
   const openWelcomePage = () => {
     const locale = resolveWelcomeLocale(getUiLocale());
@@ -49,11 +62,11 @@ export default defineBackground(() => {
     chrome.sidePanel.open({ tabId });
   };
 
-  const isTabRestricted = (tab?: chrome.tabs.Tab | null) => {
+  const isTabRestricted = (tab: chrome.tabs.Tab) => {
     return isRestrictedUrl(tab?.url ?? '');
   };
 
-  chrome.runtime.onInstalled.addListener((details) => {
+  chrome.runtime.onInstalled.addListener((details: { reason: string }) => {
     logger.info('runtime.installed', { reason: details.reason });
     if (details.reason === 'install') {
       openWelcomePage();
@@ -69,7 +82,7 @@ export default defineBackground(() => {
     });
   });
 
-  chrome.contextMenus.onClicked.addListener((info) => {
+  chrome.contextMenus.onClicked.addListener((info: { menuItemId: string | number }) => {
     logger.info('contextmenu.clicked', { menuItemId: info.menuItemId });
     if (info.menuItemId === MENU_ID_CONVERSATIONS) {
       openConversationsPage();
@@ -93,5 +106,25 @@ export default defineBackground(() => {
     }
 
     setSidePanelForTab(tabId);
+  });
+
+  chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {
+    if (!isConfigCommandMessage(message)) {
+      return false;
+    }
+
+    const type = message.type;
+    void handleConfigCommand(message)
+      .then((result) => {
+        logger.info('配置命令处理成功', { type });
+        sendResponse(result);
+      })
+      .catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        logger.error('配置命令处理失败', { type, reason });
+        sendResponse({ error: reason });
+      });
+
+    return true;
   });
 });
