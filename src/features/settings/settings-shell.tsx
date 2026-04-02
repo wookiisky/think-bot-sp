@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { isModelConfigComplete } from '../../domain/config/config-schema';
 import { createLogger } from '../../services/logger/logger';
 import { createLocaleService } from '../../services/i18n/locale-service';
 import { Icon } from '../../ui/icon';
 import { settingsApi } from './settings-api';
+import { ModelForm } from './model-form';
 import { QuickInputsPanel } from './quick-inputs-panel';
 
 type CacheStats = {
@@ -51,13 +53,18 @@ const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInput
       deletedAt: item.deletedAt,
     }));
 
+/** 取出当前默认可编辑的模型。 */
+const resolveActiveModel = (config: ExtensionConfig, selectedModelId: string | null) =>
+  config.models.find((item) => item.id === (selectedModelId ?? config.basic.defaultModelId)) ?? config.models[0] ?? null;
+
 /** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入预览。 */
 export const SettingsShell = () => {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [localeResources, setLocaleResources] = useState<Awaited<ReturnType<typeof localeService.loadResources>> | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -79,6 +86,7 @@ export const SettingsShell = () => {
         setConfig(nextConfig);
         setCacheStats(nextCacheStats);
         setLocaleResources(nextLocaleResources);
+        setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
         logger.info('设置页加载完成', {
           entryCount: nextCacheStats.entryCount,
           bytes: nextCacheStats.bytes,
@@ -90,7 +98,7 @@ export const SettingsShell = () => {
 
         const message = loadError instanceof Error ? loadError.message : 'unknown error';
         logger.error('设置页加载失败', { message });
-        setError(message);
+        setError({ title: '加载失败', message });
       }
     };
 
@@ -112,16 +120,21 @@ export const SettingsShell = () => {
           fontFamily: '"Segoe UI", system-ui, sans-serif',
         }}
       >
-        <p style={{ margin: 0 }}>{error ? `加载失败：${error}` : '正在加载设置页…'}</p>
+        <p style={{ margin: 0 }}>{error ? `${error.title}：${error.message}` : '正在加载设置页…'}</p>
       </main>
     );
   }
 
   const language = config.basic.language;
   const t = (key: string) => localeResources.t(key, language);
+  const activeModel = resolveActiveModel(config, selectedModelId);
 
   const updateConfig = (next: ExtensionConfig) => {
     setConfig(next);
+  };
+
+  const setOperationError = (title: string, message: string) => {
+    setError({ title, message });
   };
 
   const handleLanguageChange = (nextLanguage: ExtensionConfig['basic']['language']) => {
@@ -134,16 +147,81 @@ export const SettingsShell = () => {
     });
   };
 
+  const refreshCacheStats = async () => {
+    const nextCacheStats = await settingsApi.getLocalCacheStats();
+    setCacheStats(nextCacheStats);
+    return nextCacheStats;
+  };
+
+  const handleImport = async () => {
+    try {
+      const payload = typeof window.prompt === 'function' ? window.prompt('粘贴配置内容') : null;
+      if (!payload) {
+        return;
+      }
+
+      const nextConfig = await settingsApi.importConfig(payload);
+      updateConfig(nextConfig);
+      setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
+      await refreshCacheStats();
+      logger.info('导入配置成功');
+      setError(null);
+    } catch (importError) {
+      const message = importError instanceof Error ? importError.message : 'unknown error';
+      logger.error('导入配置失败', { message });
+      setOperationError('导入失败', message);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      await settingsApi.exportConfig();
+      logger.info('导出配置成功');
+      setError(null);
+    } catch (exportError) {
+      const message = exportError instanceof Error ? exportError.message : 'unknown error';
+      logger.error('导出配置失败', { message });
+      setOperationError('导出失败', message);
+    }
+  };
+
+  const handleClearCache = async () => {
+    try {
+      await settingsApi.clearLocalCache();
+      await refreshCacheStats();
+      logger.info('清理本地缓存成功');
+      setError(null);
+    } catch (clearError) {
+      const message = clearError instanceof Error ? clearError.message : 'unknown error';
+      logger.error('清理本地缓存失败', { message });
+      setOperationError('清理缓存失败', message);
+    }
+  };
+
   const handleSave = async () => {
+    const defaultModel = config.basic.defaultModelId ? config.models.find((item) => item.id === config.basic.defaultModelId) : null;
+    if (config.basic.defaultModelId && !defaultModel) {
+      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      logger.warn('默认模型不存在，阻止保存', { defaultModelId: config.basic.defaultModelId });
+      return;
+    }
+
+    if (defaultModel && !isModelConfigComplete(defaultModel)) {
+      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      logger.warn('默认模型配置不完整，阻止保存', { defaultModelId: defaultModel.id });
+      return;
+    }
+
     setSaving(true);
     try {
       const nextConfig = await settingsApi.saveConfig(config);
       updateConfig(nextConfig);
       logger.info('保存设置成功', { language: nextConfig.basic.language });
+      setError(null);
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : 'unknown error';
       logger.error('保存设置失败', { message });
-      setError(message);
+      setOperationError('保存失败', message);
     } finally {
       setSaving(false);
     }
@@ -204,10 +282,10 @@ export const SettingsShell = () => {
               <button type="button" disabled style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
                 {t('settings.reset')}
               </button>
-              <button type="button" disabled style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
+              <button type="button" onClick={handleImport} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
                 {t('settings.import')}
               </button>
-              <button type="button" disabled style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
+              <button type="button" onClick={handleExport} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
                 {t('settings.export')}
               </button>
             </div>
@@ -247,7 +325,7 @@ export const SettingsShell = () => {
                 color: '#991b1b',
               }}
             >
-              保存失败：{error}
+              {error.title}：{error.message}
             </section>
           ) : null}
 
@@ -259,6 +337,50 @@ export const SettingsShell = () => {
               alignItems: 'start',
             }}
           >
+            <section style={{ padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                <Icon name="settings" size={14} />
+                <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('settings.models')}</h2>
+              </div>
+
+              {activeModel ? (
+                <div style={{ display: 'grid', gap: '0.9rem' }}>
+                  {config.models.length > 1 ? (
+                    <label style={{ display: 'grid', gap: '0.4rem' }}>
+                      <span style={{ fontWeight: 600 }}>模型</span>
+                      <select
+                        aria-label="模型"
+                        value={activeModel.id}
+                        disabled={saving}
+                        onChange={(event) => setSelectedModelId(event.target.value)}
+                        style={{ borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
+                      >
+                        {config.models.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+
+                  <ModelForm
+                    key={activeModel.id}
+                    model={activeModel}
+                    disabled={saving}
+                    onChange={(nextModel) => {
+                      updateConfig({
+                        ...config,
+                        models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
+                      });
+                    }}
+                  />
+                </div>
+              ) : (
+                <p style={{ margin: 0, color: '#64748b' }}>暂无模型配置</p>
+              )}
+            </section>
+
             <label style={{ display: 'grid', gap: '0.45rem', padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
               <span style={{ fontWeight: 600 }}>{t('settings.language')}</span>
               <select
@@ -287,6 +409,9 @@ export const SettingsShell = () => {
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155' }}>
                 <span>{cacheStats.entryCount} 项</span>
                 <span>{formatBytes(cacheStats.bytes)}</span>
+                <button type="button" onClick={handleClearCache} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: '999px', padding: '0.45rem 0.8rem', cursor: 'pointer' }}>
+                  清理本地缓存
+                </button>
               </div>
             </section>
           </section>
