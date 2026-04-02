@@ -110,6 +110,12 @@
 - Playwright 能拿到 `service worker` 和 `extension id`。
 - 三个页面都能打开并显示基础壳层。
 
+**状态（2026-04-02 复核）**
+
+- [x] 阶段 1 验收命令已复跑通过：`pnpm build`、`pnpm test:e2e -- tests/e2e/bootstrap.spec.ts`、`pnpm test:e2e -- tests/e2e/entry-shell.spec.ts`。
+- [x] 当前工程满足阶段 1 的主体验收口径，可按“已完成”继续推进后续阶段。
+- [x] React 主版本偏差已消除：`package.json` 已回退并锁定到 `react / react-dom 18.3.1`，与本阶段技术栈口径一致。
+
 **相关文档**
 
 - `docs/app.md`
