@@ -57,6 +57,23 @@ const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInput
 const resolveActiveModel = (config: ExtensionConfig, selectedModelId: string | null) =>
   config.models.find((item) => item.id === (selectedModelId ?? config.basic.defaultModelId)) ?? config.models[0] ?? null;
 
+/** 把导出的配置内容下载为本地 json 文件。 */
+const downloadExportedConfig = (payload: string) => {
+  const filename = `think-bot-sp-config-${new Date().toISOString().slice(0, 10)}.json`;
+  const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(objectUrl);
+
+  return filename;
+};
+
 /** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入预览。 */
 export const SettingsShell = () => {
   const [config, setConfig] = useState<ExtensionConfig | null>(null);
@@ -175,8 +192,9 @@ export const SettingsShell = () => {
 
   const handleExport = async () => {
     try {
-      await settingsApi.exportConfig();
-      logger.info('导出配置成功');
+      const payload = await settingsApi.exportConfig();
+      const filename = downloadExportedConfig(payload);
+      logger.info('导出配置成功', { filename });
       setError(null);
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'unknown error';

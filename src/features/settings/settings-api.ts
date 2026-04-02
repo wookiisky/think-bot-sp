@@ -11,6 +11,11 @@ type RuntimeResponse<T> = {
   type: string;
 } & T;
 
+type RuntimeErrorResponse = {
+  /** background 返回的错误信息。 */
+  error?: string;
+};
+
 const sendMessage = <TResponse,>(message: unknown): Promise<TResponse> => {
   if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
     throw new Error('chrome.runtime.sendMessage is unavailable');
@@ -32,7 +37,11 @@ const sendMessage = <TResponse,>(message: unknown): Promise<TResponse> => {
 const requestConfig = async <TResponse extends RuntimeResponse<Record<string, unknown>>>(
   message: unknown,
 ) => {
-  const response = await sendMessage<TResponse>(message);
+  const response = await sendMessage<TResponse | RuntimeErrorResponse>(message);
+  if (typeof response === 'object' && response !== null && 'error' in response && typeof response.error === 'string') {
+    throw new Error(response.error);
+  }
+
   return response;
 };
 

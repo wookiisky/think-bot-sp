@@ -27,6 +27,7 @@ vi.mock('../../../src/features/settings/settings-api', () => ({
 describe('SettingsShell', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     mocks.getConfig.mockReset();
     mocks.saveConfig.mockReset();
     mocks.getLocalCacheStats.mockReset();
@@ -235,8 +236,23 @@ describe('SettingsShell', () => {
     expect(mocks.saveConfig).not.toHaveBeenCalled();
   });
 
-  it('导出按钮会调用 settingsApi', async () => {
+  it('导出按钮会把配置下载到本地文件', async () => {
     const config = createDefaultConfig();
+    const appendSpy = vi.spyOn(document.body, 'appendChild');
+    const removeSpy = vi.spyOn(document.body, 'removeChild');
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const createObjectURL = vi.fn(() => 'blob:settings-export');
+    const revokeObjectURL = vi.fn();
+
+    Object.defineProperty(window.URL, 'createObjectURL', {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(window.URL, 'revokeObjectURL', {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
     mocks.exportConfig.mockResolvedValueOnce('{"version":1}');
@@ -248,7 +264,19 @@ describe('SettingsShell', () => {
 
     await waitFor(() => {
       expect(mocks.exportConfig).toHaveBeenCalledTimes(1);
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
     });
+
+    const downloadLink = appendSpy.mock.calls
+      .map(([node]) => node)
+      .find((node): node is HTMLAnchorElement => node instanceof HTMLAnchorElement);
+
+    expect(downloadLink).toBeDefined();
+    expect(downloadLink?.download).toMatch(/^think-bot-sp-config-\d{4}-\d{2}-\d{2}\.json$/);
+    expect(downloadLink?.href).toBe('blob:settings-export');
+    expect(removeSpy).toHaveBeenCalledWith(downloadLink);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:settings-export');
   });
 
   it('导出失败后显示导出错误文案', async () => {
