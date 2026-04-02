@@ -7,6 +7,7 @@ import { SettingsShell } from '../../../src/features/settings/settings-shell';
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
   saveConfig: vi.fn(),
+  resetConfig: vi.fn(),
   getLocalCacheStats: vi.fn(),
   clearLocalCache: vi.fn(),
   exportConfig: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('../../../src/features/settings/settings-api', () => ({
   settingsApi: {
     getConfig: mocks.getConfig,
     saveConfig: mocks.saveConfig,
+    resetConfig: mocks.resetConfig,
     getLocalCacheStats: mocks.getLocalCacheStats,
     clearLocalCache: mocks.clearLocalCache,
     exportConfig: mocks.exportConfig,
@@ -30,6 +32,7 @@ describe('SettingsShell', () => {
     vi.restoreAllMocks();
     mocks.getConfig.mockReset();
     mocks.saveConfig.mockReset();
+    mocks.resetConfig.mockReset();
     mocks.getLocalCacheStats.mockReset();
     mocks.clearLocalCache.mockReset();
     mocks.exportConfig.mockReset();
@@ -59,6 +62,22 @@ describe('SettingsShell', () => {
     fireEvent.change(languageSelect, { target: { value: 'en' } });
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('切换主题后立即更新设置页预览并保留当前选择', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.change(screen.getByRole('combobox', { name: '主题' }), {
+      target: { value: 'dark' },
+    });
+
+    const shell = screen.getByTestId('settings-shell');
+    expect(shell).toHaveAttribute('data-theme', 'dark');
+    expect(screen.getByRole('combobox', { name: '主题' })).toHaveValue('dark');
   });
 
   it('触发保存时提交当前配置', async () => {
@@ -364,5 +383,30 @@ describe('SettingsShell', () => {
     });
     expect(await screen.findByText('0 项')).toBeInTheDocument();
     expect(screen.getByText('0 B')).toBeInTheDocument();
+  });
+
+  it('点击恢复默认后用后台默认配置刷新页面', async () => {
+    const current = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        language: 'en',
+        theme: 'dark',
+      },
+    });
+    const reset = createDefaultConfig();
+    mocks.getConfig.mockResolvedValueOnce(current);
+    mocks.getLocalCacheStats.mockResolvedValue({ entryCount: 1, bytes: 16 });
+    mocks.resetConfig.mockResolvedValueOnce(reset);
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: 'Settings' });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+    await waitFor(() => {
+      expect(mocks.resetConfig).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '语言' })).toHaveValue('zh-CN');
   });
 });

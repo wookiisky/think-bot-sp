@@ -40,6 +40,24 @@ const navigationItems = [
   { key: 'settings.cache', label: '本地缓存', icon: 'cache' as const },
 ];
 
+const themePalette = {
+  system: {
+    pageBackground: 'radial-gradient(circle at top, #ffffff 0%, #f5f7ff 48%, #eef2f7 100%)',
+    panelBackground: 'rgba(255, 255, 255, 0.86)',
+    text: '#111827',
+  },
+  light: {
+    pageBackground: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
+    panelBackground: 'rgba(255, 255, 255, 0.94)',
+    text: '#111827',
+  },
+  dark: {
+    pageBackground: 'linear-gradient(180deg, #0f172a 0%, #111827 100%)',
+    panelBackground: 'rgba(15, 23, 42, 0.92)',
+    text: '#e5eefc',
+  },
+} as const;
+
 /** 只保留有效快捷输入，并按顺序展示。 */
 const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInputItem[] =>
   [...items]
@@ -145,6 +163,7 @@ export const SettingsShell = () => {
   const language = config.basic.language;
   const t = (key: string) => localeResources.t(key, language);
   const activeModel = resolveActiveModel(config, selectedModelId);
+  const previewTheme = themePalette[config.basic.theme];
 
   const updateConfig = (next: ExtensionConfig) => {
     setConfig(next);
@@ -245,13 +264,35 @@ export const SettingsShell = () => {
     }
   };
 
+  const handleReset = async () => {
+    setSaving(true);
+    try {
+      const nextConfig = await settingsApi.resetConfig();
+      updateConfig(nextConfig);
+      setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
+      logger.info('恢复默认配置成功', {
+        language: nextConfig.basic.language,
+        theme: nextConfig.basic.theme,
+      });
+      setError(null);
+    } catch (resetError) {
+      const message = resetError instanceof Error ? resetError.message : 'unknown error';
+      logger.error('恢复默认配置失败', { message });
+      setOperationError('恢复默认失败', message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <main
+      data-testid="settings-shell"
+      data-theme={config.basic.theme}
       style={{
         minHeight: '100vh',
         padding: '1.5rem',
-        background: 'radial-gradient(circle at top, #ffffff 0%, #f5f7ff 48%, #eef2f7 100%)',
-        color: '#111827',
+        background: previewTheme.pageBackground,
+        color: previewTheme.text,
         fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
@@ -260,7 +301,7 @@ export const SettingsShell = () => {
           width: 'min(1120px, 100%)',
           margin: '0 auto',
           borderRadius: '24px',
-          background: 'rgba(255, 255, 255, 0.86)',
+          background: previewTheme.panelBackground,
           border: '1px solid rgba(148, 163, 184, 0.18)',
           boxShadow: '0 24px 60px rgba(15, 23, 42, 0.08)',
           padding: '1.5rem',
@@ -297,7 +338,7 @@ export const SettingsShell = () => {
                 <Icon name="save" size={14} />
                 <span style={{ marginLeft: '0.4rem' }}>{t('settings.save')}</span>
               </button>
-              <button type="button" disabled style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
+              <button type="button" onClick={handleReset} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
                 {t('settings.reset')}
               </button>
               <button type="button" onClick={handleImport} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
@@ -417,6 +458,35 @@ export const SettingsShell = () => {
                 <option value="en">English</option>
               </select>
               <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>切换后会立即预览标题文案。</p>
+            </label>
+
+            <label style={{ display: 'grid', gap: '0.45rem', padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
+              <span style={{ fontWeight: 600 }}>{t('settings.theme')}</span>
+              <select
+                value={config.basic.theme}
+                onChange={(event) =>
+                  updateConfig({
+                    ...config,
+                    basic: {
+                      ...config.basic,
+                      theme: event.target.value as ExtensionConfig['basic']['theme'],
+                    },
+                  })
+                }
+                aria-label={t('settings.theme')}
+                disabled={saving}
+                style={{
+                  borderRadius: '12px',
+                  border: '1px solid #d1d5db',
+                  padding: '0.7rem 0.85rem',
+                  background: '#fff',
+                }}
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+              <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>切换后会立即预览设置页主题。</p>
             </label>
 
             <section style={{ padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
