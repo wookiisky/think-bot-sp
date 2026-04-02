@@ -1,5 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
+import '../../assets/styles/globals.css';
+
 import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
 import { PageShell } from '../../src/ui/page-shell';
 

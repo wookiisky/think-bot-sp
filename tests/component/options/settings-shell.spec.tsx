@@ -52,6 +52,20 @@ describe('SettingsShell', () => {
     expect(mocks.getLocalCacheStats).toHaveBeenCalledTimes(1);
   });
 
+  it('加载配置后渲染设置页顶部动作区与导航 chips', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+
+    render(<SettingsShell />);
+
+    expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
+    expect(screen.getByTestId('settings-shell-actions')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-shell-nav')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导入配置' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导出配置' })).toBeInTheDocument();
+  });
+
   it('切换语言后即时预览标题变化', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
@@ -78,6 +92,22 @@ describe('SettingsShell', () => {
     const shell = screen.getByTestId('settings-shell');
     expect(shell).toHaveAttribute('data-theme', 'dark');
     expect(screen.getByRole('combobox', { name: '主题' })).toHaveValue('dark');
+  });
+
+  it('主题切换后保留 data-theme 并更新根节点主题 class', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.change(screen.getByRole('combobox', { name: '主题' }), {
+      target: { value: 'dark' },
+    });
+
+    const shell = screen.getByTestId('settings-shell');
+    expect(shell).toHaveAttribute('data-theme', 'dark');
+    expect(shell.className).toMatch(/dark/);
   });
 
   it('触发保存时提交当前配置', async () => {

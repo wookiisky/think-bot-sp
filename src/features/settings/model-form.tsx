@@ -1,5 +1,8 @@
 import { useState } from 'react';
 
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import { isModelConfigComplete } from '../../domain/config/config-schema';
 
@@ -11,6 +14,9 @@ type ModelFormProps = {
   /** 是否禁用表单交互。 */
   disabled?: boolean;
 };
+
+const fieldClassName =
+  'w-full rounded-md border border-input bg-input/20 px-2 py-1.5 text-xs/relaxed outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 模型配置表单，负责 Provider 差异字段、API Key 显示切换和完整性提示。 */
 export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps) => {
@@ -27,30 +33,20 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
   };
 
   return (
-    <section style={{ display: 'grid', gap: '0.9rem' }} aria-label="模型表单">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-        <h3 style={{ margin: 0, fontSize: '1rem' }}>{model.name}</h3>
-        <span
-          style={{
-            padding: '0.35rem 0.7rem',
-            borderRadius: '999px',
-            background: complete ? '#dcfce7' : '#fee2e2',
-            color: complete ? '#166534' : '#991b1b',
-            fontSize: '0.84rem',
-          }}
-        >
-          {complete ? '配置完整' : '配置不完整'}
-        </span>
+    <section className="grid gap-4" aria-label="模型表单">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-base font-semibold">{model.name}</h3>
+        <Badge variant={complete ? 'secondary' : 'destructive'}>{complete ? '配置完整' : '配置不完整'}</Badge>
       </div>
 
-      <label style={{ display: 'grid', gap: '0.4rem' }}>
-        <span style={{ fontWeight: 600 }}>提供方</span>
+      <label className="grid gap-2">
+        <span className="text-sm font-medium">提供方</span>
         <select
           aria-label="Provider"
           value={model.provider}
           disabled={disabled}
           onChange={(event) => updateModel({ provider: event.target.value as ModelConfig['provider'] })}
-          style={{ borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
+          className={fieldClassName}
         >
           <option value="openai-compatible">OpenAI Compatible</option>
           <option value="gemini">Gemini</option>
@@ -60,51 +56,43 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
       </label>
 
       {showBaseUrl ? (
-        <label style={{ display: 'grid', gap: '0.4rem' }}>
-          <span style={{ fontWeight: 600 }}>Base URL</span>
-          <input
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Base URL</span>
+          <Input
             aria-label="Base URL"
             value={model.baseUrl}
             disabled={disabled}
             onChange={(event) => updateModel({ baseUrl: event.target.value })}
-            style={{ borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
           />
         </label>
       ) : null}
 
       {showDeployment ? (
-        <label style={{ display: 'grid', gap: '0.4rem' }}>
-          <span style={{ fontWeight: 600 }}>Deployment</span>
-          <input
+        <label className="grid gap-2">
+          <span className="text-sm font-medium">Deployment</span>
+          <Input
             aria-label="Deployment"
             value={model.deployment}
             disabled={disabled}
             onChange={(event) => updateModel({ deployment: event.target.value })}
-            style={{ borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
           />
         </label>
       ) : null}
 
-      <label style={{ display: 'grid', gap: '0.4rem' }}>
-        <span style={{ fontWeight: 600 }}>API Key</span>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <input
+      <label className="grid gap-2">
+        <span className="text-sm font-medium">API Key</span>
+        <div className="flex items-center gap-2">
+          <Input
             aria-label="API Key"
             type={showApiKey ? 'text' : 'password'}
             value={model.apiKey}
             disabled={disabled}
             onChange={(event) => updateModel({ apiKey: event.target.value })}
             autoComplete="off"
-            style={{ flex: 1, borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
           />
-          <button
-            type="button"
-            onClick={() => setShowApiKey((value) => !value)}
-            disabled={disabled}
-            style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: '999px', padding: '0.55rem 0.8rem', cursor: 'pointer' }}
-          >
+          <Button type="button" variant="outline" onClick={() => setShowApiKey((value) => !value)} disabled={disabled}>
             {showApiKey ? '隐藏' : '显示'}
-          </button>
+          </Button>
         </div>
       </label>
     </section>

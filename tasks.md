@@ -6,7 +6,7 @@
 
 **Architecture:** 采用 `domain -> repositories -> services -> features -> ui` 分层，`background service worker` 作为唯一高权限协调层；`content script` 仅负责页面采集；`side panel / options / conversations` 只通过 typed command 和 port 与后台交互。每个阶段都先补失败测试，再做最小实现，最后跑阶段回归。
 
-**Tech Stack:** Chrome MV3、WXT、React 18、TypeScript Strict Mode、Vite、pnpm、zustand、react-hook-form、zod、Vitest、React Testing Library、Playwright、Vercel AI SDK。
+**Tech Stack:** Chrome MV3、WXT、React 18、TypeScript Strict Mode、Vite、pnpm、Tailwind CSS、shadcn/ui、zustand、react-hook-form、zod、Vitest、React Testing Library、Playwright、Vercel AI SDK。
 
 ---
 
@@ -88,6 +88,7 @@
 
 1. 阶段 1：工程骨架与自动化基线
 2. 阶段 2：领域模型、仓储和设置页基础
+3. 阶段 2.5：shadcn/ui 与 Tailwind 设计系统基线
 3. 阶段 3：浏览器入口、消息总线、侧边栏壳层与提取
 4. 阶段 4：聊天主链路、流式恢复与日志
 5. 阶段 5：快捷输入自动触发、分支、编辑/重试/导出
@@ -216,6 +217,65 @@
 - `pnpm test:unit -- tests/unit/domain`
 - `pnpm test:unit -- tests/unit/repositories`
 - `pnpm test:component -- tests/component/options`
+- `pnpm build`
+
+---
+
+## 阶段 2.5：shadcn/ui 与 Tailwind 设计系统基线
+
+**阶段目标**
+
+- 在现有 WXT 工程内补齐 `Tailwind CSS + shadcn/ui` 基础设施，收口后续 settings、side panel、conversations 的基础 UI 组件来源。
+- 使用 `preset b3F5SdK3Xe` 初始化 shadcn，避免继续扩散自定义壳层样式与重复表单结构。
+- 在不打断既有阶段 1/2 能力的前提下，为阶段 3 之后的工作提供统一的主题 token、组件目录和样式入口。
+
+**阶段完成后可运行结果**
+
+- 工程内存在可用的 `components.json`、Tailwind 样式入口和 shadcn 组件目录。
+- `pnpm dlx shadcn@latest info --json` 返回非空 `config`，不再是未初始化状态。
+- `options / sidepanel / conversations / welcome` 四个入口页至少有一层共享的 shadcn 基础布局可复用。
+
+**状态（2026-04-02 完成）**
+
+- [x] 当前仓库已完成 shadcn 初始化：`npx shadcn@latest info --json` 返回非空 `config`，并已安装 `badge / button / card / input / select / separator`。
+- [x] 当前仓库已接入 Tailwind CSS v4：统一通过 `@tailwindcss/vite` 和 `assets/styles/globals.css` 提供样式基线。
+- [x] 该阶段已在阶段 3 前落地，后续页面可复用统一的 shadcn 基础组件与主题 token。
+
+**相关文档**
+
+- `docs/tech_stack.md`
+- `docs/Workspace/settings.md`
+- `docs/Workspace/sidebar.md`
+- `docs/Workspace/conversations.md`
+- `docs/test/settings-core.md`
+- `docs/test/sidebar-core.md`
+- `docs/test/conversations-core.md`
+
+**子任务**
+
+- [x] 先写失败测试：
+  - `tests/component/ui/page-shell.spec.tsx` 已补充共享基础布局、主题 class 和公共容器结构断言。
+  - `tests/component/options/settings-shell.spec.tsx` 已补充顶部动作区和主题 root class 断言。
+- [x] 使用项目包管理器初始化 shadcn：
+  - 由于 WXT 未被 shadcn CLI 直接识别，已通过临时 Vite 工程应用 `preset b3F5SdK3Xe`，再将产物落回当前仓库。
+  - 当前仓库已生成并校验 `components.json`、Tailwind v4 样式入口和组件目录。
+- [x] 补齐 UI 基础设施：
+  - 已接入 Tailwind 到 WXT 各入口页。
+  - 已建立共享 `src/components/ui` 与 `src/lib/utils.ts`。
+  - 已统一主题 token，以及 `Card / Button / Badge / Input / Select / Separator` 基础件来源。
+- [x] 做最小迁移，不做平行重写：
+  - 已将 `PageShell`、`SettingsShell`、`ModelForm`、`QuickInputsPanel` 迁到 shadcn 基础布局。
+  - 已保持现有交互、测试口径和日志点不变。
+- [x] 补文档：
+  - 已同步 `docs/tech_stack.md`。
+  - 已记录 `preset b3F5SdK3Xe` 的使用结果，后续新增组件统一通过 shadcn CLI 管理。
+
+**阶段验收**
+
+- `pnpm dlx shadcn@latest info --json`
+- `pnpm test:component -- tests/component/ui/page-shell.spec.tsx`
+- `pnpm test:component -- tests/component/options/settings-shell.spec.tsx`
+- `pnpm test:e2e -- tests/e2e/entry-shell.spec.ts`
 - `pnpm build`
 
 ---

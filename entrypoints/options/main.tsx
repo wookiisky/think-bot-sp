@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 
+import '../../assets/styles/globals.css';
 import '../../assets/styles/material-symbols.css';
 
 import { SettingsShell } from '../../src/features/settings/settings-shell';

@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
 
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Separator } from '../../components/ui/separator';
+import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import { isModelConfigComplete } from '../../domain/config/config-schema';
-import { createLogger } from '../../services/logger/logger';
 import { createLocaleService } from '../../services/i18n/locale-service';
+import { createLogger } from '../../services/logger/logger';
 import { Icon } from '../../ui/icon';
-import { settingsApi } from './settings-api';
 import { ModelForm } from './model-form';
 import { QuickInputsPanel } from './quick-inputs-panel';
+import { settingsApi } from './settings-api';
 
 type CacheStats = {
   /** 本地缓存条目数。 */
@@ -33,30 +37,15 @@ const logger = createLogger('settings-shell');
 const localeService = createLocaleService();
 
 const navigationItems = [
-  { key: 'settings.models', label: '模型', icon: 'settings' as const },
-  { key: 'settings.promptTabs', label: '标签页', icon: 'menu' as const },
-  { key: 'settings.blacklist', label: '黑名单', icon: 'menu' as const },
-  { key: 'settings.sync', label: '同步', icon: 'cache' as const },
-  { key: 'settings.cache', label: '本地缓存', icon: 'cache' as const },
+  { key: 'settings.models', icon: 'settings' as const },
+  { key: 'settings.promptTabs', icon: 'menu' as const },
+  { key: 'settings.blacklist', icon: 'menu' as const },
+  { key: 'settings.sync', icon: 'cache' as const },
+  { key: 'settings.cache', icon: 'cache' as const },
 ];
 
-const themePalette = {
-  system: {
-    pageBackground: 'radial-gradient(circle at top, #ffffff 0%, #f5f7ff 48%, #eef2f7 100%)',
-    panelBackground: 'rgba(255, 255, 255, 0.86)',
-    text: '#111827',
-  },
-  light: {
-    pageBackground: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
-    panelBackground: 'rgba(255, 255, 255, 0.94)',
-    text: '#111827',
-  },
-  dark: {
-    pageBackground: 'linear-gradient(180deg, #0f172a 0%, #111827 100%)',
-    panelBackground: 'rgba(15, 23, 42, 0.92)',
-    text: '#e5eefc',
-  },
-} as const;
+const selectClassName =
+  'w-full rounded-md border border-input bg-input/20 px-2 py-1.5 text-xs/relaxed outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 只保留有效快捷输入，并按顺序展示。 */
 const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInputItem[] =>
@@ -146,16 +135,8 @@ export const SettingsShell = () => {
 
   if (!config || !localeResources || !cacheStats) {
     return (
-      <main
-        style={{
-          minHeight: '100vh',
-          padding: '2rem',
-          background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)',
-          color: '#111827',
-          fontFamily: '"Segoe UI", system-ui, sans-serif',
-        }}
-      >
-        <p style={{ margin: 0 }}>{error ? `${error.title}：${error.message}` : '正在加载设置页…'}</p>
+      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)] px-6 py-8">
+        <p className="m-0 text-sm text-foreground">{error ? `${error.title}：${error.message}` : '正在加载设置页…'}</p>
       </main>
     );
   }
@@ -163,7 +144,6 @@ export const SettingsShell = () => {
   const language = config.basic.language;
   const t = (key: string) => localeResources.t(key, language);
   const activeModel = resolveActiveModel(config, selectedModelId);
-  const previewTheme = themePalette[config.basic.theme];
 
   const updateConfig = (next: ExtensionConfig) => {
     setConfig(next);
@@ -288,224 +268,177 @@ export const SettingsShell = () => {
     <main
       data-testid="settings-shell"
       data-theme={config.basic.theme}
-      style={{
-        minHeight: '100vh',
-        padding: '1.5rem',
-        background: previewTheme.pageBackground,
-        color: previewTheme.text,
-        fontFamily: '"Segoe UI", system-ui, sans-serif',
-      }}
+      className={cn(
+        'min-h-screen px-6 py-8 text-foreground',
+        'bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)]',
+        config.basic.theme === 'dark' && 'dark',
+      )}
     >
-      <section
-        style={{
-          width: 'min(1120px, 100%)',
-          margin: '0 auto',
-          borderRadius: '24px',
-          background: previewTheme.panelBackground,
-          border: '1px solid rgba(148, 163, 184, 0.18)',
-          boxShadow: '0 24px 60px rgba(15, 23, 42, 0.08)',
-          padding: '1.5rem',
-          backdropFilter: 'blur(14px)',
-        }}
-      >
-        <header style={{ display: 'grid', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span
-                style={{
-                  width: '2.5rem',
-                  height: '2.5rem',
-                  borderRadius: '0.9rem',
-                  background: 'linear-gradient(135deg, #111827, #4f46e5)',
-                  color: '#fff',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Icon name="settings" size={18} />
-              </span>
-              <div>
-                <p style={{ margin: 0, fontSize: '0.75rem', letterSpacing: '0.16em', textTransform: 'uppercase', color: '#64748b' }}>
-                  Stage 2 settings
-                </p>
-                <h1 style={{ margin: '0.2rem 0 0', fontSize: '1.9rem', lineHeight: 1.1 }}>{t('settings.title')}</h1>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button type="button" onClick={handleSave} disabled={saving} style={{ border: 'none', background: '#111827', color: '#fff', borderRadius: '999px', padding: '0.65rem 1rem', cursor: 'pointer' }}>
-                <Icon name="save" size={14} />
-                <span style={{ marginLeft: '0.4rem' }}>{t('settings.save')}</span>
-              </button>
-              <button type="button" onClick={handleReset} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
-                {t('settings.reset')}
-              </button>
-              <button type="button" onClick={handleImport} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
-                {t('settings.import')}
-              </button>
-              <button type="button" onClick={handleExport} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', color: '#374151', borderRadius: '999px', padding: '0.65rem 1rem' }}>
-                {t('settings.export')}
-              </button>
-            </div>
-          </div>
-
-          <nav aria-label="设置导航" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {navigationItems.map((item) => (
-              <span
-                key={item.key}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  borderRadius: '999px',
-                  border: '1px solid #dbe2ea',
-                  background: '#f8fafc',
-                  padding: '0.55rem 0.8rem',
-                  fontSize: '0.92rem',
-                }}
-              >
-                <Icon name={item.icon} size={14} />
-                {t(item.key)}
-              </span>
-            ))}
-          </nav>
-        </header>
-
-        <div style={{ marginTop: '1.5rem', display: 'grid', gap: '1rem' }}>
-          {error ? (
-            <section
-              role="alert"
-              style={{
-                padding: '0.85rem 1rem',
-                borderRadius: '14px',
-                border: '1px solid #fecaca',
-                background: '#fef2f2',
-                color: '#991b1b',
-              }}
-            >
-              {error.title}：{error.message}
-            </section>
-          ) : null}
-
-          <section
-            style={{
-              display: 'grid',
-              gap: '1rem',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-              alignItems: 'start',
-            }}
-          >
-            <section style={{ padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
-                <Icon name="settings" size={14} />
-                <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('settings.models')}</h2>
-              </div>
-
-              {activeModel ? (
-                <div style={{ display: 'grid', gap: '0.9rem' }}>
-                  {config.models.length > 1 ? (
-                    <label style={{ display: 'grid', gap: '0.4rem' }}>
-                      <span style={{ fontWeight: 600 }}>模型</span>
-                      <select
-                        aria-label="模型"
-                        value={activeModel.id}
-                        disabled={saving}
-                        onChange={(event) => setSelectedModelId(event.target.value)}
-                        style={{ borderRadius: '12px', border: '1px solid #d1d5db', padding: '0.65rem 0.8rem', background: '#fff' }}
-                      >
-                        {config.models.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-
-                  <ModelForm
-                    key={activeModel.id}
-                    model={activeModel}
-                    disabled={saving}
-                    onChange={(nextModel) => {
-                      updateConfig({
-                        ...config,
-                        models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
-                      });
-                    }}
-                  />
+      <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <Card className="rounded-[28px] bg-card/90 py-0 shadow-2xl ring-1 ring-foreground/8 backdrop-blur">
+          <CardHeader className="gap-6 border-b border-border/70 px-6 py-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                  <Icon name="settings" size={18} />
+                </span>
+                <div>
+                  <p className="m-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">Stage 2 settings</p>
+                  <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t('settings.title')}</h1>
                 </div>
-              ) : (
-                <p style={{ margin: 0, color: '#64748b' }}>暂无模型配置</p>
-              )}
+              </div>
+
+              <div data-testid="settings-shell-actions" className="flex flex-wrap justify-end gap-2">
+                <Button type="button" onClick={handleSave} disabled={saving}>
+                  <Icon name="save" size={14} />
+                  {t('settings.save')}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleReset} disabled={saving}>
+                  {t('settings.reset')}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleImport} disabled={saving}>
+                  {t('settings.import')}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleExport} disabled={saving}>
+                  {t('settings.export')}
+                </Button>
+              </div>
+            </div>
+
+            <nav aria-label="设置导航" data-testid="settings-shell-nav" className="flex flex-wrap gap-2">
+              {navigationItems.map((item) => (
+                <span key={item.key} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1.5 text-xs/relaxed">
+                  <Icon name={item.icon} size={14} />
+                  {t(item.key)}
+                </span>
+              ))}
+            </nav>
+          </CardHeader>
+
+          <CardContent className="grid gap-6 px-6 py-6">
+            {error ? (
+              <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error.title}：{error.message}
+              </section>
+            ) : null}
+
+            <section className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Icon name="settings" size={14} />
+                    {t('settings.models')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 px-5 py-5">
+                  {activeModel ? (
+                    <>
+                      {config.models.length > 1 ? (
+                        <label className="grid gap-2">
+                          <span className="text-sm font-medium">模型</span>
+                          <select
+                            aria-label="模型"
+                            value={activeModel.id}
+                            disabled={saving}
+                            onChange={(event) => setSelectedModelId(event.target.value)}
+                            className={selectClassName}
+                          >
+                            {config.models.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+
+                      <ModelForm
+                        key={activeModel.id}
+                        model={activeModel}
+                        disabled={saving}
+                        onChange={(nextModel) => {
+                          updateConfig({
+                            ...config,
+                            models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
+                          });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <p className="m-0 text-sm text-muted-foreground">暂无模型配置</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                  <CardTitle className="text-base">{t('settings.language')}</CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 px-5 py-5">
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium">{t('settings.language')}</span>
+                    <select
+                      value={language}
+                      onChange={(event) => handleLanguageChange(event.target.value as ExtensionConfig['basic']['language'])}
+                      aria-label={t('settings.language')}
+                      disabled={saving}
+                      className={selectClassName}
+                    >
+                      <option value="zh-CN">中文</option>
+                      <option value="en">English</option>
+                    </select>
+                  </label>
+
+                  <label className="grid gap-2">
+                    <span className="text-sm font-medium">{t('settings.theme')}</span>
+                    <select
+                      value={config.basic.theme}
+                      onChange={(event) =>
+                        updateConfig({
+                          ...config,
+                          basic: {
+                            ...config.basic,
+                            theme: event.target.value as ExtensionConfig['basic']['theme'],
+                          },
+                        })
+                      }
+                      aria-label={t('settings.theme')}
+                      disabled={saving}
+                      className={selectClassName}
+                    >
+                      <option value="system">System</option>
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                    </select>
+                  </label>
+
+                  <p className="m-0 text-sm leading-6 text-muted-foreground">切换后会立即预览标题文案和设置页主题。</p>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Icon name="cache" size={14} />
+                    {t('settings.cache')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-4 px-5 py-5">
+                  <div className="flex flex-wrap gap-3 text-sm text-foreground">
+                    <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
+                    <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
+                  </div>
+                  <Button type="button" variant="outline" onClick={handleClearCache} disabled={saving}>
+                    清理本地缓存
+                  </Button>
+                </CardContent>
+              </Card>
             </section>
 
-            <label style={{ display: 'grid', gap: '0.45rem', padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
-              <span style={{ fontWeight: 600 }}>{t('settings.language')}</span>
-              <select
-                value={language}
-                onChange={(event) => handleLanguageChange(event.target.value as ExtensionConfig['basic']['language'])}
-                aria-label={t('settings.language')}
-                disabled={saving}
-                style={{
-                  borderRadius: '12px',
-                  border: '1px solid #d1d5db',
-                  padding: '0.7rem 0.85rem',
-                  background: '#fff',
-                }}
-              >
-                <option value="zh-CN">中文</option>
-                <option value="en">English</option>
-              </select>
-              <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>切换后会立即预览标题文案。</p>
-            </label>
-
-            <label style={{ display: 'grid', gap: '0.45rem', padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
-              <span style={{ fontWeight: 600 }}>{t('settings.theme')}</span>
-              <select
-                value={config.basic.theme}
-                onChange={(event) =>
-                  updateConfig({
-                    ...config,
-                    basic: {
-                      ...config.basic,
-                      theme: event.target.value as ExtensionConfig['basic']['theme'],
-                    },
-                  })
-                }
-                aria-label={t('settings.theme')}
-                disabled={saving}
-                style={{
-                  borderRadius: '12px',
-                  border: '1px solid #d1d5db',
-                  padding: '0.7rem 0.85rem',
-                  background: '#fff',
-                }}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-              <p style={{ margin: 0, color: '#64748b', lineHeight: 1.5 }}>切换后会立即预览设置页主题。</p>
-            </label>
-
-            <section style={{ padding: '1rem', borderRadius: '18px', border: '1px solid #e2e8f0', background: '#fff' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
-                <Icon name="cache" size={14} />
-                <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('settings.cache')}</h2>
-              </div>
-              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155' }}>
-                <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
-                <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
-                <button type="button" onClick={handleClearCache} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: '999px', padding: '0.45rem 0.8rem', cursor: 'pointer' }}>
-                  清理本地缓存
-                </button>
-              </div>
-            </section>
-          </section>
-
-          <QuickInputsPanel quickInputs={normalizeQuickInputs(config.quickInputs)} />
-        </div>
+            <Separator />
+            <QuickInputsPanel quickInputs={normalizeQuickInputs(config.quickInputs)} />
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

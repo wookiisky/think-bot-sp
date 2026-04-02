@@ -1,71 +1,47 @@
+import { Badge } from '../components/ui/badge';
+import { Card, CardContent, CardHeader } from '../components/ui/card';
+import { cn } from '../lib/utils';
+
 type PageShellProps = {
   title: string;
   route: string;
   description: string;
+  className?: string;
 };
 
-export const PageShell = ({ title, route, description }: PageShellProps) => {
+/** 通用入口页壳层，统一占位页的布局和主题基线。 */
+export const PageShell = ({ title, route, description, className }: PageShellProps) => {
   return (
     <main
-      style={{
-        minHeight: '100vh',
-        background: 'radial-gradient(circle at top, #ffffff, #f4f4f7 55%)',
-        padding: '2rem 1.5rem',
-        fontFamily: '"Segoe UI", system-ui, -apple-system, sans-serif',
-        color: '#111',
-        display: 'flex',
-        justifyContent: 'center',
-      }}
+      data-testid="page-shell"
+      className={cn(
+        'min-h-screen bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)] px-6 py-8',
+        className,
+      )}
     >
-      <section
-        style={{
-          width: 'min(960px, 100%)',
-          background: '#fff',
-          borderRadius: '18px',
-          padding: '2rem',
-          boxShadow: '0 20px 40px rgba(15, 15, 15, 0.08)',
-        }}
-      >
-        <header>
-          <p
-            style={{
-              textTransform: 'uppercase',
-              letterSpacing: '0.2em',
-              color: '#4b5563',
-              fontSize: '0.75rem',
-              margin: 0,
-            }}
-          >
-            Stage 1 shell
-          </p>
-          <h1 style={{ margin: '0.8rem 0', fontSize: '2rem' }}>{title}</h1>
-        </header>
-
-        <p style={{ color: '#374151', fontSize: '1rem', marginTop: 0 }}>{description}</p>
-
-        <div
-          style={{
-            marginTop: '1.5rem',
-            padding: '1rem',
-            background: '#f9fafb',
-            borderRadius: '12px',
-            fontSize: '0.95rem',
-            lineHeight: 1.5,
-          }}
-        >
-          <p style={{ margin: '0.25rem 0', fontWeight: 600 }}>Route</p>
-          <code style={{ fontSize: '0.9rem', whiteSpace: 'nowrap' }}>{route}</code>
-        </div>
-
-        <p
-          style={{
-            marginTop: '1rem',
-            fontSize: '0.95rem',
-            color: '#6b7280',
-          }}
-        >
-          Environment: development
-        </p>
+      <section className="mx-auto flex w-full max-w-5xl justify-center">
+        <Card className="w-full gap-0 rounded-3xl bg-card/90 py-0 shadow-2xl ring-1 ring-foreground/8 backdrop-blur">
+          <CardHeader className="gap-4 border-b border-border/70 px-6 py-6">
+            <div className="flex items-center justify-between gap-3">
+              <Badge variant="secondary" className="rounded-full px-3 py-1 uppercase tracking-[0.22em]">
+                Stage 2.5 shell
+              </Badge>
+              <span className="text-xs text-muted-foreground">Environment: development</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              <h1 className="font-heading text-3xl font-medium tracking-tight">{title}</h1>
+              <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{description}</p>
+            </div>
+          </CardHeader>
+          <CardContent className="px-6 py-6">
+            <div
+              data-testid="page-shell-route"
+              className="rounded-2xl border border-border/70 bg-muted/60 px-4 py-3 font-mono text-sm text-foreground"
+            >
+              {route}
+            </div>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

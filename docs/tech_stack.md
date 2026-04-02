@@ -21,8 +21,10 @@
 
 - `shadcn/ui`
   - 统一按钮、弹层、表单、选择器、分隔面板等基础交互。
+  - 当前项目已使用 `preset b3F5SdK3Xe` 建立基线，组件目录固定为 `src/components/ui`。
 - `Tailwind CSS`
   - 原子化样式体系。
+  - 当前项目基于 Tailwind CSS v4，统一通过 `@tailwindcss/vite` 与 `assets/styles/globals.css` 接入。
 - `@dnd-kit`
   - 模型与快捷输入排序。
 - `@tanstack/react-virtual`

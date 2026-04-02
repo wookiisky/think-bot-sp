@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 import { PageShell } from '../../../src/ui/page-shell';
 
 describe('PageShell', () => {
-  it('renders page name, route, and stage label', () => {
+  it('renders page name, route, and shared shell structure', () => {
     const sidePanelRoute = '/side-panel.html';
 
     render(
@@ -15,9 +15,13 @@ describe('PageShell', () => {
       />,
     );
 
+    const main = screen.getByTestId('page-shell');
+    const routeCard = within(main).getByTestId('page-shell-route');
+
     expect(screen.getByRole('heading', { name: 'Side Panel' })).toBeInTheDocument();
-    expect(screen.getByText(sidePanelRoute)).toBeInTheDocument();
     expect(screen.getByText('Stage 1 shell only')).toBeInTheDocument();
-    expect(screen.getByText(/environment/i)).toBeInTheDocument();
+    expect(within(routeCard).getByText(sidePanelRoute)).toBeInTheDocument();
+    expect(within(main).getByText(/environment/i)).toBeInTheDocument();
+    expect(main.className).toMatch(/min-h-screen/);
   });
 });
