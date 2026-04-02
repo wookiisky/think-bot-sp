@@ -20,6 +20,7 @@
     "@playwright/test": "^1.54.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
+    "@testing-library/dom": "^10.1.0",
     "@types/chrome": "^0.0.306",
     "@types/node": "^22.15.2",
     "@types/react": "^18.3.20",
