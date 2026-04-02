@@ -1,0 +1,13 @@
+/* 本地图标基础样式，不依赖在线字体。 */
+.material-symbols-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 0;
+  color: inherit;
+}
+
+.material-symbols-icon svg {
+  display: block;
+}
