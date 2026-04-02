@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  buildPageRecord,
+  normalizePageUrl,
+  pageRecordSchema,
+  resetPromptTabState,
+} from '../../../src/domain/page/page-schema';
+
+describe('page schema', () => {
+  it('归一化页面 URL', () => {
+    expect(normalizePageUrl('https://example.com/a?utm_source=ads&q=1#hash')).toBe(
+      'https://example.com/a?q=1',
+    );
+  });
+
+  it('创建页面记录时默认开启页面内容并写入过期时间', () => {
+    const page = buildPageRecord({
+      url: 'https://example.com/a?utm_source=ads&q=1#hash',
+      now: 1_000,
+    });
+
+    expect(pageRecordSchema.parse(page)).toEqual(page);
+    expect(page.id).toBe('https://example.com/a?q=1');
+    expect(page.includePageContent).toBe(true);
+    expect(page.promptTabStates).toEqual([]);
+    expect(page.expiresAt - page.updatedAt).toBe(90 * 24 * 60 * 60 * 1000);
+  });
+
+  it('重置 promptTab 时只清空目标状态', () => {
+    const page = buildPageRecord({
+      url: 'https://example.com',
+      promptTabStates: [
+        {
+          promptTabId: 'chat',
+          initializedAt: 10,
+          lastAutoTriggerAt: 20,
+          autoTriggerStatus: 'running',
+          lastClearedAt: null,
+        },
+        {
+          promptTabId: 'quick',
+          initializedAt: 30,
+          lastAutoTriggerAt: 40,
+          autoTriggerStatus: 'done',
+          lastClearedAt: null,
+        },
+      ],
+      now: 50,
+    });
+
+    const next = resetPromptTabState(page, 'chat', 60);
+
+    expect(next.includePageContent).toBe(true);
+    expect(next.promptTabStates[0]).toEqual({
+      promptTabId: 'chat',
+      initializedAt: null,
+      lastAutoTriggerAt: null,
+      autoTriggerStatus: 'idle',
+      lastClearedAt: 60,
+    });
+    expect(next.promptTabStates[1]).toEqual(page.promptTabStates[1]);
+  });
+});
