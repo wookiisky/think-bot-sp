@@ -160,6 +160,12 @@
 - 多页面读取到的配置一致。
 - 设置页可展示本地缓存占用，并具备安全清理入口。
 
+**状态（2026-04-02 复核）**
+
+- [x] 阶段 2 验收命令已复跑通过：`pnpm test:unit -- tests/unit/domain tests/unit/repositories tests/unit/services/runtime-messaging/config-commands.spec.ts`、`pnpm test:component -- tests/component/options`、`pnpm test:e2e -- tests/e2e/settings-flow.spec.ts`、`pnpm build`。
+- [x] 设置页已补齐阶段 2 最小闭环：读取、保存、恢复默认、语言/主题即时预览、模型完整性判定、本地缓存展示与安全清理。
+- [x] 阶段 2 当前可按“已完成”推进后续阶段。
+
 **相关文档**
 
 - `docs/DataSchema/config.md`
@@ -178,32 +184,32 @@
 
 **子任务**
 
-- [ ] 先写失败单测：
+- [x] 先写失败单测：
   - `tests/unit/domain/config-schema.spec.ts` 覆盖 `version / updatedAt`、Provider 字段约束、默认模型完整性判定、软删除模型过滤、模型 / 快捷输入 / 黑名单稳定 ID 唯一性。
   - `tests/unit/domain/page-schema.spec.ts` 覆盖 URL 归一化、`promptTabStates` 重置语义、页面级 `includePageContent`、`expiresAt` 生成规则。
   - `tests/unit/domain/conversation-schema.spec.ts` 覆盖 `Chat` 与快捷输入隔离、分支挂载规则。
   - `tests/unit/domain/loading-state.spec.ts` 覆盖单 `promptTab` 单主 session 约束。
-- [ ] 实现 Zod schema、类型定义、默认值工厂和 shared 常量。
-- [ ] 先写失败仓储测试：
+- [x] 实现 Zod schema、类型定义、默认值工厂和 shared 常量。
+- [x] 先写失败仓储测试：
   - `tests/unit/repositories/config-repository.spec.ts` 覆盖跨页面读写一致、快速重复保存不丢字段、非法导入不覆盖现有配置。
   - `tests/unit/repositories/page-repository.spec.ts` 覆盖页面级状态恢复、过期页面清理、删除页面级联清理。
   - `tests/unit/repositories/conversation-repository.spec.ts`
   - `tests/unit/repositories/locale-repository.spec.ts`
-- [ ] 实现 typed repositories，统一封装 `chrome.storage.local`，禁止 UI 直接读写原始 key。
-- [ ] 先写失败组件测试：
+- [x] 实现 typed repositories，统一封装 `chrome.storage.local`，禁止 UI 直接读写原始 key。
+- [x] 先写失败组件测试：
   - `tests/component/options/settings-shell.spec.tsx` 覆盖配置加载、保存、默认值恢复、语言切换即时预览。
   - `tests/component/options/model-form.spec.tsx` 覆盖 Provider 切换字段显隐、API Key 掩码、不可保存的不完整模型。
   - `tests/component/options/quick-inputs.spec.tsx` 覆盖快捷输入折叠展开、名称与消息预览。
-- [ ] 实现设置页基础：
+- [x] 实现设置页基础：
   - 基础设置、语言模型、标签页、黑名单四个核心区域的骨架。
   - 读取 / 保存完整配置。
   - 语言资源加载与 key 对齐校验。
   - 本地图标资源接入。
   - 本地缓存占用展示与安全清理入口。
-- [ ] 固定配置与快照版本常量、导入校验和拒绝策略：
+- [x] 固定配置与快照版本常量、导入校验和拒绝策略：
   - `ExtensionConfig.version` 与 `SyncSnapshot.schemaVersion` 统一由 shared 常量提供。
   - 非法结构或不支持版本的导入直接拒绝，不污染现有本地数据。
-- [ ] 在 background 暴露 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG` 最小命令处理器。
+- [x] 在 background 暴露 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG` 最小命令处理器。
 
 **阶段验收**
 
