@@ -1,0 +1,29 @@
+import { createRoot } from 'react-dom/client';
+
+import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
+import { PageShell } from '../../src/ui/page-shell';
+
+const localeParam = new URLSearchParams(window.location.search).get('locale') ?? 'en';
+const root = createRoot(document.getElementById('root')!);
+
+root.render(
+  <div>
+    <PageShell
+      title="Welcome"
+      route={EXTENSION_PAGES.welcome}
+      description="Landing page for new installs and onboarding."
+    />
+    <section
+      style={{
+        margin: '1.25rem auto',
+        maxWidth: '960px',
+        textAlign: 'center',
+        fontSize: '0.9rem',
+        color: '#4b5563',
+      }}
+    >
+      <p style={{ margin: '0.25rem 0' }}>Locale seed: {localeParam}</p>
+      <p style={{ margin: '0.25rem 0' }}>Environment: development</p>
+    </section>
+  </div>,
+);

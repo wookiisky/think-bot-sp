@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tsPluginImport from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import globals from 'globals';
 
 const baseConfigs = [js.configs.recommended];
 const tsPlugin = tsPluginImport['module.exports'] ?? tsPluginImport;
@@ -29,7 +30,6 @@ export default [
       'tests/**/*.{js,ts,tsx}',
       'entrypoints/**/*.{js,ts,tsx}'
     ],
-    ignores: ['.output/.wxt/playwright-report/test-results'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
@@ -38,9 +38,10 @@ export default [
         ecmaFeatures: { jsx: true }
       },
       globals: {
-        browser: 'readonly',
-        process: 'readonly',
-        document: 'readonly'
+        ...globals.browser,
+        ...globals.node
+        ,
+        chrome: 'readonly'
       }
     },
     rules: {
