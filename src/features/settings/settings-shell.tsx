@@ -407,8 +407,8 @@ export const SettingsShell = () => {
                 <h2 style={{ margin: 0, fontSize: '1rem' }}>{t('settings.cache')}</h2>
               </div>
               <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155' }}>
-                <span>{cacheStats.entryCount} 项</span>
-                <span>{formatBytes(cacheStats.bytes)}</span>
+                <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
+                <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
                 <button type="button" onClick={handleClearCache} disabled={saving} style={{ border: '1px solid #d1d5db', background: '#fff', borderRadius: '999px', padding: '0.45rem 0.8rem', cursor: 'pointer' }}>
                   清理本地缓存
                 </button>

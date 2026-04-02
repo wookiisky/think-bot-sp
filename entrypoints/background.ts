@@ -89,24 +89,28 @@ export default defineBackground(() => {
     }
   });
 
-  chrome.action.onClicked.addListener((tab) => {
-    logger.info('action.clicked', { tabId: tab?.id, url: tab?.url });
-    const tabId = tab?.id;
+  if (chrome.action?.onClicked) {
+    chrome.action.onClicked.addListener((tab) => {
+      logger.info('action.clicked', { tabId: tab?.id, url: tab?.url });
+      const tabId = tab?.id;
 
-    if (!tabId) {
-      logger.warn('action.missing-tab', { url: tab?.url });
-      openConversationsPage();
-      return;
-    }
+      if (!tabId) {
+        logger.warn('action.missing-tab', { url: tab?.url });
+        openConversationsPage();
+        return;
+      }
 
-    if (isTabRestricted(tab)) {
-      logger.warn('action.restricted', { tabId, url: tab?.url });
-      openConversationsPage();
-      return;
-    }
+      if (isTabRestricted(tab)) {
+        logger.warn('action.restricted', { tabId, url: tab?.url });
+        openConversationsPage();
+        return;
+      }
 
-    setSidePanelForTab(tabId);
-  });
+      setSidePanelForTab(tabId);
+    });
+  } else {
+    logger.warn('扩展按钮能力不可用', {});
+  }
 
   chrome.runtime.onMessage.addListener((message: unknown, _sender: unknown, sendResponse: (response?: unknown) => void) => {
     if (!isConfigCommandMessage(message)) {

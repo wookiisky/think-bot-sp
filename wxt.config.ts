@@ -12,6 +12,9 @@ export default defineConfig({
       'contextMenus',
       'unlimitedStorage'
     ],
+    action: {
+      default_title: 'think-bot-sp'
+    },
     options_page: 'options.html',
     side_panel: {
       default_path: 'side-panel.html'
