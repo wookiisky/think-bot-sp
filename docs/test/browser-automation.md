@@ -20,8 +20,8 @@
 
 - 启动基线：
   - 扩展成功加载。
-  - service worker 可获取。
-  - extension id 稳定可用于打开页面。
+  - service worker 可获取；拿不到时测试直接失败，不做静默降级。
+  - extension id 从 service worker URL 解析，稳定可用于打开页面。
   - 首次安装会按浏览器语言打开快速上手文档。
 - P0 主流程：
   - 普通网页打开 side panel。
@@ -56,6 +56,11 @@
 - 使用 persistent context。
 - 失败默认保留 trace、video、screenshot。
 - 通过测试桩控制模型与同步返回，避免依赖真实外部服务。
+
+基线约束：
+
+- 扩展 id 获取优先依赖 service worker URL，不依赖 `chrome://extensions` 页面结构。
+- extension page 路由断言应优先复用 shared 常量，避免测试写死构建产物文件名。
 
 ## 6. 必须长期回归的高风险场景
 

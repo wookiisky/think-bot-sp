@@ -120,16 +120,16 @@
 
 **子任务**
 
-- [ ] 初始化 `WXT + React 18 + TypeScript strict + pnpm` 工程，并声明 `storage / sidePanel / activeTab / scripting / downloads / contextMenus / unlimitedStorage` 权限。
-- [ ] 建立基础目录骨架：`domain / repositories / services / features / ui / shared / tests`。
-- [ ] 先写失败测试：
+- [x] 初始化 `WXT + React 18 + TypeScript strict + pnpm` 工程，并声明 `storage / sidePanel / activeTab / scripting / downloads / contextMenus / unlimitedStorage` 权限。
+- [x] 建立基础目录骨架：`domain / repositories / services / features / ui / shared / tests`。
+- [x] 先写失败测试：
   - `tests/e2e/bootstrap.spec.ts` 覆盖扩展加载、`service worker` 存在、`options` 与 `conversations` 页面可打开。
   - `tests/e2e/entry-shell.spec.ts` 覆盖 side panel 路由存在但暂未接业务能力。
-- [ ] 实现最小代码：
+- [x] 实现最小代码：
   - `background` 仅完成安装、上下文菜单和页面路由注册。
   - 三个页面只渲染壳层和环境信息。
-- [ ] 接入 `Vitest / RTL / Playwright`、trace/video/screenshot 保留策略、基础 mock 工具。
-- [ ] 为 `logger` 预留基础接口和测试桩，后续阶段直接复用。
+- [x] 接入 `Vitest / RTL / Playwright`、trace/video/screenshot 保留策略、基础 mock 工具。
+- [x] 为 `logger` 预留基础接口和测试桩，后续阶段直接复用。
 
 **阶段验收**
 

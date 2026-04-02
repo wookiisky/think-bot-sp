@@ -3,11 +3,17 @@ import path from 'node:path';
 import { chromium, expect, test as base, type BrowserContext } from '@playwright/test';
 
 type ExtensionFixtures = {
+  /** 持久化浏览器上下文，用于加载并操作 MV3 扩展。 */
   context: BrowserContext;
+  /** 当前测试运行时解析出的扩展 ID。 */
   extensionId: string;
+  /** 当前扩展 service worker 的完整地址。 */
+  serviceWorkerUrl: string;
 };
 
 export const test = base.extend<ExtensionFixtures>({
+  // 创建持久化浏览器上下文，并把打包产物作为 unpacked extension 加载进去。
+  // eslint-disable-next-line no-empty-pattern
   context: async ({}, use) => {
     const extensionPath = path.resolve(process.cwd(), '.output/chrome-mv3');
     const context = await chromium.launchPersistentContext('', {
@@ -21,62 +27,8 @@ export const test = base.extend<ExtensionFixtures>({
     await use(context);
     await context.close();
   },
-  extensionId: async ({ context }, use) => {
-    const extensionsPage = await context.newPage();
-    let extensionId: string | null = null;
-
-    try {
-      await extensionsPage.goto('chrome://extensions/', {
-        waitUntil: 'domcontentloaded',
-      });
-
-      const devToggle = extensionsPage.locator('cr-toggle[aria-label="Developer mode"]');
-      if (await devToggle.count()) {
-        const isPressed = await devToggle.first().getAttribute('aria-pressed');
-        if (isPressed === 'false') {
-          await devToggle.first().click();
-          await extensionsPage.waitForTimeout(500);
-        }
-      }
-
-      await extensionsPage
-        .locator('extensions-item')
-        .first()
-        .waitFor({ timeout: 5000 })
-        .catch(() => null);
-
-      const items = extensionsPage.locator('extensions-manager >> extensions-item');
-      const itemCount = await items.count();
-      for (let i = 0; i < itemCount; i++) {
-        const item = items.nth(i);
-        const text = await item.innerText();
-        if (text.toLowerCase().includes('think-bot-sp')) {
-          try {
-            const optionsButton = item.getByRole('button', { name: 'Options' });
-            if (await optionsButton.count()) {
-              const [optionsPage] = await Promise.all([
-                context.waitForEvent('page'),
-                optionsButton.click(),
-              ]);
-              await optionsPage.waitForLoadState('domcontentloaded');
-              extensionId = new URL(optionsPage.url()).host;
-              await optionsPage.close();
-            }
-          } catch {
-            // best effort; continue with other strategies
-          }
-
-          if (!extensionId) {
-            extensionId = await item.getAttribute('id');
-          }
-
-          break;
-        }
-      }
-    } finally {
-      await extensionsPage.close();
-    }
-
+  // Phase 1 基线要求能稳定拿到 service worker；拿不到就直接失败，不做静默降级。
+  serviceWorkerUrl: async ({ context }, use) => {
     const serviceWorker =
       context.serviceWorkers()[0] ??
       (await context
@@ -85,17 +37,15 @@ export const test = base.extend<ExtensionFixtures>({
         })
         .catch(() => null));
 
-    if (serviceWorker) {
-      extensionId = extensionId ?? new URL(serviceWorker.url()).host;
+    if (!serviceWorker) {
+      throw new Error('Phase 1 E2E 基线失败：未能在 15 秒内获取扩展 service worker。');
     }
 
-    if (!extensionId) {
-      throw new Error(
-        'Unable to determine extension id; Developer Mode enabled but neither service worker nor extension listing provided an id',
-      );
-    }
-
-    await use(extensionId);
+    await use(serviceWorker.url());
+  },
+  // 扩展 ID 统一从 service worker URL 解析，避免测试夹具依赖 chrome://extensions UI 结构。
+  extensionId: async ({ serviceWorkerUrl }, use) => {
+    await use(new URL(serviceWorkerUrl).host);
   },
 });
 
