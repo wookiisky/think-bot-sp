@@ -1,11 +1,10 @@
-import { pageRecordSchema } from '../domain/page/page-schema';
+import { buildPageRecord, pageRecordSchema } from '../domain/page/page-schema';
 import { CONVERSATION_STORAGE_PREFIX, LOADING_STORAGE_PREFIX, PAGE_STORAGE_PREFIX } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
+const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
 
 const getPageKey = (normalizedUrl: string) => `${PAGE_STORAGE_PREFIX}${normalizedUrl}`;
-const getConversationPrefix = (normalizedUrl: string) => `${CONVERSATION_STORAGE_PREFIX}${normalizedUrl}:`;
-const getLoadingPrefix = (normalizedUrl: string) => `${LOADING_STORAGE_PREFIX}${normalizedUrl}:`;
 
 const matchesExactConversationKey = (key: string, normalizedUrl: string): boolean => {
   if (!key.startsWith(CONVERSATION_STORAGE_PREFIX)) {
@@ -58,6 +57,39 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       const result = await storage.get<Record<string, unknown>>([getPageKey(normalizedUrl)]);
       const value = result[getPageKey(normalizedUrl)];
       return value ? pageRecordSchema.parse(value) : null;
+    },
+
+    /** 保存提取结果，同时保留页面级运行状态。 */
+    async saveExtractionResult(input: {
+      /** 归一化后的页面 URL。 */
+      normalizedUrl: string;
+      /** 页面原始 URL。 */
+      url: string;
+      /** 页面标题。 */
+      title: string;
+      /** 页面 favicon。 */
+      faviconUrl: string;
+      /** 提取出的正文。 */
+      content: string;
+      /** 实际使用的提取方法。 */
+      extractionMethod: 'readability' | 'jina';
+    }) {
+      const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
+      const currentValue = result[getPageKey(input.normalizedUrl)];
+      const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : null;
+      const now = Date.now();
+      const nextPage = pageRecordSchema.parse({
+        ...(currentPage ?? buildPageRecord({ url: input.url, now })),
+        title: input.title,
+        faviconUrl: input.faviconUrl,
+        content: input.content,
+        extractionMethod: input.extractionMethod,
+        updatedAt: now,
+        expiresAt: now + NINETY_DAYS,
+      });
+
+      await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
+      return nextPage;
     },
 
     /** 列出全部页面记录。 */
