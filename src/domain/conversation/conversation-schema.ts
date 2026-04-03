@@ -28,6 +28,7 @@ const messageRecordSchema = z
     content: z.string(),
     images: z.array(z.string()),
     status: z.enum(['loading', 'done', 'error', 'cancelled']),
+    errorMessage: z.string().nullable().default(null),
     modelId: z.string().nullable(),
     branches: z.array(branchRecordSchema),
     retryFromMessageId: z.string().nullable(),
