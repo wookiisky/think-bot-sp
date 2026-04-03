@@ -196,6 +196,10 @@ describe('runtime-messaging', () => {
       shouldExtract: true,
     });
     expect(pageRepository.getPage).toHaveBeenCalledWith('https://example.com/article');
+    expect(blacklistRepository.isBlocked).toHaveBeenCalledWith({
+      browserTabId: 7,
+      normalizedUrl: 'https://example.com/article',
+    });
   });
 
   it('bootstrap 会拒绝非 sidepanel.html 的 sender', async () => {
@@ -237,6 +241,15 @@ describe('runtime-messaging', () => {
         {
           id: 'ext-id',
           url: 'chrome-extension://ext-id/sidepanel.html',
+        },
+        'ext-id',
+      ),
+    ).toBe(true);
+    expect(
+      isSidebarPageSender(
+        {
+          id: 'ext-id',
+          url: 'chrome-extension://ext-id/sidepanel.html?tabId=7&pageUrl=https%3A%2F%2Fexample.com',
         },
         'ext-id',
       ),

@@ -32,9 +32,9 @@ type ConversationRepository = {
 
 type BlacklistRepository = {
   /** 判断页面是否被黑名单阻止。 */
-  isBlocked(normalizedUrl: string): Promise<boolean> | boolean;
+  isBlocked(input: { browserTabId: number; normalizedUrl: string }): Promise<boolean> | boolean;
   /** 读取命中的黑名单规则。 */
-  getMatchedRuleId(normalizedUrl: string): Promise<string | null> | string | null;
+  getMatchedRuleId(input: { browserTabId: number; normalizedUrl: string }): Promise<string | null> | string | null;
 };
 
 type SidebarHandlerContext = {
@@ -70,8 +70,14 @@ export const createSidebarCommandHandler = ({
           pageRepository.getPage(normalizedUrl),
           conversationRepository.listPageConversations(normalizedUrl),
           conversationRepository.listPageLoadingStates(normalizedUrl),
-          blacklistRepository.isBlocked(normalizedUrl),
-          blacklistRepository.getMatchedRuleId(normalizedUrl),
+          blacklistRepository.isBlocked({
+            browserTabId: command.tabId,
+            normalizedUrl,
+          }),
+          blacklistRepository.getMatchedRuleId({
+            browserTabId: command.tabId,
+            normalizedUrl,
+          }),
         ]);
 
         const response: SidebarBootstrapResponse = {

@@ -1,8 +1,9 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-const SENSITIVE_KEYS = new Set(['apiKey']);
+const SENSITIVE_KEYS = new Set(['apiKey', 'gistToken', 'webdavPassword', 'authorization']);
 
-const sanitizePayload = (payload?: Record<string, unknown>): Record<string, unknown> => {
+/** 脱敏日志载荷中的敏感字段，避免配置或凭据进入控制台。 */
+export const sanitizePayload = (payload?: Record<string, unknown>): Record<string, unknown> => {
   if (!payload) {
     return {};
   }

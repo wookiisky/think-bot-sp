@@ -16,7 +16,11 @@ export const isSidebarPageSender = (sender: SidebarMessageSender, runtimeId: str
     return false;
   }
 
-  return sender.url.endsWith('/sidepanel.html');
+  try {
+    return new URL(sender.url).pathname.endsWith('/sidepanel.html');
+  } catch {
+    return false;
+  }
 };
 
 /** 断言 sender 必须来自 sidepanel.html。 */

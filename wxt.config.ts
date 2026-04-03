@@ -24,6 +24,8 @@ export default defineConfig({
       'unlimitedStorage'
     ],
     host_permissions: [
+      'http://*/*',
+      'https://*/*',
       'https://r.jina.ai/*'
     ],
     action: {

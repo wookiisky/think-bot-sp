@@ -119,6 +119,33 @@ describe('extraction service', () => {
 });
 
 describe('content source', () => {
+  it('content script 未连接时回退到 executeScript 直接采集页面内容', async () => {
+    const sendMessage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+      .mockResolvedValueOnce({
+        url: 'https://example.com/article',
+        title: 'Injected',
+        html: '<article><p>Injected</p></article>',
+        text: 'Injected',
+        faviconUrl: '',
+      });
+    const executeScript = vi.fn().mockResolvedValue(undefined);
+    const contentSource = createContentSource({
+      tabs: {
+        executeScript,
+        reload: vi.fn(),
+        sendMessage,
+      },
+    });
+
+    await expect(contentSource.collect({ tabId: 7 })).resolves.toMatchObject({
+      title: 'Injected',
+      text: 'Injected',
+    });
+    expect(executeScript).toHaveBeenCalledWith(7);
+  });
+
   it('content script 未连接时自动刷新一次再重试', async () => {
     const sendMessage = vi
       .fn()
@@ -133,6 +160,7 @@ describe('content source', () => {
     const reload = vi.fn().mockResolvedValue(undefined);
     const contentSource = createContentSource({
       tabs: {
+        executeScript: vi.fn().mockRejectedValue(new Error('executeScript failed')),
         reload,
         sendMessage,
       },
