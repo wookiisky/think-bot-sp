@@ -46,12 +46,13 @@
 - 需要新提取时先尝试 Readability。
 - Readability 失败且允许回退时再调用 Jina。
 - 成功后写入 `PageRecord`。
-- content script 未连接时，background 先自动刷新当前页面一次并重试注入；只有自动恢复失败后才把错误抛给 UI。
+- content script 未连接时，background 先尝试按需注入 `content-scripts/content.js`，仍未连上时再自动刷新当前页面并有限次重试；只有自动恢复失败后才把错误抛给 UI。
 
 ## 6. 错误与异常处理
 
 - content script 未连接：
-  - 先执行一次自动刷新重试。
+  - 先尝试一次按需注入 content script。
+  - 注入后仍不可用，再执行一次自动刷新重试。
   - 自动刷新后仍失败时返回连接错误并允许上层手动重试。
 - HTML 为空：
   - 直接失败，不发送空内容到 Jina。
@@ -79,6 +80,7 @@
 - 不在 content script 发起跨域 Jina 请求。
 - 不因一次提取失败清空已有有效缓存。
 - 不把提取方法做成全局共享状态。
+- `GET_SIDEBAR_BOOTSTRAP` 不触发提取，提取只由 `RE_EXTRACT_CONTENT` 显式启动。
 
 ## 10. 测试要求
 

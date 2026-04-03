@@ -35,11 +35,12 @@
 - side panel bootstrap 阶段完成 URL 匹配并返回阻断结果。
 - 命中则发送 `BLACKLIST_DETECTED` 或在 bootstrap 结果中标记 `blocked`。
 - 用户确认继续并发送 `CONFIRM_BLACKLIST_CONTINUE` 后才放行后续流程。
+- 放行令牌只保存在当前 service worker 内存中，按 `browserTab + normalizedUrl` 组合键隔离。
 
 ## 6. 错误与异常处理
 
 - 规则非法时，保存阶段阻断，不把错误带到运行时。
-- 匹配异常时，默认视为不通过并记录错误。
+- 匹配异常时，运行时默认视为阻断并记录错误，避免非法正则把页面误放行。
 
 ## 7. 数据与状态
 
@@ -57,6 +58,7 @@
 
 - 命中黑名单时不能直接开始提取或自动触发。
 - 默认规则恢复不能覆盖用户新增规则。
+- 黑名单放行不能写入持久化存储，也不能跨 `browserTab` 复用。
 
 ## 10. 测试要求
 

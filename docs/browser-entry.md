@@ -19,6 +19,12 @@
 - 首次安装：
   - 根据浏览器语言打开对应的快速上手文档。
 
+## 2.1 阶段 3 已落地约束
+
+- side panel 默认入口固定为 `sidepanel.html`，不再使用其他别名路径。
+- 浏览器入口测试驱动只允许走 `tests/e2e/helpers` 中的显式 `__E2E_BROWSER_ACTION_CLICK__` 协议，正式命令集合不混入测试指令。
+- `sidepanel.html` 支持通过 `tabId` 和 `pageUrl` query 显式恢复上下文，仅用于 E2E 和调试复现，不改变正式按钮点击链路。
+
 ## 3. 责任边界
 
 负责：

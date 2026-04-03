@@ -67,6 +67,11 @@
 - `blacklist.detected`
 - `blacklist.bypass_confirmed`
 
+阶段 3 当前最小契约：
+
+- 已稳定使用的关键事件包含 `panel.open.requested`、`action.clicked`、`panel.auto_hidden`、`extraction.started`、`extraction.readability_failed`、`extraction.jina_fallback_started`、`extraction.completed`、`blacklist.bypass_confirmed`。
+- 当前敏感字段脱敏集合包含 `apiKey`、`gistToken`、`webdavPassword`、`authorization`。
+
 ## 5. 关键流程
 
 - side panel 打开和初始化时记录入口、当前 `browserTab` 和初始化结果。

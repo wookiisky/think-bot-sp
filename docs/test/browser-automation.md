@@ -16,6 +16,11 @@
 - 覆盖扩展图标点击、右键菜单和首次安装入口。
 - 在真实浏览器中验证流式消息和恢复行为。
 
+阶段 3 自动化策略：
+
+- 扩展图标入口复用 `tests/e2e/helpers/browser-entry-driver.ts`，通过显式 `__E2E_BROWSER_ACTION_CLICK__` 协议走同一条 background 入口逻辑。
+- `sidebar-extraction` 场景通过 `sidepanel.html?tabId=&pageUrl=` 显式恢复 side panel 上下文，避免把用户手势约束和提取闭环耦死在同一个 E2E 用例里。
+
 ## 3. 验证点
 
 - 启动基线：

@@ -29,6 +29,7 @@
 
 - 正常流：
   - 打开侧边栏并显示内容。
+  - 阶段 3 必须覆盖“两阶段 bootstrap -> 黑名单确认 -> 正文提取成功”闭环。
   - 顶部控制区、提取内容区、`promptTab` 区、聊天区、输入区的上下结构稳定。
   - 提取内容区在切换 `Chat` 和快捷输入 `promptTab` 后仍保持常驻可见。
   - side panel 首屏初始化采用主动拉取 bootstrap，首屏不依赖 background 主动推送命令。
@@ -54,6 +55,7 @@
   - `browserTab A` 打开 side panel，切到 `browserTab B` 自动隐藏，切回 `browserTab A` 不自动恢复。
   - 用户取消请求。
   - content script 断连后自动刷新一次再重试。
+  - 静态 content script 未挂载时，background 能先按需注入再继续采集。
 
 ## 4. 关键边界条件
 

@@ -139,17 +139,19 @@
 2. background 先返回缓存、页面状态、`promptTab` 会话摘要、loading 状态和黑名单判定结果。
 3. 若页面已有有效缓存，则不重复提取。
 4. 若页面无缓存且当前打开流程已通过黑名单校验，background 请求 content script 提供页面 HTML 和元数据。
-5. 提取服务优先使用 Readability。
-6. Readability 成功则保存页面内容、提取方式、更新时间。
-7. Readability 失败且允许回退时，调用 Jina 提取。
-8. Jina 成功则保存新内容和方法。
-9. side panel 将提取结果显示在常驻独立的提取内容区。
-10. 全部失败则返回错误态，并保留当前页面上下文。
+5. 若 content script 未连上，background 先尝试按需注入 content script，再进入一次自动刷新重连。
+6. 提取服务优先使用 Readability。
+7. Readability 成功则保存页面内容、提取方式、更新时间。
+8. Readability 失败且允许回退时，调用 Jina 提取。
+9. Jina 成功则保存新内容和方法。
+10. side panel 将提取结果显示在常驻独立的提取内容区。
+11. 全部失败则返回错误态，并保留当前页面上下文。
 
 错误流：
 
 - content script 未连接：
-  - background 自动刷新当前页面一次并重新注入 content script。
+  - background 先尝试按需注入 content script。
+  - 注入后仍失败时，再自动刷新当前页面一次并重新连接。
   - 自动恢复仍失败后，才提示用户手动刷新或重试。
 - Jina 请求失败：
   - 标记提取失败，不覆盖已有成功缓存。

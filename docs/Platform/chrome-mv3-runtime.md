@@ -26,6 +26,7 @@
 - 只能使用受限 Chrome 扩展能力。
 - 与页面脚本的桥接需显式注入或 DOM 通道。
 - 不直接持有模型 API Key、同步凭证和远端写入能力。
+- 阶段 3 的内容采集固定暴露 `COLLECT_PAGE_SOURCE`，返回 `url / title / html / text / faviconUrl`。
 
 ### 2.3 Service Worker
 
@@ -58,6 +59,11 @@
 - `scripting`：按需执行脚本或注入桥接。
 - `downloads`：导出 Markdown 与配置文件。
 - `storage`：本地持久化。
+
+阶段 3 额外约束：
+
+- `host_permissions` 需要覆盖 `http://*/*`、`https://*/*` 和 `https://r.jina.ai/*`，否则网页采集和 Jina 回退都不稳定。
+- 当 `tabs.sendMessage` 未连上 content script 时，background 可以先按需注入 content script，再走一次自动刷新重连。
 
 权限约束：
 
