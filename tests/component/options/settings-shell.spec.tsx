@@ -75,6 +75,17 @@ describe('SettingsShell', () => {
     expect(screen.getByRole('button', { name: '导出配置' })).toBeInTheDocument();
   });
 
+  it('设置页使用完整 tab 页面布局而不是弹窗式卡片壳层', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+
+    render(<SettingsShell />);
+
+    const shell = await screen.findByTestId('settings-shell');
+    expect(shell).toHaveAttribute('data-layout', 'tab-page');
+    expect(screen.queryByTestId('settings-shell-frame')).not.toBeInTheDocument();
+  });
+
   it('切换语言后即时预览标题变化', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });

@@ -265,6 +265,7 @@ export const SettingsShell = () => {
   return (
     <main
       data-testid="settings-shell"
+      data-layout="tab-page"
       data-theme={config.basic.theme}
       className={cn(
         'min-h-screen px-6 py-8 text-foreground',
@@ -273,179 +274,177 @@ export const SettingsShell = () => {
       )}
     >
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <Card className="rounded-[28px] bg-card/90 py-0 shadow-2xl ring-1 ring-foreground/8 backdrop-blur">
-          <CardHeader className="gap-6 border-b border-border/70 px-6 py-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-                  <Icon name="settings" size={18} />
-                </span>
-                <div>
-                  <p className="m-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">Stage 2 settings</p>
-                  <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t('settings.title')}</h1>
-                </div>
-              </div>
-
-              <div data-testid="settings-shell-actions" className="flex flex-wrap justify-end gap-2">
-                <Button type="button" onClick={handleSave} disabled={saving}>
-                  <Icon name="save" size={14} />
-                  {t('settings.save')}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleReset} disabled={saving}>
-                  {t('settings.reset')}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleImport} disabled={saving}>
-                  {t('settings.import')}
-                </Button>
-                <Button type="button" variant="outline" onClick={handleExport} disabled={saving}>
-                  {t('settings.export')}
-                </Button>
+        <header className="grid gap-6 border-b border-border/70 pb-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+                <Icon name="settings" size={18} />
+              </span>
+              <div>
+                <p className="m-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">Stage 2 settings</p>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t('settings.title')}</h1>
               </div>
             </div>
 
-            <nav aria-label="设置导航" data-testid="settings-shell-nav" className="flex flex-wrap gap-2">
-              {navigationItems.map((item) => (
-                <span key={item.key} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1.5 text-xs/relaxed">
-                  <Icon name={item.icon} size={14} />
-                  {t(item.key)}
-                </span>
-              ))}
-            </nav>
-          </CardHeader>
+            <div data-testid="settings-shell-actions" className="flex flex-wrap justify-end gap-2">
+              <Button type="button" onClick={handleSave} disabled={saving}>
+                <Icon name="save" size={14} />
+                {t('settings.save')}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleReset} disabled={saving}>
+                {t('settings.reset')}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleImport} disabled={saving}>
+                {t('settings.import')}
+              </Button>
+              <Button type="button" variant="outline" onClick={handleExport} disabled={saving}>
+                {t('settings.export')}
+              </Button>
+            </div>
+          </div>
 
-          <CardContent className="grid gap-6 px-6 py-6">
-            {error ? (
-              <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error.title}：{error.message}
-              </section>
-            ) : null}
+          <nav aria-label="设置导航" data-testid="settings-shell-nav" className="flex flex-wrap gap-2">
+            {navigationItems.map((item) => (
+              <span key={item.key} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1.5 text-xs/relaxed">
+                <Icon name={item.icon} size={14} />
+                {t(item.key)}
+              </span>
+            ))}
+          </nav>
+        </header>
 
-            <section className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon name="settings" size={14} />
-                    {t('settings.models')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 px-5 py-5">
-                  {activeModel ? (
-                    <>
-                      {config.models.length > 1 ? (
-                        <label className="grid gap-2">
-                          <span className="text-sm font-medium">模型</span>
-                          <Select
-                            value={activeModel.id}
-                            disabled={saving}
-                            onValueChange={setSelectedModelId}
-                          >
-                            <SelectTrigger aria-label="模型" className="w-full">
-                              <SelectValue placeholder="选择模型" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {config.models.map((item) => (
-                                <SelectItem key={item.id} value={item.id}>
-                                  {item.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </label>
-                      ) : null}
+        <section className="grid gap-6">
+          {error ? (
+            <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error.title}：{error.message}
+            </section>
+          ) : null}
 
-                      <ModelForm
-                        key={activeModel.id}
-                        model={activeModel}
-                        disabled={saving}
-                        onChange={(nextModel) => {
-                          updateConfig({
-                            ...config,
-                            models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
-                          });
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <p className="m-0 text-sm text-muted-foreground">暂无模型配置</p>
-                  )}
-                </CardContent>
-              </Card>
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Icon name="settings" size={14} />
+                  {t('settings.models')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 px-5 py-5">
+                {activeModel ? (
+                  <>
+                    {config.models.length > 1 ? (
+                      <label className="grid gap-2">
+                        <span className="text-sm font-medium">模型</span>
+                        <Select
+                          value={activeModel.id}
+                          disabled={saving}
+                          onValueChange={setSelectedModelId}
+                        >
+                          <SelectTrigger aria-label="模型" className="w-full">
+                            <SelectValue placeholder="选择模型" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {config.models.map((item) => (
+                              <SelectItem key={item.id} value={item.id}>
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </label>
+                    ) : null}
 
-              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                  <CardTitle className="text-base">{t('settings.language')}</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 px-5 py-5">
-                  <label className="grid gap-2">
-                    <span className="text-sm font-medium">{t('settings.language')}</span>
-                    <Select
-                      value={language}
+                    <ModelForm
+                      key={activeModel.id}
+                      model={activeModel}
                       disabled={saving}
-                      onValueChange={(value) => handleLanguageChange(value as ExtensionConfig['basic']['language'])}
-                    >
-                      <SelectTrigger aria-label={t('settings.language')} className="w-full">
-                        <SelectValue placeholder={t('settings.language')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="zh-CN">中文</SelectItem>
-                        <SelectItem value="en">English</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </label>
-
-                  <label className="grid gap-2">
-                    <span className="text-sm font-medium">{t('settings.theme')}</span>
-                    <Select
-                      value={config.basic.theme}
-                      disabled={saving}
-                      onValueChange={(value) =>
+                      onChange={(nextModel) => {
                         updateConfig({
                           ...config,
-                          basic: {
-                            ...config.basic,
-                            theme: value as ExtensionConfig['basic']['theme'],
-                          },
-                        })
-                      }
-                    >
-                      <SelectTrigger aria-label={t('settings.theme')} className="w-full">
-                        <SelectValue placeholder={t('settings.theme')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">System</SelectItem>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </label>
+                          models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
+                        });
+                      }}
+                    />
+                  </>
+                ) : (
+                  <p className="m-0 text-sm text-muted-foreground">暂无模型配置</p>
+                )}
+              </CardContent>
+            </Card>
 
-                  <p className="m-0 text-sm leading-6 text-muted-foreground">切换后会立即预览标题文案和设置页主题。</p>
-                </CardContent>
-              </Card>
+            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                <CardTitle className="text-base">{t('settings.language')}</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 px-5 py-5">
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium">{t('settings.language')}</span>
+                  <Select
+                    value={language}
+                    disabled={saving}
+                    onValueChange={(value) => handleLanguageChange(value as ExtensionConfig['basic']['language'])}
+                  >
+                    <SelectTrigger aria-label={t('settings.language')} className="w-full">
+                      <SelectValue placeholder={t('settings.language')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="zh-CN">中文</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
 
-              <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-                <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Icon name="cache" size={14} />
-                    {t('settings.cache')}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-4 px-5 py-5">
-                  <div className="flex flex-wrap gap-3 text-sm text-foreground">
-                    <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
-                    <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
-                  </div>
-                  <Button type="button" variant="outline" onClick={handleClearCache} disabled={saving}>
-                    清理本地缓存
-                  </Button>
-                </CardContent>
-              </Card>
-            </section>
+                <label className="grid gap-2">
+                  <span className="text-sm font-medium">{t('settings.theme')}</span>
+                  <Select
+                    value={config.basic.theme}
+                    disabled={saving}
+                    onValueChange={(value) =>
+                      updateConfig({
+                        ...config,
+                        basic: {
+                          ...config.basic,
+                          theme: value as ExtensionConfig['basic']['theme'],
+                        },
+                      })
+                    }
+                  >
+                    <SelectTrigger aria-label={t('settings.theme')} className="w-full">
+                      <SelectValue placeholder={t('settings.theme')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="system">System</SelectItem>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
 
-            <Separator />
-            <QuickInputsPanel quickInputs={normalizeQuickInputs(config.quickInputs)} />
-          </CardContent>
-        </Card>
+                <p className="m-0 text-sm leading-6 text-muted-foreground">切换后会立即预览标题文案和设置页主题。</p>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
+              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Icon name="cache" size={14} />
+                  {t('settings.cache')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4 px-5 py-5">
+                <div className="flex flex-wrap gap-3 text-sm text-foreground">
+                  <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
+                  <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
+                </div>
+                <Button type="button" variant="outline" onClick={handleClearCache} disabled={saving}>
+                  清理本地缓存
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
+
+          <Separator />
+          <QuickInputsPanel quickInputs={normalizeQuickInputs(config.quickInputs)} />
+        </section>
       </section>
     </main>
   );
