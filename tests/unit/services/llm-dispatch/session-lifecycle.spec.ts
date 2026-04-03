@@ -697,4 +697,99 @@ describe('chat-dispatch-service session lifecycle', () => {
       },
     ]);
   });
+
+  it('port 事件发布失败时不会覆盖已持久化的主生命周期结果', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    const configRepository = {
+      getModelById: vi.fn().mockResolvedValue({
+        id: 'model-7',
+        name: '主模型',
+        provider: 'openai-compatible',
+        enabled: true,
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'token',
+        deployment: '',
+        temperature: 0,
+        tools: [],
+        thinkingBudget: null,
+        maxOutputTokens: null,
+        supportsImages: true,
+        order: 0,
+        deletedAt: null,
+      }),
+    };
+    const providerRegistry = {
+      resolveProviderModel: vi.fn().mockReturnValue({
+        providerId: 'openai-compatible',
+        modelId: 'gpt-4.1-mini',
+        modelLabel: '主模型',
+        supportsImages: true,
+        sdkModel: { kind: 'sdk-model' },
+      }),
+    };
+    const publishToPromptTab = vi.fn(() => {
+      throw new Error('port disconnected');
+    });
+    const service = createChatDispatchService({
+      configRepository,
+      providerRegistry,
+      conversationRepository,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText: vi.fn().mockResolvedValue({
+        textStream: (async function* () {
+          yield '即使端口断开也应完成';
+        })(),
+      }),
+      createSessionId: () => 'session-7',
+      createMessageId: (() => {
+        const ids = ['user-7', 'assistant-7'];
+        return () => ids.shift() ?? 'exhausted';
+      })(),
+      now: (() => {
+        const values = [70, 71, 72, 73];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.dispatchChat({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      modelId: 'model-7',
+      content: '测试 port 故障',
+      images: [],
+    });
+
+    await expect(session.done).resolves.toMatchObject({
+      sessionId: 'session-7',
+      messageId: 'assistant-7',
+      status: 'done',
+      errorMessage: null,
+    });
+    expect(publishToPromptTab).toHaveBeenCalled();
+    await expect(conversationRepository.getLoadingState('https://example.com/article', 'chat')).resolves.toBeNull();
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
+      messages: [
+        expect.objectContaining({
+          id: 'user-7',
+          status: 'done',
+          content: '测试 port 故障',
+        }),
+        expect.objectContaining({
+          id: 'assistant-7',
+          status: 'done',
+          content: '即使端口断开也应完成',
+          errorMessage: null,
+        }),
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-7',
+        status: 'done',
+        summary: '即使端口断开也应完成',
+      },
+    });
+  });
 });

@@ -235,6 +235,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
   const createSessionId = deps.createSessionId ?? (() => crypto.randomUUID());
   const createMessageId = deps.createMessageId ?? (() => crypto.randomUUID());
   const now = deps.now ?? (() => Date.now());
+  /** port 推送是边缘副作用，失败不能反向污染已落库结果。 */
+  const publishToPromptTabSafely = (event: ChatStreamEvent) => {
+    try {
+      deps.portBus.publishToPromptTab(event);
+    } catch {
+      // port 断开或监听方异常时，恢复链路仍以持久化状态为准。
+    }
+  };
 
   return {
     /** 启动一次主聊天流。 */
@@ -318,7 +326,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       const done = (async (): Promise<ChatStreamResult> => {
         let result: ChatStreamResult;
         try {
-          deps.portBus.publishToPromptTab({
+          publishToPromptTabSafely({
             type: 'CHAT_STREAM_STARTED',
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
@@ -346,7 +354,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               chunk,
               now: now(),
             });
-            deps.portBus.publishToPromptTab({
+            publishToPromptTabSafely({
               type: 'CHAT_STREAM_CHUNK',
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
@@ -362,7 +370,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             now: now(),
           });
-          deps.portBus.publishToPromptTab({
+          publishToPromptTabSafely({
             type: 'CHAT_STREAM_FINISHED',
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
@@ -389,7 +397,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           });
 
           if (status === 'cancelled') {
-            deps.portBus.publishToPromptTab({
+            publishToPromptTabSafely({
               type: 'CHAT_STREAM_CANCELLED',
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
@@ -397,7 +405,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               messageId: assistantMessageId,
             });
           } else {
-            deps.portBus.publishToPromptTab({
+            publishToPromptTabSafely({
               type: 'CHAT_STREAM_FAILED',
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
