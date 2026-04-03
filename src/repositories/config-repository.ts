@@ -61,5 +61,11 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
     async getEnabledCompleteModels() {
       return getEnabledCompleteModels(await readConfig());
     },
+
+    /** 按稳定 id 获取模型，不存在时返回 null。 */
+    async getModelById(modelId: string) {
+      const config = await readConfig();
+      return config.models.find((model) => model.id === modelId) ?? null;
+    },
   };
 };

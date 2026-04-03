@@ -13,6 +13,9 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.17",
+    "@ai-sdk/google": "^2.0.13",
+    "@ai-sdk/openai-compatible": "^1.0.17",
     "@mozilla/readability": "^0.6.0",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/noto-sans": "^5.2.10",

@@ -62,4 +62,40 @@ describe('config-repository', () => {
       version: expect.any(String),
     });
   });
+
+  it('getModelById 返回目标模型，未命中时返回 null', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConfigRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveConfig(
+      createDefaultConfig({
+        models: [
+          {
+            id: 'm1',
+            name: 'Model A',
+            provider: 'gemini',
+            enabled: true,
+            model: 'gemini-2.5-flash',
+            baseUrl: '',
+            apiKey: 'key',
+            deployment: '',
+            temperature: 1,
+            tools: [],
+            thinkingBudget: null,
+            maxOutputTokens: null,
+            supportsImages: true,
+            order: 0,
+            deletedAt: null,
+          },
+        ],
+      }),
+    );
+
+    await expect(repo.getModelById('m1')).resolves.toMatchObject({
+      id: 'm1',
+      name: 'Model A',
+      supportsImages: true,
+    });
+    await expect(repo.getModelById('missing')).resolves.toBeNull();
+  });
 });
