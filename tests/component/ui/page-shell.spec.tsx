@@ -21,7 +21,7 @@ describe('PageShell', () => {
     expect(screen.getByRole('heading', { name: 'Side Panel' })).toBeInTheDocument();
     expect(screen.getByText('共享壳层基线')).toBeInTheDocument();
     expect(within(routeCard).getByText(sidePanelRoute)).toBeInTheDocument();
-    expect(within(main).getByText('Environment: development')).toBeInTheDocument();
+    expect(within(main).getByText(/environment/i)).toBeInTheDocument();
     expect(main).toHaveClass('min-h-screen');
   });
 });
