@@ -38,7 +38,7 @@
 
 1. 用户点击扩展图标。
 2. background 判断当前 `browserTab` 是否为可用普通网页。
-3. 可用时，background 为当前 `browserTab` 设置 side panel 选项并调用 `sidePanel.open({ tabId })`。
+3. 可用时，background 先确保 `openPanelOnActionClick` 已启用，再为当前 `browserTab` 设置 side panel 选项，由浏览器原生完成打开。
 4. side panel 完成挂载后，通过 one-shot command 主动请求 `GET_SIDEBAR_BOOTSTRAP`。
 5. background 读取页面缓存、会话恢复数据、loading 状态和黑名单判定结果。
 6. side panel 先渲染恢复态；有缓存则优先展示页面内容、页面状态和 `promptTab` 去重状态。
@@ -52,7 +52,7 @@
 
 关键验证点：
 
-- `sidePanel.open()` 只能由用户点击链路触发。
+- `sidePanel.open()` 需要用户手势；扩展图标链路不能在异步链路里手动调用，应依赖浏览器原生点击打开行为。
 - side panel 初始化只能由 side panel 自己拉取 `GET_SIDEBAR_BOOTSTRAP`，background 不主动推送首屏初始化命令。
 - 普通页打开时优先显示缓存而不是空白页。
 - content script 不可用时必须进入异常流而不是静默失败。

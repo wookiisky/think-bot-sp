@@ -45,6 +45,10 @@ export default defineBackground(() => {
     contextMenus: chrome.contextMenus,
     getUiLocale: () => chrome.i18n?.getUILanguage?.() ?? 'en',
   });
+  void browserEntry.configureActionClickBehavior().catch((error: unknown) => {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.warn('侧边栏按钮行为配置失败', { reason });
+  });
   const contentSource = createContentSource({
     tabs: {
       executeScript: (tabId) =>

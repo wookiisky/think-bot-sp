@@ -48,7 +48,7 @@
 
 1. 用户点击扩展图标。
 2. background 读取当前活动 `browserTab` 与 URL。
-3. 若页面可注入，则先调用 `sidePanel.setOptions({ tabId: browserTabId, path, enabled: true })`，再调用 `sidePanel.open({ tabId: browserTabId })`。
+3. 若页面可注入，则先通过 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` 让浏览器接管扩展图标点击打开行为，再为当前 `browserTab` 调用 `sidePanel.setOptions({ tabId: browserTabId, path, enabled: true })`。
 4. side panel 完成挂载后主动发起 `GET_SIDEBAR_BOOTSTRAP`。
 5. background 返回当前页面缓存、会话恢复数据、loading 状态、黑名单判定结果和是否需要继续提取的初始化摘要。
 6. side panel 先渲染恢复态；若命中黑名单，则只展示确认层，不直接执行提取和自动触发。
@@ -98,7 +98,7 @@
 
 ## 6. 约束与禁止事项
 
-- `sidePanel.open()` 只能走用户点击扩展图标链路。
+- `sidePanel.open()` 需要用户手势；扩展图标链路优先使用 `openPanelOnActionClick`，不要在异步消息或 `await` 之后手动调用。
 - side panel 必须按 `browserTab` 维度启用，不能退化成全局 panel。
 - `browserTab` 切换后 side panel 只允许自动隐藏，不允许切回原 `browserTab` 时自动恢复。
 - 右键菜单入口只能打开 conversations，不能隐式进入 side panel。

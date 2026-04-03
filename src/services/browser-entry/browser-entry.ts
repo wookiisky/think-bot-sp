@@ -65,6 +65,21 @@ export const createBrowserEntryService = ({
 }: BrowserEntryDependencies) => {
   const enabledTabIds = new Set<number>();
 
+  /** 配置扩展按钮点击后由浏览器原生打开 side panel。 */
+  const configureActionClickBehavior = async () => {
+    if (!sidePanel.setPanelBehavior) {
+      logger.warn('侧边栏按钮行为能力不可用', {});
+      return;
+    }
+
+    await sidePanel.setPanelBehavior({
+      openPanelOnActionClick: true,
+    });
+    logger.info('侧边栏按钮行为已配置', {
+      openPanelOnActionClick: true,
+    });
+  };
+
   /** 生成扩展页 URL。 */
   const toExtensionUrl = (route: string, query?: string) => {
     const baseUrl = runtime.getURL(stripLeadingSlash(route));
@@ -90,28 +105,18 @@ export const createBrowserEntryService = ({
     };
   };
 
-  /** 为目标标签页启用并打开 side panel。 */
-  const openSidePanelForTab = async (
-    tabId: number,
-    options: {
-      /** 是否跳过真实 open，仅用于 E2E 驱动规避用户手势限制。 */
-      skipOpen?: boolean;
-    } = {},
-  ): Promise<BrowserEntryActionResult> => {
+  /** 为目标标签页启用 side panel。 */
+  const openSidePanelForTab = async (tabId: number): Promise<BrowserEntryActionResult> => {
     const path = stripLeadingSlash(EXTENSION_PAGES.sidePanel);
     await sidePanel.setOptions({
       tabId,
       path,
       enabled: true,
     });
-    if (!options.skipOpen) {
-      await sidePanel.open({ tabId });
-    }
     enabledTabIds.add(tabId);
-    logger.info('panel.open.requested', {
+    logger.info('侧边栏入口已绑定当前标签页', {
       browserTabId: tabId,
       path,
-      skipOpen: options.skipOpen ?? false,
     });
     return {
       kind: 'sidepanel-opened',
@@ -120,13 +125,7 @@ export const createBrowserEntryService = ({
   };
 
   /** 处理扩展按钮点击。 */
-  const handleActionClick = async (
-    tab: chrome.tabs.Tab | undefined,
-    options: {
-      /** 是否跳过真实 side panel open。 */
-      skipOpen?: boolean;
-    } = {},
-  ): Promise<BrowserEntryActionResult> => {
+  const handleActionClick = async (tab: chrome.tabs.Tab | undefined): Promise<BrowserEntryActionResult> => {
     logger.info('action.clicked', {
       tabId: tab?.id,
       url: tab?.url,
@@ -147,7 +146,7 @@ export const createBrowserEntryService = ({
       return openConversationsPage();
     }
 
-    return openSidePanelForTab(tab.id, options);
+    return openSidePanelForTab(tab.id);
   };
 
   /** 处理标签页切换后的 side panel 启用态清理。 */
@@ -201,18 +200,14 @@ export const createBrowserEntryService = ({
 
   /** 处理 E2E 浏览器按钮驱动消息。 */
   const handleE2EBrowserActionClick = async (message: E2EBrowserActionMessage): Promise<BrowserEntryActionResult> => {
-    return handleActionClick(
-      {
-        id: message.tabId,
-        url: message.pageUrl,
-      },
-      {
-        skipOpen: true,
-      },
-    );
+    return handleActionClick({
+      id: message.tabId,
+      url: message.pageUrl,
+    });
   };
 
   return {
+    configureActionClickBehavior,
     handleActionClick,
     handleContextMenuClick,
     handleInstalled,

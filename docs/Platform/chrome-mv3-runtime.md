@@ -14,11 +14,12 @@
 ### 2.1 Side Panel
 
 - `sidePanel.open()` 需要用户手势。
+- 扩展图标点击打开 side panel 时，优先使用 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，不要在异步链路里手动补一次 `open()`。
 - side panel 是 extension page，可访问 Chrome API。
 - side panel 默认存在全局 panel 和 `browserTab` 级 panel 两种语义，业务侧必须显式使用 `browserTab` 级 panel。
 - 切换到未启用 side panel 的 `browserTab` 时，浏览器会自动隐藏 side panel。
 - Chrome 官方默认行为是切回已打开过的 `browserTab` 时 side panel 会自动再次显示；产品若要求“不自动恢复”，必须在 `browserTab` 切换后主动清理上一 `browserTab` 的启用态。
-- side panel 首屏初始化更安全的方式是“挂载后主动拉取 bootstrap”；不要依赖 `sidePanel.open()` 之后 background 立即推送初始化消息。
+- side panel 首屏初始化更安全的方式是“挂载后主动拉取 bootstrap”；不要依赖 `sidePanel.open()` 或浏览器原生打开之后由 background 立即推送初始化消息。
 
 ### 2.2 Content Script
 
