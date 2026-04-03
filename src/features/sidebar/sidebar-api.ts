@@ -1,4 +1,7 @@
 /* eslint-disable no-unused-vars */
+import type { ExtensionConfig } from '../../domain/config/config-schema';
+import type { SidebarConversationRecord, SidebarLoadingStateRecord } from '../../services/runtime-messaging/sidebar-contract';
+
 type ExtractionMethod = 'readability' | 'jina';
 
 type SidebarBootstrapResponse = {
@@ -16,9 +19,9 @@ type SidebarBootstrapResponse = {
     content: string;
   } | null;
   /** 页面下的会话摘要。 */
-  conversations: unknown[];
+  conversations: SidebarConversationRecord[];
   /** 页面下的加载态摘要。 */
-  loadingStates: unknown[];
+  loadingStates: SidebarLoadingStateRecord[];
   /** 是否命中黑名单。 */
   blockedByBlacklist: boolean;
   /** 命中的规则 id。 */
@@ -83,9 +86,18 @@ type StopSessionResponse = {
 
 type SidebarStreamPort = chrome.runtime.Port;
 
+type GetConfigResponse = {
+  /** 响应类型。 */
+  type: 'GET_CONFIG_SUCCESS';
+  /** 当前完整配置。 */
+  config: ExtensionConfig;
+};
+
 type SidebarApi = {
   /** 读取 side panel bootstrap。 */
   getSidebarBootstrap: (..._input: [{ tabId: number; pageUrl: string }]) => Promise<SidebarBootstrapResponse>;
+  /** 读取当前完整配置。 */
+  getConfig: () => Promise<GetConfigResponse>;
   /** 确认黑名单后继续。 */
   confirmBlacklistContinue: (..._input: [{ tabId: number; pageUrl: string }]) => Promise<ConfirmBlacklistContinueResponse>;
   /** 重新提取页面内容。 */
@@ -112,6 +124,11 @@ export const createSidebarApi = (): SidebarApi => ({
     return chrome.runtime.sendMessage({
       type: 'GET_SIDEBAR_BOOTSTRAP',
       ...input,
+    });
+  },
+  getConfig() {
+    return chrome.runtime.sendMessage({
+      type: 'GET_CONFIG',
     });
   },
   confirmBlacklistContinue(input) {

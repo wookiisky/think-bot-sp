@@ -31,6 +31,7 @@ const readContextFromQuery = (): SidebarContext | null => {
 
 const App = () => {
   const [context, setContext] = useState<SidebarContext | null>(null);
+  const [api] = useState(() => createSidebarApi());
 
   useEffect(() => {
     const queryContext = readContextFromQuery();
@@ -51,7 +52,7 @@ const App = () => {
     return <main data-testid="sidebar-shell-loading">正在加载标签页上下文…</main>;
   }
 
-  return <SidebarShell api={createSidebarApi()} tabId={context.tabId} pageUrl={context.pageUrl} />;
+  return <SidebarShell api={api} tabId={context.tabId} pageUrl={context.pageUrl} />;
 };
 
 root.render(<App />);

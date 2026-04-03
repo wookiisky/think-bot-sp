@@ -1,9 +1,30 @@
 import { useEffect, useState } from 'react';
 
+import { getEnabledCompleteModels } from '../../domain/config/config-schema';
+import { ChatInput } from './chat-input';
+import { ChatThread } from './chat-thread';
 import type { SidebarApi } from './sidebar-api';
 
 type ExtractionMethod = 'readability' | 'jina';
 type SidebarState = 'bootstrapping' | 'blocked' | 'extracting' | 'ready' | 'error';
+type ChatMessageState = {
+  /** 消息 id。 */
+  id: string;
+  /** 角色。 */
+  role: 'user' | 'assistant' | 'system';
+  /** 内容。 */
+  content: string;
+  /** 状态。 */
+  status: 'loading' | 'done' | 'error' | 'cancelled';
+};
+type ModelOption = {
+  /** 模型稳定 id。 */
+  id: string;
+  /** 展示名。 */
+  name: string;
+  /** 是否支持图片输入。 */
+  supportsImages: boolean;
+};
 
 type SidebarShellProps = {
   /** side panel 消息 API。 */
@@ -14,11 +35,41 @@ type SidebarShellProps = {
   pageUrl: string;
 };
 
-/** 渲染阶段 3 的最小侧边栏工作台。 */
+const CHAT_PROMPT_TAB_ID = 'chat';
+
+/** 以 assistant 消息 id 为键做增量合并。 */
+const upsertAssistantMessage = (
+  messages: ChatMessageState[],
+  messageId: string,
+  buildNext: (current: ChatMessageState | null) => ChatMessageState,
+) => {
+  let found = false;
+  const next = messages.map((message) => {
+    if (message.id !== messageId) {
+      return message;
+    }
+    found = true;
+    return buildNext(message);
+  });
+
+  return found ? next : [...next, buildNext(null)];
+};
+
+/** 生成本地乐观用户消息内容。 */
+const toOptimisticUserContent = (text: string, images: string[]) => (text.trim().length > 0 ? text : images.length > 0 ? '[图片]' : '');
+
+/** 渲染阶段 4 的最小侧边栏工作台。 */
 export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [state, setState] = useState<SidebarState>('bootstrapping');
   const [content, setContent] = useState('');
   const [method, setMethod] = useState<ExtractionMethod>('readability');
+  const [messages, setMessages] = useState<ChatMessageState[]>([]);
+  const [restoreMessageId, setRestoreMessageId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [includePageContentByDefault, setIncludePageContentByDefault] = useState(true);
+  const [chatNotice, setChatNotice] = useState('');
 
   /** 执行一次正文提取并同步 UI 状态。 */
   const runExtraction = async (nextMethod: ExtractionMethod) => {
@@ -34,18 +85,158 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   useEffect(() => {
+    const port = api.connectStream({
+      tabId,
+      pageUrl,
+      promptTabId: CHAT_PROMPT_TAB_ID,
+    });
+    const handlePortMessage = (event: unknown) => {
+      if (typeof event !== 'object' || event === null || !('type' in event)) {
+        return;
+      }
+
+      const payload = event as Record<string, unknown>;
+      switch (payload.type) {
+        case 'CHAT_STREAM_STARTED':
+          if (typeof payload.sessionId === 'string') {
+            setActiveSessionId(payload.sessionId);
+          }
+          if (typeof payload.messageId === 'string') {
+            setRestoreMessageId(payload.messageId);
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: message?.content ?? '',
+                status: 'loading',
+              })),
+            );
+          }
+          return;
+        case 'CHAT_STREAM_CHUNK':
+          if (typeof payload.sessionId === 'string') {
+            setActiveSessionId(payload.sessionId);
+          }
+          if (typeof payload.messageId === 'string' && typeof payload.chunk === 'string') {
+            setRestoreMessageId(payload.messageId);
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: `${message?.content ?? ''}${payload.chunk as string}`,
+                status: 'loading',
+              })),
+            );
+          }
+          return;
+        case 'CHAT_STREAM_FINISHED':
+          setActiveSessionId(null);
+          setRestoreMessageId(null);
+          if (typeof payload.messageId === 'string') {
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: message?.content ?? '',
+                status: 'done',
+              })),
+            );
+          }
+          return;
+        case 'CHAT_STREAM_FAILED':
+          setActiveSessionId(null);
+          setRestoreMessageId(null);
+          if (typeof payload.messageId === 'string') {
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: message?.content ?? '',
+                status: 'error',
+              })),
+            );
+          }
+          return;
+        case 'CHAT_STREAM_CANCELLED':
+          setActiveSessionId(null);
+          setRestoreMessageId(null);
+          if (typeof payload.messageId === 'string') {
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: message?.content ?? '',
+                status: 'cancelled',
+              })),
+            );
+          }
+          return;
+        case 'RESTORE_LOADING':
+          if (typeof payload.sessionId === 'string') {
+            setActiveSessionId(payload.sessionId);
+          }
+          if (typeof payload.messageId === 'string' && typeof payload.content === 'string') {
+            setRestoreMessageId(payload.messageId);
+            setMessages((current) =>
+              upsertAssistantMessage(current, payload.messageId as string, () => ({
+                id: payload.messageId as string,
+                role: 'assistant',
+                content: payload.content as string,
+                status: 'loading',
+              })),
+            );
+          }
+          return;
+        default:
+          return;
+      }
+    };
+
+    port.onMessage?.addListener?.(handlePortMessage as never);
+    return () => {
+      port.onMessage?.removeListener?.(handlePortMessage as never);
+      port.disconnect();
+    };
+  }, [api, pageUrl, tabId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
       try {
-        const bootstrap = await api.getSidebarBootstrap({ tabId, pageUrl });
+        const [bootstrap, configResponse] = await Promise.all([api.getSidebarBootstrap({ tabId, pageUrl }), api.getConfig()]);
         if (cancelled) {
           return;
         }
 
         const nextMethod = bootstrap.page?.extractionMethod ?? 'readability';
+        const nextModels = getEnabledCompleteModels(configResponse.config).map((model) => ({
+          id: model.id,
+          name: model.name,
+          supportsImages: model.supportsImages,
+        }));
+        const defaultModelId =
+          nextModels.find((model) => model.id === configResponse.config.basic.defaultModelId)?.id ?? nextModels[0]?.id ?? '';
+        const chatConversation = bootstrap.conversations.find((conversation) => conversation.promptTabId === CHAT_PROMPT_TAB_ID) ?? null;
+        const chatLoadingState = bootstrap.loadingStates.find((loadingState) => loadingState.promptTabId === CHAT_PROMPT_TAB_ID) ?? null;
+        const loadingAssistantMessage =
+          chatConversation?.messages.find((message) => message.role === 'assistant' && message.status === 'loading') ?? null;
+
         setMethod(nextMethod);
         setContent(bootstrap.page?.content ?? '');
+        setModels(nextModels);
+        setSelectedModelId(defaultModelId);
+        setIncludePageContentByDefault(configResponse.config.basic.includePageContentByDefault);
+        setMessages(
+          (chatConversation?.messages ?? []).map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            status: message.status,
+          })),
+        );
+        setRestoreMessageId(chatLoadingState?.resumeTarget?.messageId ?? loadingAssistantMessage?.id ?? null);
+        setActiveSessionId(chatLoadingState?.sessionId ?? null);
 
         if (bootstrap.blockedByBlacklist) {
           setState('blocked');
@@ -104,6 +295,75 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }
   };
 
+  /** 发送用户消息，并在本地先补一条乐观消息。 */
+  const handleSend = async (input: { text: string; images: string[]; modelId: string; includePageContent: boolean }) => {
+    setChatNotice('');
+    const optimisticUserMessageId = `local-user:${Date.now()}`;
+    setMessages((current) => [
+      ...current,
+      {
+        id: optimisticUserMessageId,
+        role: 'user',
+        content: toOptimisticUserContent(input.text, input.images),
+        status: 'done',
+      },
+    ]);
+
+    try {
+      const response = await api.sendChat({
+        tabId,
+        pageUrl,
+        promptTabId: CHAT_PROMPT_TAB_ID,
+        modelId: input.modelId,
+        text: input.text,
+        images: input.images,
+        includePageContent: input.includePageContent,
+      });
+      setActiveSessionId(response.payload.sessionId);
+      setRestoreMessageId(response.payload.messageId);
+      setMessages((current) =>
+        upsertAssistantMessage(current, response.payload.messageId, (message) => ({
+          id: response.payload.messageId,
+          role: 'assistant',
+          content: message?.content ?? '',
+          status: 'loading',
+        })),
+      );
+    } catch {
+      setChatNotice('发送失败，请重试');
+    }
+  };
+
+  /** 停止当前会话。 */
+  const handleStop = async () => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    await api.stopSession({
+      tabId,
+      pageUrl,
+      promptTabId: CHAT_PROMPT_TAB_ID,
+      sessionId: activeSessionId,
+    });
+  };
+
+  /** 导出当前会话，空会话时直接拦截。 */
+  const handleExport = async () => {
+    const hasExportableMessage = messages.some((message) => message.content.trim().length > 0);
+    if (!hasExportableMessage) {
+      setChatNotice('当前会话为空，不能导出');
+      return;
+    }
+
+    setChatNotice('');
+    await api.exportConversation({
+      tabId,
+      pageUrl,
+      promptTabId: CHAT_PROMPT_TAB_ID,
+    });
+  };
+
   return (
     <main data-testid="sidebar-shell" className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="border-b border-border px-4 py-3">
@@ -142,9 +402,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         </button>
       </section>
 
-      <section className="flex-1 px-4 py-3 text-sm text-muted-foreground">
-        阶段 3 仅接入提取区和最小聊天占位，真实流式聊天在阶段 4 落地。
-      </section>
+      <ChatThread messages={messages} restoreMessageId={restoreMessageId} />
+      <ChatInput
+        disabled={state === 'bootstrapping' || state === 'extracting' || state === 'blocked'}
+        sending={Boolean(activeSessionId)}
+        selectedModelId={selectedModelId}
+        models={models}
+        defaultIncludePageContent={includePageContentByDefault}
+        onSelectModel={setSelectedModelId}
+        onSend={handleSend}
+        onStop={handleStop}
+        onExport={handleExport}
+      />
+      {chatNotice ? <p className="px-4 pb-3 text-sm text-destructive">{chatNotice}</p> : null}
     </main>
   );
 };

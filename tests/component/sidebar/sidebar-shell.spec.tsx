@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { SidebarShell } from '../../../src/features/sidebar/sidebar-shell';
 
 describe('SidebarShell', () => {
@@ -25,6 +26,20 @@ describe('SidebarShell', () => {
         },
       }),
       switchExtractionMethod: vi.fn(),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig(),
+      }),
+      sendChat: vi.fn(),
+      stopSession: vi.fn(),
+      exportConversation: vi.fn(),
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      })),
     };
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
@@ -56,6 +71,20 @@ describe('SidebarShell', () => {
       }),
       reExtractContent: vi.fn(),
       switchExtractionMethod: vi.fn(),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig(),
+      }),
+      sendChat: vi.fn(),
+      stopSession: vi.fn(),
+      exportConversation: vi.fn(),
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      })),
     };
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
