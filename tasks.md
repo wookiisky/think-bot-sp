@@ -235,11 +235,12 @@
 - `pnpm dlx shadcn@latest info --json` 返回非空 `config`，不再是未初始化状态。
 - `options / sidepanel / conversations / welcome` 四个入口页至少有一层共享的 shadcn 基础布局可复用。
 
-**状态（2026-04-02 完成）**
+**状态（2026-04-03 完成）**
 
-- [x] 当前仓库已完成 shadcn 初始化：`npx shadcn@latest info --json` 返回非空 `config`，并已安装 `badge / button / card / input / select / separator`。
+- [x] 当前仓库已完成 shadcn 初始化：`pnpm dlx shadcn@latest info --json` 返回非空 `config`，并已安装 `badge / button / card / input / select / separator`。
 - [x] 当前仓库已接入 Tailwind CSS v4：统一通过 `@tailwindcss/vite` 和 `assets/styles/globals.css` 提供样式基线。
 - [x] 该阶段已在阶段 3 前落地，后续页面可复用统一的 shadcn 基础组件与主题 token。
+- [x] Playwright E2E 已改为先构建当前源码，再加载 `.output/chrome-mv3`，避免入口壳层回归读取旧产物。
 
 **相关文档**
 
@@ -268,6 +269,7 @@
   - 已保持现有交互、测试口径和日志点不变。
 - [x] 补文档：
   - 已同步 `docs/tech_stack.md`。
+  - 已同步 `docs/Workspace/settings.md`、`docs/Workspace/sidebar.md`、`docs/Workspace/conversations.md`、`docs/test/settings-core.md`、`docs/test/sidebar-core.md`。
   - 已记录 `preset b3F5SdK3Xe` 的使用结果，后续新增组件统一通过 shadcn CLI 管理。
 
 **阶段验收**

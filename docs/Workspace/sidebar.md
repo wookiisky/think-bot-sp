@@ -189,3 +189,10 @@
 - `flow.md`
 - `test/sidebar-core.md`
 - `test/llm-and-streaming.md`
+
+## 13. 阶段 2.5 设计系统基线
+
+- 侧边栏入口页在阶段 3 真实工作台落地前，统一通过 `src/ui/page-shell.tsx` 承担共享壳层。
+- 该共享壳层统一复用 `src/components/ui/card.tsx`、`src/components/ui/badge.tsx` 和 `assets/styles/globals.css` 的主题 token。
+- `tests/e2e/entry-shell.spec.ts` 负责验证 side panel 入口始终加载当前源码构建出的共享壳层，而不是陈旧产物。
+- E2E 当前通过 Playwright `globalSetup` 先执行 `pnpm run build`，再加载 `.output/chrome-mv3`，保证入口壳层验收基于最新代码。

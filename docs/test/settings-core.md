@@ -75,3 +75,5 @@
 - 语言模型页采用“列表摘要 + 展开编辑”形态，不使用整页跳转编辑。
 - 默认模型候选、侧边栏模型选择器、分支模型选择器对“启用且配置完整”的判定一致。
 - 阶段2的“标签页 / 云同步 / 黑名单设置”只验证导航占位，不视为已交付编辑能力。
+- 阶段 2.5 额外要求设置页根节点保留 `data-testid="settings-shell"`、`data-theme` 与主题 class，顶部动作区保留 `settings-shell-actions`，导航区保留 `settings-shell-nav`。
+- 阶段 2.5 组件回归以 `tests/component/options/settings-shell.spec.tsx`、`tests/component/options/model-form.spec.tsx`、`tests/component/options/quick-inputs.spec.tsx` 为主，不允许用页面内 mock 绕过真实设置页壳层。

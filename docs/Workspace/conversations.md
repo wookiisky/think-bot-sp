@@ -161,3 +161,9 @@
 - `decision_log.md`
 - `Workspace/sidebar.md`
 - `test/conversations-core.md`
+
+## 13. 阶段 2.5 设计系统基线
+
+- 对话管理页在真实历史工作台交付前，入口层统一复用 `src/ui/page-shell.tsx` 作为共享壳层。
+- 该壳层与 side panel / welcome 共用 `assets/styles/globals.css`、`src/components/ui/card.tsx`、`src/components/ui/badge.tsx` 等基础件来源。
+- 阶段 2.5 的目标是统一入口页样式基线和主题 token，不在本阶段引入对话管理页真实业务区块。

@@ -85,3 +85,9 @@
 - 受限页
 - 至少 1 个完整可用模型
 - 至少 1 条 autoTrigger 快捷输入
+
+## 7. 阶段 2.5 入口壳层验收
+
+- 阶段 2.5 先验证 side panel 入口壳层基线，不把真实提取与聊天工作台当作已完成能力。
+- `tests/e2e/entry-shell.spec.ts` 必须验证 `page-shell`、标题、route 和环境标识存在。
+- Playwright E2E 必须先构建当前源码，再加载 `.output/chrome-mv3`，避免读取陈旧扩展产物导致壳层回归失真。
