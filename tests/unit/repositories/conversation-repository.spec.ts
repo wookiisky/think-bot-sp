@@ -96,4 +96,72 @@ describe('conversation-repository', () => {
       updatedAt: 2,
     });
   });
+
+  it('按页面列出 conversation 和 loading 状态', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveConversation({
+      id: 'https://example.com/a:chat',
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messages: [],
+      lastAssistantState: null,
+      updatedAt: 1,
+    });
+    await repo.saveConversation({
+      id: 'https://example.com/b:chat',
+      normalizedUrl: 'https://example.com/b',
+      promptTabId: 'chat',
+      messages: [],
+      lastAssistantState: null,
+      updatedAt: 2,
+    });
+    await repo.saveLoadingState({
+      id: 'loading:https://example.com/a:chat',
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      promptTabStatus: 'loading',
+      branchStates: [],
+      resumeTarget: null,
+      cancelRequested: false,
+      updatedAt: 3,
+    });
+    await repo.saveLoadingState({
+      id: 'loading:https://example.com/b:chat',
+      normalizedUrl: 'https://example.com/b',
+      promptTabId: 'chat',
+      sessionId: 'session-2',
+      promptTabStatus: 'loading',
+      branchStates: [],
+      resumeTarget: null,
+      cancelRequested: false,
+      updatedAt: 4,
+    });
+
+    await expect(repo.listPageConversations('https://example.com/a')).resolves.toEqual([
+      {
+        id: 'https://example.com/a:chat',
+        normalizedUrl: 'https://example.com/a',
+        promptTabId: 'chat',
+        messages: [],
+        lastAssistantState: null,
+        updatedAt: 1,
+      },
+    ]);
+    await expect(repo.listPageLoadingStates('https://example.com/a')).resolves.toEqual([
+      {
+        id: 'loading:https://example.com/a:chat',
+        normalizedUrl: 'https://example.com/a',
+        promptTabId: 'chat',
+        sessionId: 'session-1',
+        promptTabStatus: 'loading',
+        branchStates: [],
+        resumeTarget: null,
+        cancelRequested: false,
+        updatedAt: 3,
+      },
+    ]);
+  });
 });
