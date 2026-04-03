@@ -1,6 +1,8 @@
 /// <reference types="chrome" />
 
+import { streamText } from 'ai';
 import { defineBackground } from 'wxt/utils/define-background';
+import { normalizePageUrl } from '../src/domain/page/page-schema';
 import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapter';
 import { createConfigRepository } from '../src/repositories/config-repository';
 import { createConversationRepository } from '../src/repositories/conversation-repository';
@@ -11,10 +13,13 @@ import { createBlacklistService } from '../src/services/blacklist/blacklist-serv
 import { createContentSource } from '../src/services/extraction/content-source';
 import { createExtractionService } from '../src/services/extraction/extraction-service';
 import { createJinaClient } from '../src/services/extraction/jina-client';
+import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dispatch-service';
+import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
 import { createLogger } from '../src/services/logger/logger';
 import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
+import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
-import { normalizePageUrl } from '../src/domain/page/page-schema';
+import { sidebarPortClientMessageSchema, sidebarPortEventSchema } from '../src/services/runtime-messaging/sidebar-contract';
 
 export default defineBackground(() => {
   const logger = createLogger('background');
@@ -22,6 +27,26 @@ export default defineBackground(() => {
   const configRepository = createConfigRepository(storage);
   const pageRepository = createPageRepository(storage);
   const conversationRepository = createConversationRepository(storage);
+  const portBus = createPortBus();
+  const chatDispatchService = createChatDispatchService({
+    configRepository,
+    providerRegistry: {
+      resolveProviderModel,
+    },
+    conversationRepository,
+    portBus: {
+      publishToPromptTab(event) {
+        portBus.publishToPromptTab(
+          {
+            normalizedUrl: event.normalizedUrl,
+            promptTabId: event.promptTabId,
+          },
+          sidebarPortEventSchema.parse(event),
+        );
+      },
+    },
+    streamText,
+  });
   const handleConfigCommand = createConfigCommandHandler({
     configRepository,
     pageRepository,
@@ -116,6 +141,7 @@ export default defineBackground(() => {
     runtime: chrome.runtime,
     pageRepository,
     conversationRepository,
+    chatDispatchService,
     blacklistRepository: {
       isBlocked: async ({ browserTabId, normalizedUrl }) => {
         const config = await configRepository.getConfig();
@@ -132,6 +158,82 @@ export default defineBackground(() => {
         return bypassStore.has(toBypassKey(browserTabId, normalizedUrl)) ? null : service.checkUrl(normalizedUrl).matchedRuleId;
       },
     },
+  });
+
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== 'sidepanel') {
+      return;
+    }
+
+    const portId = portBus.register(port);
+    logger.info('port.connected', {
+      portName: port.name,
+    });
+
+    port.onMessage.addListener((message: unknown) => {
+      const parsed = sidebarPortClientMessageSchema.safeParse(message);
+      if (!parsed.success) {
+        return;
+      }
+
+      const normalizedUrl = normalizePageUrl(parsed.data.pageUrl);
+      portBus.bindPromptTab(portId, {
+        normalizedUrl,
+        promptTabId: parsed.data.promptTabId,
+      });
+      logger.info('port.restore_requested', {
+        browserTabId: parsed.data.tabId,
+        normalizedUrl,
+        promptTab: parsed.data.promptTabId,
+      });
+
+      void Promise.all([
+        conversationRepository.getLoadingState(normalizedUrl, parsed.data.promptTabId),
+        conversationRepository.getConversation(normalizedUrl, parsed.data.promptTabId),
+      ])
+        .then(([loadingState, conversation]) => {
+          if (!loadingState || !conversation) {
+            return;
+          }
+
+          const loadingAssistantMessage =
+            conversation.messages.find((messageRecord) => messageRecord.role === 'assistant' && messageRecord.status === 'loading') ?? null;
+          const restoreMessageId = loadingState.resumeTarget?.messageId ?? conversation.lastAssistantState?.messageId ?? loadingAssistantMessage?.id ?? null;
+          const restoreMessage =
+            conversation.messages.find((messageRecord) => messageRecord.id === restoreMessageId && messageRecord.role === 'assistant') ?? loadingAssistantMessage;
+
+          if (!restoreMessage || restoreMessage.status !== 'loading') {
+            return;
+          }
+
+          port.postMessage(
+            sidebarPortEventSchema.parse({
+              type: 'RESTORE_LOADING',
+              normalizedUrl,
+              promptTabId: parsed.data.promptTabId,
+              sessionId: loadingState.sessionId,
+              messageId: restoreMessage.id,
+              content: restoreMessage.content,
+            }),
+          );
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          logger.warn('port.restore_failed', {
+            browserTabId: parsed.data.tabId,
+            normalizedUrl,
+            promptTab: parsed.data.promptTabId,
+            reason,
+          });
+        });
+    });
+
+    port.onDisconnect.addListener(() => {
+      portBus.unregister(portId);
+      logger.info('port.disconnected', {
+        portName: port.name,
+      });
+    });
   });
 
   chrome.runtime.onInstalled.addListener((details: { reason: string }) => {

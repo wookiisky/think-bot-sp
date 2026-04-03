@@ -2,39 +2,35 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createLogger } from '../../../../src/services/logger/logger';
 
-describe('logger stage 3 contract', () => {
-  it('稳定输出阶段 3 关键事件名和脱敏字段', () => {
+describe('logger contract', () => {
+  it('阶段 4 日志事件名稳定且继续脱敏', () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const logger = createLogger('background');
 
     try {
-      logger.info('panel.init.started', {
-        browserTabId: 7,
-        normalizedUrl: 'https://example.com',
+      logger.info('chat.stream.started', {
+        sessionId: 'session-1',
+        promptTab: 'chat',
         apiKey: 'secret',
-        gistToken: 'gist-secret',
       });
-      logger.warn('extraction.readability_failed', {
-        browserTabId: 7,
-        normalizedUrl: 'https://example.com',
+      logger.error('chat.stream.failed', {
+        sessionId: 'session-1',
         authorization: 'Bearer secret',
       });
 
-      expect(infoSpy).toHaveBeenCalledWith('[background] panel.init.started', {
-        browserTabId: 7,
-        normalizedUrl: 'https://example.com',
+      expect(infoSpy).toHaveBeenCalledWith('[background] chat.stream.started', {
+        sessionId: 'session-1',
+        promptTab: 'chat',
         apiKey: '[REDACTED]',
-        gistToken: '[REDACTED]',
       });
-      expect(warnSpy).toHaveBeenCalledWith('[background] extraction.readability_failed', {
-        browserTabId: 7,
-        normalizedUrl: 'https://example.com',
+      expect(errorSpy).toHaveBeenCalledWith('[background] chat.stream.failed', {
+        sessionId: 'session-1',
         authorization: '[REDACTED]',
       });
     } finally {
       infoSpy.mockRestore();
-      warnSpy.mockRestore();
+      errorSpy.mockRestore();
     }
   });
 });

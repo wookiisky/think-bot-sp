@@ -57,6 +57,32 @@ type SwitchExtractionMethodResponse = {
   };
 };
 
+type SendChatResponse = {
+  /** 响应类型。 */
+  type: 'SEND_CHAT_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 新建流式会话 id。 */
+    sessionId: string;
+    /** 助手消息 id。 */
+    messageId: string;
+  };
+};
+
+type StopSessionResponse = {
+  /** 响应类型。 */
+  type: 'STOP_SESSION_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 会话 id。 */
+    sessionId: string;
+    /** 是否实际停止。 */
+    stopped: boolean;
+  };
+};
+
+type SidebarStreamPort = chrome.runtime.Port;
+
 type SidebarApi = {
   /** 读取 side panel bootstrap。 */
   getSidebarBootstrap: (..._input: [{ tabId: number; pageUrl: string }]) => Promise<SidebarBootstrapResponse>;
@@ -68,6 +94,16 @@ type SidebarApi = {
   switchExtractionMethod: (
     ..._input: [{ tabId: number; pageUrl: string; method: ExtractionMethod }]
   ) => Promise<SwitchExtractionMethodResponse>;
+  /** 发送主聊天请求。 */
+  sendChat: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; modelId: string; text: string; images: string[]; includePageContent: boolean }]
+  ) => Promise<SendChatResponse>;
+  /** 停止当前流式会话。 */
+  stopSession: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string; sessionId: string }]) => Promise<StopSessionResponse>;
+  /** 导出当前会话。 */
+  exportConversation: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => Promise<unknown>;
+  /** 建立流式订阅 port。 */
+  connectStream: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => SidebarStreamPort;
 };
 
 /** 创建 side panel API，统一封装 runtime message 调用。 */
@@ -95,6 +131,34 @@ export const createSidebarApi = (): SidebarApi => ({
       type: 'SWITCH_EXTRACTION_METHOD',
       ...input,
     });
+  },
+  sendChat(input) {
+    return chrome.runtime.sendMessage({
+      type: 'SEND_CHAT',
+      ...input,
+    });
+  },
+  stopSession(input) {
+    return chrome.runtime.sendMessage({
+      type: 'STOP_SESSION',
+      ...input,
+    });
+  },
+  exportConversation(input) {
+    return chrome.runtime.sendMessage({
+      type: 'EXPORT_CONVERSATION',
+      ...input,
+    });
+  },
+  connectStream(input) {
+    const port = chrome.runtime.connect({
+      name: 'sidepanel',
+    });
+    port.postMessage({
+      type: 'SUBSCRIBE_SIDEBAR_STREAM',
+      ...input,
+    });
+    return port;
   },
 });
 

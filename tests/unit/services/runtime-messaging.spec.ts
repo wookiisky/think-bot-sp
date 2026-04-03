@@ -8,6 +8,7 @@ import {
   sidebarBootstrapCommandSchema,
   sidebarBootstrapResponseSchema,
   sidebarCommandSchema,
+  sidebarPortClientMessageSchema,
   sidebarCommandTypeSchema,
   sidebarCommandTypeValues,
 } from '../../../src/services/runtime-messaging/sidebar-contract';
@@ -17,12 +18,15 @@ import { assertSidebarPageSender, isSidebarPageSender } from '../../../src/servi
 import { createFakeStorageArea } from '../../helpers/fake-storage';
 
 describe('runtime-messaging', () => {
-  it('sidebar contract 集中定义命令、响应和 port 名称 schema', () => {
+  it('阶段 4 扩展 sidebar 命令与流式事件契约', () => {
     expect(sidebarCommandTypeValues).toEqual([
       'GET_SIDEBAR_BOOTSTRAP',
       'CONFIRM_BLACKLIST_CONTINUE',
       'SWITCH_EXTRACTION_METHOD',
       'RE_EXTRACT_CONTENT',
+      'SEND_CHAT',
+      'STOP_SESSION',
+      'EXPORT_CONVERSATION',
     ]);
     expect(sidebarCommandTypeSchema.parse('GET_SIDEBAR_BOOTSTRAP')).toBe('GET_SIDEBAR_BOOTSTRAP');
     expect(sidebarPortNameSchema.parse('sidepanel')).toBe('sidepanel');
@@ -62,24 +66,50 @@ describe('runtime-messaging', () => {
     });
     expect(
       sidebarCommandSchema.parse({
-        type: 'GET_SIDEBAR_BOOTSTRAP',
+        type: 'SEND_CHAT',
         tabId: 7,
         pageUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        modelId: 'model-1',
+        text: '你好',
+        images: [],
+        includePageContent: true,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        type: 'SEND_CHAT',
+        promptTabId: 'chat',
+        modelId: 'model-1',
+      }),
+    );
+    expect(
+      sidebarPortClientMessageSchema.parse({
+        type: 'SUBSCRIBE_SIDEBAR_STREAM',
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        promptTabId: 'chat',
       }),
     ).toEqual({
-      type: 'GET_SIDEBAR_BOOTSTRAP',
+      type: 'SUBSCRIBE_SIDEBAR_STREAM',
       tabId: 7,
       pageUrl: 'https://example.com/article',
+      promptTabId: 'chat',
     });
     expect(
       sidebarPortEventSchema.parse({
-        type: 'PORT_REGISTERED',
-        portName: 'sidepanel',
+        type: 'RESTORE_LOADING',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-1',
+        messageId: 'assistant-1',
+        content: '部分回答',
       }),
-    ).toEqual({
-      type: 'PORT_REGISTERED',
-      portName: 'sidepanel',
-    });
+    ).toEqual(
+      expect.objectContaining({
+        type: 'RESTORE_LOADING',
+        sessionId: 'session-1',
+      }),
+    );
     expect(isSidebarCommandMessage({ type: 'GET_SIDEBAR_BOOTSTRAP' })).toBe(true);
     expect(isSidebarCommandMessage({ type: 'CLEAR_PAGE_CONTEXT' })).toBe(false);
     expect(sidebarCommandTypes.has('CLEAR_PAGE_CONTEXT' as never)).toBe(false);
@@ -283,19 +313,121 @@ describe('runtime-messaging', () => {
     ).toThrow(/sidebar\.html/i);
   });
 
-  it('port bus 会广播注册、断连和恢复事件', () => {
+  it('阶段 4 命令会路由发送与停止会话', async () => {
+    const cancel = vi.fn();
+    const handler = createSidebarCommandHandler({
+      runtime: { id: 'ext-id' },
+      pageRepository: {
+        getPage: vi.fn(),
+      },
+      conversationRepository: {
+        listPageConversations: vi.fn(),
+        listPageLoadingStates: vi.fn(),
+      },
+      blacklistRepository: {
+        isBlocked: vi.fn(),
+        getMatchedRuleId: vi.fn(),
+      },
+      chatDispatchService: {
+        dispatchChat: vi.fn().mockResolvedValue({
+          sessionId: 'session-1',
+          messageId: 'assistant-1',
+          cancel,
+          done: new Promise(() => undefined),
+        }),
+      },
+    });
+
+    await expect(
+      handler(
+        {
+          type: 'SEND_CHAT',
+          tabId: 7,
+          pageUrl: 'https://example.com/article',
+          promptTabId: 'chat',
+          modelId: 'model-1',
+          text: '你好',
+          images: [],
+          includePageContent: true,
+        },
+        {
+          sender: {
+            id: 'ext-id',
+            url: 'chrome-extension://ext-id/sidebar.html',
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      type: 'SEND_CHAT_SUCCESS',
+      payload: {
+        sessionId: 'session-1',
+        messageId: 'assistant-1',
+      },
+    });
+    await expect(
+      handler(
+        {
+          type: 'STOP_SESSION',
+          tabId: 7,
+          pageUrl: 'https://example.com/article',
+          promptTabId: 'chat',
+          sessionId: 'session-1',
+        },
+        {
+          sender: {
+            id: 'ext-id',
+            url: 'chrome-extension://ext-id/sidebar.html',
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      type: 'STOP_SESSION_SUCCESS',
+      payload: {
+        sessionId: 'session-1',
+        stopped: true,
+      },
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('port bus 会按 promptTab 路由事件，并保留注册与断连广播', () => {
     const events: Array<{ type: string; portName: string }> = [];
     const bus = createPortBus();
     bus.subscribe((event) => {
       events.push(event);
     });
 
+    const firstDisconnectListeners: Array<() => void> = [];
+    const secondDisconnectListeners: Array<() => void> = [];
     const port = {
       name: 'sidepanel',
+      sender: {
+        documentId: 'doc-1',
+      },
       postMessage: vi.fn(),
       disconnect: vi.fn(),
       onDisconnect: {
+        addListener: vi.fn((listener: () => void) => {
+          firstDisconnectListeners.push(listener);
+        }),
+        removeListener: vi.fn(),
+      },
+      onMessage: {
         addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+    };
+    const secondPort = {
+      name: 'sidepanel',
+      sender: {
+        documentId: 'doc-2',
+      },
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onDisconnect: {
+        addListener: vi.fn((listener: () => void) => {
+          secondDisconnectListeners.push(listener);
+        }),
         removeListener: vi.fn(),
       },
       onMessage: {
@@ -304,14 +436,50 @@ describe('runtime-messaging', () => {
       },
     };
 
-    bus.register(port as never);
+    const firstPortId = bus.register(port as never);
+    const secondPortId = bus.register(secondPort as never);
+    bus.bindPromptTab(firstPortId, {
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+    });
+    bus.bindPromptTab(secondPortId, {
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-1',
+    });
     expect(events).toContainEqual({ type: 'PORT_REGISTERED', portName: 'sidepanel' });
 
-    bus.disconnect('sidepanel');
+    bus.publishToPromptTab(
+      {
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+      },
+      {
+        type: 'RESTORE_LOADING',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-1',
+        messageId: 'assistant-1',
+        content: '部分回答',
+      },
+    );
+    expect(port.postMessage).toHaveBeenCalledWith({
+      type: 'RESTORE_LOADING',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      content: '部分回答',
+    });
+    expect(secondPort.postMessage).not.toHaveBeenCalled();
+
+    bus.disconnect(firstPortId);
     expect(port.disconnect).toHaveBeenCalledTimes(1);
     expect(events).toContainEqual({ type: 'PORT_DISCONNECTED', portName: 'sidepanel' });
 
-    bus.recover(port as never);
+    const recoveredPortId = bus.recover(port as never);
+    expect(recoveredPortId).not.toBe(firstPortId);
     expect(events).toContainEqual({ type: 'PORT_RECOVERED', portName: 'sidepanel' });
+    firstDisconnectListeners[0]?.();
+    secondDisconnectListeners[0]?.();
   });
 });
