@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +27,15 @@ const createModel = (overrides = {}) =>
 describe('ModelForm', () => {
   afterEach(() => cleanup());
 
-  it('切换 Provider 后展示差异字段', () => {
+  /** 打开 shadcn Select 并选择目标选项。 */
+  const selectOption = async (label: string, optionText: string) => {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: label }));
+    const listbox = await screen.findByRole('listbox');
+    await user.click(within(listbox).getByText(optionText));
+  };
+
+  it('切换 Provider 后展示差异字段', async () => {
     const onChange = vi.fn();
 
     const Harness = () => {
@@ -39,13 +48,14 @@ describe('ModelForm', () => {
 
     render(<Harness />);
 
-    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveValue('openai-compatible');
+    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveTextContent('OpenAI Compatible');
     expect(screen.getByLabelText('Base URL')).toBeInTheDocument();
     expect(screen.queryByLabelText('Deployment')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Provider' }), { target: { value: 'azure-openai' } });
+    await selectOption('Provider', 'Azure OpenAI');
 
     expect(onChange).toHaveBeenCalled();
+    expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveTextContent('Azure OpenAI');
     expect(screen.getByLabelText('Base URL')).toBeInTheDocument();
     expect(screen.getByLabelText('Deployment')).toBeInTheDocument();
   });

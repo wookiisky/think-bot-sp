@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
@@ -39,6 +40,14 @@ describe('SettingsShell', () => {
     mocks.importConfig.mockReset();
   });
 
+  /** 打开 shadcn Select 并选择目标选项。 */
+  const selectOption = async (label: string, optionText: string) => {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('combobox', { name: label }));
+    const listbox = await screen.findByRole('listbox');
+    await user.click(within(listbox).getByText(optionText));
+  };
+
   it('加载配置并展示缓存统计', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
@@ -72,8 +81,8 @@ describe('SettingsShell', () => {
 
     render(<SettingsShell />);
 
-    const languageSelect = await screen.findByRole('combobox', { name: '语言' });
-    fireEvent.change(languageSelect, { target: { value: 'en' } });
+    await screen.findByRole('combobox', { name: '语言' });
+    await selectOption('语言', 'English');
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
   });
@@ -85,13 +94,11 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
-    fireEvent.change(screen.getByRole('combobox', { name: '主题' }), {
-      target: { value: 'dark' },
-    });
+    await selectOption('主题', 'Dark');
 
     const shell = screen.getByTestId('settings-shell');
     expect(shell).toHaveAttribute('data-theme', 'dark');
-    expect(screen.getByRole('combobox', { name: '主题' })).toHaveValue('dark');
+    expect(screen.getByRole('combobox', { name: '主题' })).toHaveTextContent('Dark');
   });
 
   it('主题切换后保留 data-theme 并更新根节点主题 class', async () => {
@@ -101,9 +108,7 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
-    fireEvent.change(screen.getByRole('combobox', { name: '主题' }), {
-      target: { value: 'dark' },
-    });
+    await selectOption('主题', 'Dark');
 
     const shell = screen.getByTestId('settings-shell');
     expect(shell).toHaveAttribute('data-theme', 'dark');
@@ -391,8 +396,7 @@ describe('SettingsShell', () => {
     await screen.findByRole('heading', { name: '设置' });
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
-
-    fireEvent.change(screen.getByRole('combobox', { name: '模型' }), { target: { value: 'model-2' } });
+    await selectOption('模型', '模型二');
 
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
   });
@@ -437,6 +441,6 @@ describe('SettingsShell', () => {
       expect(mocks.resetConfig).toHaveBeenCalledTimes(1);
     });
     expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '语言' })).toHaveValue('zh-CN');
+    expect(screen.getByRole('combobox', { name: '语言' })).toHaveTextContent('中文');
   });
 });

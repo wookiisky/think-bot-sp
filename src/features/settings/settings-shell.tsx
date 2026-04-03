@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Separator } from '../../components/ui/separator';
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
@@ -43,9 +44,6 @@ const navigationItems = [
   { key: 'settings.sync', icon: 'cache' as const },
   { key: 'settings.cache', icon: 'cache' as const },
 ];
-
-const selectClassName =
-  'w-full rounded-md border border-input bg-input/20 px-2 py-1.5 text-xs/relaxed outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 只保留有效快捷输入，并按顺序展示。 */
 const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInputItem[] =>
@@ -336,19 +334,22 @@ export const SettingsShell = () => {
                       {config.models.length > 1 ? (
                         <label className="grid gap-2">
                           <span className="text-sm font-medium">模型</span>
-                          <select
-                            aria-label="模型"
+                          <Select
                             value={activeModel.id}
                             disabled={saving}
-                            onChange={(event) => setSelectedModelId(event.target.value)}
-                            className={selectClassName}
+                            onValueChange={setSelectedModelId}
                           >
-                            {config.models.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger aria-label="模型" className="w-full">
+                              <SelectValue placeholder="选择模型" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {config.models.map((item) => (
+                                <SelectItem key={item.id} value={item.id}>
+                                  {item.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </label>
                       ) : null}
 
@@ -377,39 +378,45 @@ export const SettingsShell = () => {
                 <CardContent className="grid gap-3 px-5 py-5">
                   <label className="grid gap-2">
                     <span className="text-sm font-medium">{t('settings.language')}</span>
-                    <select
+                    <Select
                       value={language}
-                      onChange={(event) => handleLanguageChange(event.target.value as ExtensionConfig['basic']['language'])}
-                      aria-label={t('settings.language')}
                       disabled={saving}
-                      className={selectClassName}
+                      onValueChange={(value) => handleLanguageChange(value as ExtensionConfig['basic']['language'])}
                     >
-                      <option value="zh-CN">中文</option>
-                      <option value="en">English</option>
-                    </select>
+                      <SelectTrigger aria-label={t('settings.language')} className="w-full">
+                        <SelectValue placeholder={t('settings.language')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="zh-CN">中文</SelectItem>
+                        <SelectItem value="en">English</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </label>
 
                   <label className="grid gap-2">
                     <span className="text-sm font-medium">{t('settings.theme')}</span>
-                    <select
+                    <Select
                       value={config.basic.theme}
-                      onChange={(event) =>
+                      disabled={saving}
+                      onValueChange={(value) =>
                         updateConfig({
                           ...config,
                           basic: {
                             ...config.basic,
-                            theme: event.target.value as ExtensionConfig['basic']['theme'],
+                            theme: value as ExtensionConfig['basic']['theme'],
                           },
                         })
                       }
-                      aria-label={t('settings.theme')}
-                      disabled={saving}
-                      className={selectClassName}
                     >
-                      <option value="system">System</option>
-                      <option value="light">Light</option>
-                      <option value="dark">Dark</option>
-                    </select>
+                      <SelectTrigger aria-label={t('settings.theme')} className="w-full">
+                        <SelectValue placeholder={t('settings.theme')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system">System</SelectItem>
+                        <SelectItem value="light">Light</SelectItem>
+                        <SelectItem value="dark">Dark</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </label>
 
                   <p className="m-0 text-sm leading-6 text-muted-foreground">切换后会立即预览标题文案和设置页主题。</p>

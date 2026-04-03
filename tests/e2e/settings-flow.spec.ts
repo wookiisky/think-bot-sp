@@ -1,3 +1,5 @@
+import type { Page } from '@playwright/test';
+
 import { expect, test } from './helpers/extension-fixture';
 
 const cacheKeys = {
@@ -5,6 +7,12 @@ const cacheKeys = {
   conversation: 'conversation:https://example.com/article:summary',
   loading: 'loading:https://example.com/article:summary',
   ignored: 'ignored:test',
+};
+
+/** 打开 shadcn Select 并选择目标选项。 */
+const selectOption = async (page: Page, label: RegExp | string, optionText: string) => {
+  await page.getByRole('combobox', { name: label }).click();
+  await page.getByRole('option', { name: optionText, exact: true }).click();
 };
 
 test('settings flow keeps language and theme after save, then reset to defaults', async ({ context, extensionId }) => {
@@ -51,10 +59,9 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await expect(options.getByTestId('cache-entry-count')).toContainText('3');
   await expect(options.getByTestId('cache-bytes')).toContainText(/B/);
 
-  const languageSelect = options.getByRole('combobox').first();
-  await languageSelect.selectOption('en');
+  await selectOption(options, /语言|Language/, 'English');
   await expect(options.locator('h1')).toContainText('Settings');
-  await options.getByRole('combobox', { name: /Theme|主题/ }).selectOption('dark');
+  await selectOption(options, /Theme|主题/, 'Dark');
   await expect(options.getByTestId('settings-shell')).toHaveAttribute('data-theme', 'dark');
 
   await options.getByRole('button', { name: /保存|Save/ }).click();
@@ -63,7 +70,7 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await options.reload();
 
   await expect(options.locator('h1')).toContainText('Settings');
-  await expect(options.getByRole('combobox', { name: /Theme|主题/ })).toHaveValue('dark');
+  await expect(options.getByRole('combobox', { name: /Theme|主题/ })).toContainText('Dark');
   await expect(options.getByTestId('settings-shell')).toHaveAttribute('data-theme', 'dark');
   await expect(options.getByRole('heading', { name: /本地缓存|Local Cache/ })).toBeVisible();
   await expect(options.getByTestId('cache-entry-count')).toContainText('3');
@@ -72,8 +79,8 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await options.getByRole('button', { name: /恢复默认|Reset/ }).click();
   await expect.poll(() => handledCommandTypes).toContain('RESET_CONFIG');
   await expect(options.locator('h1')).toContainText('设置');
-  await expect(options.getByRole('combobox', { name: /语言|Language/ })).toHaveValue('zh-CN');
-  await expect(options.getByRole('combobox', { name: /主题|Theme/ })).toHaveValue('system');
+  await expect(options.getByRole('combobox', { name: /语言|Language/ })).toContainText('中文');
+  await expect(options.getByRole('combobox', { name: /主题|Theme/ })).toContainText('System');
   await expect(options.getByTestId('settings-shell')).toHaveAttribute('data-theme', 'system');
   await expect(
     options.evaluate(async () => {

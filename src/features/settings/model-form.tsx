@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import { isModelConfigComplete } from '../../domain/config/config-schema';
 
@@ -14,9 +15,6 @@ type ModelFormProps = {
   /** 是否禁用表单交互。 */
   disabled?: boolean;
 };
-
-const fieldClassName =
-  'w-full rounded-md border border-input bg-input/20 px-2 py-1.5 text-xs/relaxed outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50';
 
 /** 模型配置表单，负责 Provider 差异字段、API Key 显示切换和完整性提示。 */
 export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps) => {
@@ -41,18 +39,21 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
 
       <label className="grid gap-2">
         <span className="text-sm font-medium">提供方</span>
-        <select
-          aria-label="Provider"
+        <Select
           value={model.provider}
           disabled={disabled}
-          onChange={(event) => updateModel({ provider: event.target.value as ModelConfig['provider'] })}
-          className={fieldClassName}
+          onValueChange={(value) => updateModel({ provider: value as ModelConfig['provider'] })}
         >
-          <option value="openai-compatible">OpenAI Compatible</option>
-          <option value="gemini">Gemini</option>
-          <option value="azure-openai">Azure OpenAI</option>
-          <option value="anthropic">Anthropic</option>
-        </select>
+          <SelectTrigger aria-label="Provider" className="w-full">
+            <SelectValue placeholder="选择 Provider" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
+            <SelectItem value="gemini">Gemini</SelectItem>
+            <SelectItem value="azure-openai">Azure OpenAI</SelectItem>
+            <SelectItem value="anthropic">Anthropic</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
 
       {showBaseUrl ? (
