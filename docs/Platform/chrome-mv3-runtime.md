@@ -18,7 +18,8 @@
 - side panel 是 extension page，可访问 Chrome API。
 - side panel 默认存在全局 panel 和 `browserTab` 级 panel 两种语义，业务侧必须显式使用 `browserTab` 级 panel。
 - 切换到未启用 side panel 的 `browserTab` 时，浏览器会自动隐藏 side panel。
-- Chrome 官方默认行为是切回已打开过的 `browserTab` 时 side panel 会自动再次显示；产品若要求“不自动恢复”，必须在 `browserTab` 切换后主动清理上一 `browserTab` 的启用态。
+- Chrome 官方默认行为是切回已打开过的 `browserTab` 时 side panel 会自动再次显示；产品若要求“不自动展示”，必须在 `browserTab` 切换后主动清理上一 `browserTab` 的启用态。
+- 上一条清理不能只依赖 service worker 全局变量；`browserTab` 启用集合需要放在 `chrome.storage.session` 这类可跨 worker 休眠恢复的运行态存储里，才能在 worker 重启后继续做旧 tab 清理，同时还要为当前活动页重新预配置 side panel，避免下一次点击退化成双击打开。
 - side panel 首屏初始化更安全的方式是“挂载后主动拉取 bootstrap”；不要依赖 `sidePanel.open()` 或浏览器原生打开之后由 background 立即推送初始化消息。
 
 ### 2.2 Content Script
@@ -34,6 +35,7 @@
 - 会空闲终止并重新启动。
 - 不能依赖全局变量保存关键业务状态。
 - 适合作为权限调度中心，不适合作为持久内存。
+- 对必须跨休眠恢复的运行态数据，优先使用可恢复存储做辅助清理，不要把它误当成业务持久化。
 
 ## 3. 网络与跨域限制
 
@@ -95,7 +97,7 @@
 ## 8. 测试要求
 
 - 侧边栏只能在用户操作链路中打开。
-- `browserTab` 切换后 side panel 自动隐藏，切回原 `browserTab` 不自动恢复。
+- `browserTab` 切换后 side panel 自动隐藏，切回原 `browserTab` 不自动展示，但下一次点击应可直接打开。
 - 受限页不能尝试注入脚本。
 - service worker 重启后 loading 恢复正确。
 - host permissions 缺失时错误可诊断。

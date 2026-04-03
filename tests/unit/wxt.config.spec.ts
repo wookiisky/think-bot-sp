@@ -15,4 +15,8 @@ describe('wxt manifest config', () => {
     expect(config.manifest?.options_ui).toBeUndefined();
     expect(config.manifest?.options_page).toBeUndefined();
   });
+
+  it('side panel 不声明全局 default_path，避免切换 browserTab 后继续常驻显示', () => {
+    expect(config.manifest?.side_panel).toBeUndefined();
+  });
 });

@@ -6,7 +6,7 @@ export type SidebarMessageSender = {
   url?: string | null;
 };
 
-/** 判断 sender 是否来自 sidepanel.html。 */
+/** 判断 sender 是否来自 sidebar.html。 */
 export const isSidebarPageSender = (sender: SidebarMessageSender, runtimeId: string): boolean => {
   if (!sender.id || sender.id !== runtimeId) {
     return false;
@@ -17,15 +17,15 @@ export const isSidebarPageSender = (sender: SidebarMessageSender, runtimeId: str
   }
 
   try {
-    return new URL(sender.url).pathname.endsWith('/sidepanel.html');
+    return new URL(sender.url).pathname.endsWith('/sidebar.html');
   } catch {
     return false;
   }
 };
 
-/** 断言 sender 必须来自 sidepanel.html。 */
+/** 断言 sender 必须来自 sidebar.html。 */
 export const assertSidebarPageSender = (sender: SidebarMessageSender, runtimeId: string): void => {
   if (!isSidebarPageSender(sender, runtimeId)) {
-    throw new Error('invalid sidebar sender: expected runtime id and sidepanel.html');
+    throw new Error('invalid sidebar sender: expected runtime id and sidebar.html');
   }
 };

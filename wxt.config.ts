@@ -30,9 +30,6 @@ export default defineConfig({
     ],
     action: {
       default_title: 'think-bot-sp'
-    },
-    side_panel: {
-      default_path: 'sidepanel.html'
     }
   }
 });

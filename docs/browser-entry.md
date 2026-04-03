@@ -21,9 +21,10 @@
 
 ## 2.1 阶段 3 已落地约束
 
-- side panel 默认入口固定为 `sidepanel.html`，不再使用其他别名路径。
+- side panel 扩展页路由固定为 `sidebar.html`，避免触发 WXT 对保留 `sidepanel.html` 入口的全局 `default_path` 自动注入。
 - 浏览器入口测试驱动只允许走 `tests/e2e/helpers` 中的显式 `__E2E_BROWSER_ACTION_CLICK__` 协议，正式命令集合不混入测试指令。
-- `sidepanel.html` 支持通过 `tabId` 和 `pageUrl` query 显式恢复上下文，仅用于 E2E 和调试复现，不改变正式按钮点击链路。
+- `sidebar.html` 支持通过 `tabId` 和 `pageUrl` query 显式恢复上下文，仅用于 E2E 和调试复现，不改变正式按钮点击链路。
+- 已启用的 `browserTab` 集合保存在 `chrome.storage.session`，只用于 service worker 休眠或重启后的旧 tab 清理，不属于业务持久化数据。
 
 ## 3. 责任边界
 
@@ -31,7 +32,7 @@
 
 - 判断当前 `browserTab` 是否可进入 side panel。
 - 在用户点击扩展图标时打开 `browserTab` 级 side panel。
-- 在 `browserTab` 切换时维护 side panel 自动隐藏且不自动恢复的行为。
+- 在 `browserTab` 切换时维护 side panel 自动隐藏，并为当前活动页预配置下次单击可打开的行为。
 - 在受限页提供退化入口。
 - 注册并处理扩展图标右键菜单。
 - 在首次安装时打开本地化快速上手文档。
@@ -48,7 +49,7 @@
 
 1. 用户点击扩展图标。
 2. background 读取当前活动 `browserTab` 与 URL。
-3. 若页面可注入，则先通过 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` 让浏览器接管扩展图标点击打开行为，再为当前 `browserTab` 调用 `sidePanel.setOptions({ tabId: browserTabId, path, enabled: true })`。
+3. 若页面可注入，则 background 会在标签页激活或 URL 更新时提前为当前 `browserTab` 调用 `sidePanel.setOptions({ tabId: browserTabId, path, enabled: true })`，并通过 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` 让浏览器接管扩展图标点击打开行为。
 4. side panel 完成挂载后主动发起 `GET_SIDEBAR_BOOTSTRAP`。
 5. background 返回当前页面缓存、会话恢复数据、loading 状态、黑名单判定结果和是否需要继续提取的初始化摘要。
 6. side panel 先渲染恢复态；若命中黑名单，则只展示确认层，不直接执行提取和自动触发。
@@ -58,9 +59,9 @@
 
 1. 用户在 `browserTab A` 已打开 side panel 时切换到 `browserTab B`。
 2. 若 `browserTab B` 未启用 side panel，浏览器自动隐藏 side panel。
-3. background 在监听到 `browserTab` 切换后，清理 `browserTab A` 的 side panel 启用态，避免用户切回时自动恢复。
-4. 用户切回 `browserTab A` 时，side panel 保持隐藏。
-5. 用户再次点击扩展图标后，才重新打开 `browserTab A` 的 side panel。
+3. background 在监听到 `browserTab` 切换后，清理 `browserTab A` 的 side panel 启用态，避免旧 tab 保持打开。
+4. 同时为当前活动 `browserTab` 预配置 side panel，但不主动展开 UI。
+5. 用户切回 `browserTab A` 时，side panel 保持隐藏；只有再次点击扩展图标时才重新打开。
 
 ### 4.3 受限页面退化
 
@@ -89,6 +90,9 @@
   - 当前活动 `browserTab`
   - 当前 `browserTab` URL
   - 浏览器语言
+- 运行态辅助存储：
+  - 已启用的 `browserTab` 集合
+  - 仅用于跨 service worker 休眠恢复后的旧 tab 清理
 - 持久化依赖：
   - 无强依赖业务数据
 - 下游协作：
@@ -100,7 +104,8 @@
 
 - `sidePanel.open()` 需要用户手势；扩展图标链路优先使用 `openPanelOnActionClick`，不要在异步消息或 `await` 之后手动调用。
 - side panel 必须按 `browserTab` 维度启用，不能退化成全局 panel。
-- `browserTab` 切换后 side panel 只允许自动隐藏，不允许切回原 `browserTab` 时自动恢复。
+- `browserTab` 切换后 side panel 只允许自动隐藏，不允许切回原 `browserTab` 时自动展示。
+- 当前活动 `browserTab` 需要提前预配置 side panel，不能把首次配置延后到扩展图标点击时，否则会退化成需要点击两次才能打开。
 - 右键菜单入口只能打开 conversations，不能隐式进入 side panel。
 - 首次安装只负责打开快速上手文档，不预热页面提取和模型调用。
 - 受限页判断失败不能降级为“先尝试注入，失败再说”。
@@ -113,7 +118,7 @@
 - 职责测试：点击扩展图标、`browserTab` 切换、右键菜单、首次安装。
 - 边界测试：普通页、受限页、无活动 `browserTab`。
 - 错误流测试：页面打开失败、上下文菜单未注册。
-- 不变量测试：右键菜单不依赖当前页面可注入性；首次安装按语言选择文档；切回原 `browserTab` 不自动恢复 side panel。
+- 不变量测试：右键菜单不依赖当前页面可注入性；首次安装按语言选择文档；切回原 `browserTab` 不自动展示 side panel，但下一次点击应可直接打开。
 
 ## 8. 相关文档
 

@@ -6,6 +6,7 @@ import { createConfigRepository } from '../src/repositories/config-repository';
 import { createConversationRepository } from '../src/repositories/conversation-repository';
 import { createPageRepository } from '../src/repositories/page-repository';
 import { createBrowserEntryService } from '../src/services/browser-entry/browser-entry';
+import { createBrowserEntryPanelState } from '../src/services/browser-entry/browser-panel-state';
 import { createBlacklistService } from '../src/services/blacklist/blacklist-service';
 import { createContentSource } from '../src/services/extraction/content-source';
 import { createExtractionService } from '../src/services/extraction/extraction-service';
@@ -42,6 +43,7 @@ export default defineBackground(() => {
     runtime: chrome.runtime,
     tabs: chrome.tabs,
     sidePanel: chrome.sidePanel,
+    panelState: createBrowserEntryPanelState(chrome.storage.session),
     contextMenus: chrome.contextMenus,
     getUiLocale: () => chrome.i18n?.getUILanguage?.() ?? 'en',
   });
@@ -149,6 +151,18 @@ export default defineBackground(() => {
       }
     }
     void browserEntry.handleTabActivated(activeInfo);
+  });
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (tabId && changeInfo.url) {
+      clearBypassForTab(tabId);
+    }
+    void browserEntry.handleTabUpdated(tabId, changeInfo, tab);
+  });
+
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    clearBypassForTab(tabId);
+    void browserEntry.handleTabRemoved(tabId);
   });
 
   if (chrome.action?.onClicked) {

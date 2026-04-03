@@ -13,7 +13,7 @@
 ## 文档基线（已完成）
 
 - [x] 统一 side panel 首屏初始化协议为“两阶段 bootstrap”，首屏由 side panel 挂载后主动请求 `GET_SIDEBAR_BOOTSTRAP`。
-- [x] 统一 `browserTab` 行为：点击扩展按钮打开 side panel；切换 `browserTab` 自动隐藏；切回原 `browserTab` 不自动恢复。
+- [x] 统一 `browserTab` 行为：点击扩展按钮打开 side panel；切换 `browserTab` 自动隐藏；切回原 `browserTab` 不自动展示，但会为当前活动页重新预配置，保证下一次点击可直接打开。
 - [x] 统一黑名单时序：命中后先确认，放行前禁止提取和自动触发。
 - [x] 统一侧边栏布局顺序：顶部控制区 -> 提取内容区 -> 快捷输入标签区 -> 聊天区。
 - [x] 统一自动触发上下文规则：“强制带入页面内容”只作为请求级 override，不改写页面级 `includePageContent`。
@@ -89,11 +89,11 @@
 1. 阶段 1：工程骨架与自动化基线
 2. 阶段 2：领域模型、仓储和设置页基础
 3. 阶段 2.5：shadcn/ui 与 Tailwind 设计系统基线
-3. 阶段 3：浏览器入口、消息总线、侧边栏壳层与提取
-4. 阶段 4：聊天主链路、流式恢复与日志
-5. 阶段 5：快捷输入自动触发、分支、编辑/重试/导出
-6. 阶段 6：对话管理页与历史恢复
-7. 阶段 7：同步、删除语义与发布前回归
+4. 阶段 3：浏览器入口、消息总线、侧边栏壳层与提取
+5. 阶段 4：聊天主链路、流式恢复与日志
+6. 阶段 5：快捷输入自动触发、分支、编辑/重试/导出
+7. 阶段 6：对话管理页与历史恢复
+8. 阶段 7：同步、删除语义与发布前回归
 
 ---
 
@@ -298,6 +298,15 @@
 - 切换 `browserTab` 后 side panel 自动隐藏，切回不自动恢复。
 - 黑名单命中时先停在确认层，放行后才继续提取与自动触发。
 
+**状态（2026-04-03 复核）**
+
+- [x] 当前仓库已打通阶段 3 最小闭环：普通网页入口、两阶段 bootstrap、黑名单确认、正文提取展示。
+- [x] 当前仓库已落地阶段 3 关键实现：`browser-entry`、`sidebar` typed command、sender 校验、content script 采集、Readability/Jina 提取、页面/会话恢复查询。
+- [x] 当前仓库已通过阶段 3 基础回归：`pnpm build`、阶段 3 相关 unit/component 测试、`tests/e2e/browser-entry.spec.ts`、`tests/e2e/sidebar-extraction.spec.ts`。
+- [x] 切换 `browserTab` 后 side panel 自动隐藏与切回不自动恢复已补齐真实浏览器回归，不再作为已知问题。
+- [ ] 当前自动化遗漏：右键菜单打开 conversations、首次安装打开文档，尚未形成 E2E 回归。
+- [ ] 当前消息总线只完成阶段 3 one-shot command 和最小 `port-bus` 框架，`background` 侧 `onConnect` / 恢复握手尚未接入，不能按“已完成流式恢复框架”验收。
+
 **相关文档**
 
 - `docs/browser-entry.md`
@@ -318,7 +327,7 @@
   - `tests/unit/services/blacklist.spec.ts` 覆盖命中拦截、确认放行、非法规则阻断。
 - [ ] 实现 typed command / port 协议、命令名常量、sender 校验与基础恢复握手。
 - [ ] 先写失败 E2E：
-  - `tests/e2e/browser-entry.spec.ts` 覆盖普通页打开 side panel、受限页退化、右键菜单打开 conversations、首次安装打开文档。
+  - `tests/e2e/browser-entry.spec.ts` 覆盖普通页打开 side panel、受限页退化、`browserTab` 切换隐藏后不自动恢复。
   - `tests/e2e/sidebar-extraction.spec.ts` 覆盖 side panel 两阶段 bootstrap 初始化、缓存优先、黑名单先确认后提取、Readability/Jina 切换、`browserTab` 切换隐藏后不自动恢复。
 - [ ] 实现 `browser entry`：
   - 扩展图标点击逻辑。

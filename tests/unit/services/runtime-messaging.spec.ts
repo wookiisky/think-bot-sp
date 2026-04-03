@@ -146,7 +146,7 @@ describe('runtime-messaging', () => {
         {
           sender: {
             id: 'ext-id',
-            url: 'chrome-extension://ext-id/sidepanel.html',
+            url: 'chrome-extension://ext-id/sidebar.html',
           },
         },
       ),
@@ -202,7 +202,7 @@ describe('runtime-messaging', () => {
     });
   });
 
-  it('bootstrap 会拒绝非 sidepanel.html 的 sender', async () => {
+  it('bootstrap 会拒绝非 sidebar.html 的 sender', async () => {
     const handler = createSidebarCommandHandler({
       runtime: { id: 'ext-id' },
       pageRepository: {
@@ -232,15 +232,15 @@ describe('runtime-messaging', () => {
           },
         },
       ),
-    ).rejects.toThrow(/sidepanel\.html/i);
+    ).rejects.toThrow(/sidebar\.html/i);
   });
 
-  it('sender 只接受 runtime.id 且来源是 sidepanel.html', () => {
+  it('sender 只接受 runtime.id 且来源是 sidebar.html', () => {
     expect(
       isSidebarPageSender(
         {
           id: 'ext-id',
-          url: 'chrome-extension://ext-id/sidepanel.html',
+          url: 'chrome-extension://ext-id/sidebar.html',
         },
         'ext-id',
       ),
@@ -249,7 +249,7 @@ describe('runtime-messaging', () => {
       isSidebarPageSender(
         {
           id: 'ext-id',
-          url: 'chrome-extension://ext-id/sidepanel.html?tabId=7&pageUrl=https%3A%2F%2Fexample.com',
+          url: 'chrome-extension://ext-id/sidebar.html?tabId=7&pageUrl=https%3A%2F%2Fexample.com',
         },
         'ext-id',
       ),
@@ -267,7 +267,7 @@ describe('runtime-messaging', () => {
       isSidebarPageSender(
         {
           id: 'other-id',
-          url: 'chrome-extension://ext-id/sidepanel.html',
+          url: 'chrome-extension://ext-id/sidebar.html',
         },
         'ext-id',
       ),
@@ -280,7 +280,7 @@ describe('runtime-messaging', () => {
         },
         'ext-id',
       ),
-    ).toThrow(/sidepanel\.html/i);
+    ).toThrow(/sidebar\.html/i);
   });
 
   it('port bus 会广播注册、断连和恢复事件', () => {

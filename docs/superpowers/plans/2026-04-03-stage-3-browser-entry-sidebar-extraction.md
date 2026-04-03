@@ -10,6 +10,20 @@
 
 ---
 
+## 复核结论（2026-04-03）
+
+- 已落地：
+  - `entrypoints/background.ts` 已接入浏览器入口、sidebar one-shot command、黑名单放行和提取服务。
+  - `entrypoints/content.ts`、`src/services/extraction/*`、`src/services/blacklist/*`、`src/features/sidebar/*` 已形成阶段 3 最小闭环。
+  - `tests/unit/services/runtime-messaging.spec.ts`、`tests/unit/services/extraction.spec.ts`、`tests/unit/services/blacklist.spec.ts`、`tests/component/sidebar/sidebar-shell.spec.tsx`、`tests/e2e/browser-entry.spec.ts`、`tests/e2e/sidebar-extraction.spec.ts` 当前可通过。
+  - `browserTab` 切换后 side panel 自动隐藏；切回原 tab 不自动展示，但当前活动页会重新预配置 side panel，保证下一次点击可直接打开，已补齐 E2E 回归。
+- 未完成：
+  - 右键菜单入口、首次安装快速上手文档尚未形成 E2E 回归。
+  - `port-bus` 仅完成 schema 和最小事件广播，`background` 尚未接 `chrome.runtime.onConnect`，恢复握手仍属于阶段 4 前置框架。
+- 文档收口要求：
+  - 阶段 3 对外状态应调整为“主体已落地，右键菜单和首次安装快速上手文档仍待补齐”，不能笼统标记为全部完成。
+  - Playwright 扩展 E2E 依赖共享 `.output/chrome-mv3` 构建目录，当前应串行执行不同 `pnpm test:e2e -- ...` 命令，避免并行构建互相覆盖。
+
 ## File Structure
 
 ### 新建文件
@@ -49,7 +63,7 @@
 - `tests/e2e/helpers/browser-entry-driver.ts`
   - 浏览器入口测试驱动，隔离 Playwright 对扩展按钮可操作性的差异。
 - `tests/e2e/browser-entry.spec.ts`
-  - 扩展图标、受限页退化、右键菜单、首次安装 E2E。
+  - 扩展图标、受限页退化、`browserTab` 切换语义 E2E。
 - `tests/e2e/sidebar-extraction.spec.ts`
   - 两阶段 bootstrap、缓存优先、黑名单确认、提取回退、`browserTab` 切换语义 E2E。
 
@@ -58,10 +72,10 @@
 - `package.json`
   - 增加 `@mozilla/readability` 运行时依赖。
 - `wxt.config.ts`
-  - 补 `host_permissions`，统一 `side_panel.default_path` 为 `sidepanel.html`。
+  - 补 `host_permissions`，并避免使用 WXT 保留的 `sidepanel.html` 入口命名，防止构建时自动注入全局 `side_panel.default_path`。
 - `entrypoints/background.ts`
   - 组合 browser entry、runtime command、port bus、blacklist、extraction。
-- `entrypoints/sidepanel/main.tsx`
+- `entrypoints/sidebar/main.tsx`
   - 从占位 `PageShell` 切到真实 `SidebarShell`。
 - `src/repositories/page-repository.ts`
   - 补最小页面缓存更新辅助方法，避免 background 直接拼装 page record。
@@ -668,7 +682,7 @@ test('受限页点击扩展图标时退化到 conversations', async ({ context, 
 - [ ] **Step 2: 运行 E2E 确认失败**
 
 Run: `pnpm test:e2e -- tests/e2e/browser-entry.spec.ts`
-Expected: FAIL，当前没有浏览器入口测试驱动，也没有 `browserTab` 切换清理逻辑。
+Expected: FAIL，当前没有浏览器入口测试驱动。
 
 - [ ] **Step 3: 先补浏览器入口测试驱动，避免把测试钩子混入生产命令协议**
 

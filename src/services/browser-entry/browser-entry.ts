@@ -1,5 +1,6 @@
 import { EXTENSION_PAGES } from '../../shared/extension-pages';
 import { isRestrictedUrl, resolveWelcomeLocale } from '../../shared/browser-entry';
+import { createBrowserEntryPanelState } from './browser-panel-state';
 
 const MENU_ID_CONVERSATIONS = 'open-conversations';
 /* eslint-disable-next-line no-unused-vars */
@@ -23,10 +24,19 @@ type BrowserEntryDependencies = {
   tabs: typeof chrome.tabs;
   /** side panel 能力。 */
   sidePanel: typeof chrome.sidePanel;
+  /** side panel 运行态。 */
+  panelState: ReturnType<typeof createBrowserEntryPanelState>;
   /** contextMenus 能力。 */
   contextMenus: typeof chrome.contextMenus;
   /** 当前浏览器 UI 语言。 */
   getUiLocale: () => string;
+};
+
+type BrowserEntryTabUpdateInfo = {
+  /** 变更后的 URL。 */
+  url?: string;
+  /** 标签页加载状态。 */
+  status?: string;
 };
 
 type BrowserEntryActionResult =
@@ -60,11 +70,10 @@ export const createBrowserEntryService = ({
   runtime,
   tabs,
   sidePanel,
+  panelState,
   contextMenus,
   getUiLocale,
 }: BrowserEntryDependencies) => {
-  const enabledTabIds = new Set<number>();
-
   /** 配置扩展按钮点击后由浏览器原生打开 side panel。 */
   const configureActionClickBehavior = async () => {
     if (!sidePanel.setPanelBehavior) {
@@ -113,7 +122,7 @@ export const createBrowserEntryService = ({
       path,
       enabled: true,
     });
-    enabledTabIds.add(tabId);
+    await panelState.addEnabledTabId(tabId);
     logger.info('侧边栏入口已绑定当前标签页', {
       browserTabId: tabId,
       path,
@@ -122,6 +131,37 @@ export const createBrowserEntryService = ({
       kind: 'sidepanel-opened',
       tabId,
     };
+  };
+
+  /** 禁用目标标签页的 side panel。 */
+  const disableSidePanelForTab = async (tabId: number) => {
+    await sidePanel.setOptions({
+      tabId,
+      enabled: false,
+    });
+    await panelState.removeEnabledTabId(tabId);
+  };
+
+  /** 按当前标签页 URL 同步 side panel 可用态。 */
+  const syncSidePanelForActiveTab = async (tab: chrome.tabs.Tab | undefined) => {
+    if (!tab?.id) {
+      return;
+    }
+
+    if (isRestrictedUrl(tab.url ?? '')) {
+      await disableSidePanelForTab(tab.id);
+      logger.info('当前标签页侧边栏已禁用', {
+        browserTabId: tab.id,
+        url: tab.url,
+      });
+      return;
+    }
+
+    await openSidePanelForTab(tab.id);
+    logger.info('当前标签页侧边栏已预配置', {
+      browserTabId: tab.id,
+      url: tab.url,
+    });
   };
 
   /** 处理扩展按钮点击。 */
@@ -151,20 +191,69 @@ export const createBrowserEntryService = ({
 
   /** 处理标签页切换后的 side panel 启用态清理。 */
   const handleTabActivated = async ({ tabId }: { tabId: number }) => {
-    for (const openedTabId of Array.from(enabledTabIds)) {
+    const enabledTabIds = await panelState.getEnabledTabIds();
+
+    for (const openedTabId of enabledTabIds) {
       if (openedTabId === tabId) {
         continue;
       }
 
-      enabledTabIds.delete(openedTabId);
-      await sidePanel.setOptions({
-        tabId: openedTabId,
-        enabled: false,
-      });
-      logger.info('panel.auto_hidden', {
-        browserTabId: openedTabId,
+      try {
+        await disableSidePanelForTab(openedTabId);
+        logger.info('panel.auto_hidden', {
+          browserTabId: openedTabId,
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        logger.warn('panel.auto_hide_failed', {
+          browserTabId: openedTabId,
+          reason,
+        });
+      }
+    }
+
+    try {
+      await syncSidePanelForActiveTab(await tabs.get(tabId));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.warn('panel.active_tab_sync_failed', {
+        browserTabId: tabId,
+        reason,
       });
     }
+  };
+
+  /** 处理活动标签页 URL 或加载状态变化。 */
+  const handleTabUpdated = async (
+    tabId: number,
+    changeInfo: BrowserEntryTabUpdateInfo,
+    tab: chrome.tabs.Tab,
+  ) => {
+    if (!tab.active) {
+      return;
+    }
+
+    if (changeInfo.url === undefined && changeInfo.status !== 'complete') {
+      return;
+    }
+
+    try {
+      await syncSidePanelForActiveTab(tab);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.warn('panel.active_tab_sync_failed', {
+        browserTabId: tabId,
+        reason,
+      });
+    }
+  };
+
+  /** 处理标签页关闭后的 side panel 运行态清理。 */
+  const handleTabRemoved = async (tabId: number) => {
+    await panelState.removeEnabledTabId(tabId);
+    logger.info('panel.removed', {
+      browserTabId: tabId,
+    });
   };
 
   /** 处理安装事件。 */
@@ -212,6 +301,8 @@ export const createBrowserEntryService = ({
     handleContextMenuClick,
     handleInstalled,
     handleTabActivated,
+    handleTabUpdated,
+    handleTabRemoved,
     handleE2EBrowserActionClick,
     registerContextMenu,
   };

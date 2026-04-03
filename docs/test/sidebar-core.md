@@ -52,10 +52,15 @@
   - 流式中断。
 - 异常流：
   - side panel 关闭重开恢复 loading。
-  - `browserTab A` 打开 side panel，切到 `browserTab B` 自动隐藏，切回 `browserTab A` 不自动恢复。
+  - `browserTab A` 打开 side panel，切到 `browserTab B` 自动隐藏，切回 `browserTab A` 不自动展示，但再次点击时应可直接打开。
   - 用户取消请求。
   - content script 断连后自动刷新一次再重试。
   - 静态 content script 未挂载时，background 能先按需注入再继续采集。
+
+阶段 3 当前复核现状：
+
+- 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、受限页退化、`browserTab` 切换隐藏后不自动展示且当前活动页重新预配置。
+- 已知问题：无。
 
 ## 4. 关键边界条件
 
