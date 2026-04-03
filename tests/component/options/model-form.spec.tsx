@@ -21,6 +21,7 @@ const createModel = (overrides = {}) =>
     maxOutputTokens: null,
     order: 0,
     deletedAt: null,
+    supportsImages: false,
     ...overrides,
   }) as const;
 
@@ -81,5 +82,33 @@ describe('ModelForm', () => {
     render(<ModelForm model={createModel()} onChange={vi.fn()} />);
 
     expect(screen.getByText('配置完整')).toBeInTheDocument();
+  });
+
+  it('可显式切换图片输入能力并回写到界面', async () => {
+    const onChange = vi.fn();
+
+    const Harness = () => {
+      const [model, setModel] = useState(createModel());
+      return (
+        <ModelForm
+          model={model}
+          onChange={(nextModel) => {
+            onChange(nextModel);
+            setModel(nextModel);
+          }}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    const checkbox = screen.getByRole('checkbox', { name: '支持图片输入' });
+    expect(checkbox).not.toBeChecked();
+
+    const user = userEvent.setup();
+    await user.click(checkbox);
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ supportsImages: true }));
+    expect(screen.getByRole('checkbox', { name: '支持图片输入' })).toBeChecked();
   });
 });

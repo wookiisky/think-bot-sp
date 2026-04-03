@@ -80,6 +80,17 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
         </label>
       ) : null}
 
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          aria-label="支持图片输入"
+          type="checkbox"
+          checked={model.supportsImages}
+          disabled={disabled}
+          onChange={(event) => updateModel({ supportsImages: event.target.checked })}
+        />
+        <span className="font-medium">支持图片输入</span>
+      </label>
+
       <label className="grid gap-2">
         <span className="text-sm font-medium">API Key</span>
         <div className="flex items-center gap-2">

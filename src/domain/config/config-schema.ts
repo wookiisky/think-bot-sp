@@ -18,6 +18,7 @@ const modelConfigSchema = z
     tools: z.array(z.string()),
     thinkingBudget: z.number().int().nonnegative().nullable(),
     maxOutputTokens: z.number().int().positive().nullable(),
+    supportsImages: z.boolean().default(false),
     order: z.number().int().nonnegative(),
     deletedAt: z.number().int().nonnegative().nullable(),
   })

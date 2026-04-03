@@ -54,6 +54,7 @@ describe('config schema', () => {
         maxOutputTokens: null,
         order: 0,
         deletedAt: null,
+        supportsImages: true,
       }),
     ).toBe(true);
 
@@ -73,14 +74,87 @@ describe('config schema', () => {
         maxOutputTokens: null,
         order: 1,
         deletedAt: 10,
+        supportsImages: false,
       }),
     ).toBe(false);
 
     const config = createDefaultConfig({
       models: [
+          {
+            id: 'kept',
+            name: 'Kept',
+            provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+            maxOutputTokens: null,
+            order: 0,
+            deletedAt: null,
+            supportsImages: true,
+          },
+          {
+            id: 'skipped',
+            name: 'Skipped',
+          provider: 'gemini',
+          enabled: false,
+          model: 'gemini-2.5-flash',
+          baseUrl: '',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+            maxOutputTokens: null,
+            order: 1,
+            deletedAt: null,
+            supportsImages: false,
+          },
+        ],
+      });
+
+    expect(getEnabledCompleteModels(config).map((item) => item.id)).toEqual(['kept']);
+  });
+
+  it('parse 后保留显式图片能力字段', () => {
+    const config = createDefaultConfig({
+      models: [
         {
-          id: 'kept',
-          name: 'Kept',
+          id: 'm1',
+          name: '图片模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          order: 0,
+          deletedAt: null,
+          supportsImages: true,
+        },
+      ],
+    });
+
+    const parsed = extensionConfigSchema.parse(config);
+
+    expect(parsed.models[0]?.supportsImages).toBe(true);
+  });
+
+  it('旧配置缺少 supportsImages 时 parse 后默认补 false', () => {
+    const config = extensionConfigSchema.parse({
+      ...createDefaultConfig(),
+      models: [
+        {
+          id: 'legacy',
+          name: 'Legacy',
           provider: 'openai-compatible',
           enabled: true,
           model: 'gpt-4.1-mini',
@@ -94,26 +168,10 @@ describe('config schema', () => {
           order: 0,
           deletedAt: null,
         },
-        {
-          id: 'skipped',
-          name: 'Skipped',
-          provider: 'gemini',
-          enabled: false,
-          model: 'gemini-2.5-flash',
-          baseUrl: '',
-          apiKey: 'key',
-          deployment: '',
-          temperature: 1,
-          tools: [],
-          thinkingBudget: null,
-          maxOutputTokens: null,
-          order: 1,
-          deletedAt: null,
-        },
       ],
     });
 
-    expect(getEnabledCompleteModels(config).map((item) => item.id)).toEqual(['kept']);
+    expect(config.models[0]?.supportsImages).toBe(false);
   });
 
   it('拒绝重复 models 稳定 id 和错误 provider 字段', () => {
@@ -136,6 +194,7 @@ describe('config schema', () => {
             maxOutputTokens: null,
             order: 0,
             deletedAt: null,
+            supportsImages: false,
           },
           {
             id: 'm1',
@@ -152,6 +211,7 @@ describe('config schema', () => {
             maxOutputTokens: null,
             order: 1,
             deletedAt: null,
+            supportsImages: false,
           },
         ],
       }).success,
@@ -176,6 +236,7 @@ describe('config schema', () => {
             maxOutputTokens: null,
             order: 0,
             deletedAt: null,
+            supportsImages: false,
           },
         ],
       }).success,
