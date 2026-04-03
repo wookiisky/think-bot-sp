@@ -22,6 +22,13 @@
 - 上一条清理不能只依赖 service worker 全局变量；`browserTab` 启用集合需要放在 `chrome.storage.session` 这类可跨 worker 休眠恢复的运行态存储里，才能在 worker 重启后继续做旧 tab 清理，同时还要为当前活动页重新预配置 side panel，避免下一次点击退化成双击打开。
 - side panel 首屏初始化更安全的方式是“挂载后主动拉取 bootstrap”；不要依赖 `sidePanel.open()` 或浏览器原生打开之后由 background 立即推送初始化消息。
 
+### 2.1.1 本次修复暴露出的易错结论
+
+- 不要把“切换 tab 后仍会自动恢复”简单归因成 worker 内存丢失。内存态丢失只会放大问题，但不是唯一根因。
+- WXT 的 `sidepanel.html` / `entrypoints/sidepanel/*` 是保留入口名。继续使用这组命名时，构建产物会自动注入 `manifest.side_panel.default_path`，直接破坏按 `browserTab` 管理 side panel 的前提。
+- `openPanelOnActionClick` 模式下，当前 tab 的 side panel 必须在点击前已经配置好。若把 `setOptions({ enabled: true })` 放到 `action.onClicked` 回调里，真实浏览器会退化成第一次点击只配置、第二次点击才打开。
+- 用测试驱动消息复用 `handleActionClick` 只能验证业务分支，不足以验证浏览器真实点击时序；必须额外关注真实 action 语义是否被测试覆盖。
+
 ### 2.2 Content Script
 
 - 运行在 isolated world。

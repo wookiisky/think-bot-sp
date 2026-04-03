@@ -27,6 +27,13 @@
 - 未覆盖：右键菜单打开 conversations、首次安装快速上手文档。
 - 已覆盖：`browserTab` 切换后自动隐藏，当前活动页会重新预配置 side panel，保证下一次点击可直接打开。
 
+阶段 3 本次修复过程中的测试复盘：
+
+- 第一轮错误测试结论来自 `__E2E_BROWSER_ACTION_CLICK__` 驱动。它能复用 `background` 逻辑，但不能证明真实浏览器 action 点击时序正确。
+- `tests/e2e/browser-entry.spec.ts` 早期只验证“点击后 `getOptions()` 变成 enabled”，没有覆盖“配置必须在点击前已存在”这一前置条件，因此漏掉了“双击才打开”的问题。
+- `tests/e2e/entry-shell.spec.ts` 早期断言了瞬态 loading UI，实际页面直开时很容易在断言前就进入稳定态，属于错误测试假设，现已改成验证稳定态。
+- 扩展 E2E 共用 `.output/chrome-mv3` 构建目录；多个 `pnpm test:e2e -- ...` 并行运行会互相覆盖构建产物，曾导致一次假性构建失败，后续必须串行执行。
+
 ## 3. 验证点
 
 - 启动基线：
@@ -73,6 +80,7 @@
 - 扩展 id 获取优先依赖 service worker URL，不依赖 `chrome://extensions` 页面结构。
 - extension page 路由断言应优先复用 shared 常量，避免测试写死构建产物文件名。
 - 当前 E2E 会在 `globalSetup` 中写入共享 `.output/chrome-mv3` 目录，不应并行启动多个独立 `pnpm test:e2e -- ...` 进程。
+- 需要区分“业务入口复用测试”和“浏览器真实时序测试”：前者验证 handler 分支，后者验证单击打开、自动隐藏和预配置是否符合真实浏览器行为。
 
 ## 6. 必须长期回归的高风险场景
 

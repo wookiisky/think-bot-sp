@@ -62,6 +62,13 @@
 - 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、受限页退化、`browserTab` 切换隐藏后不自动展示且当前活动页重新预配置。
 - 已知问题：无。
 
+阶段 3 本次修复复盘：
+
+- 第一轮修复只补了 `chrome.storage.session` 运行态，解决了 worker 重启后旧 tab 清理，但没有彻底解释真实浏览器中的自动恢复问题。
+- 继续排查后确认，WXT 保留入口名 `sidepanel.html` 会导致构建产物带上全局 `side_panel.default_path`，这是“切换后仍会恢复”的结构性根因之一。
+- 路由改成 `sidebar.html` 后，`entry-shell` 与 sender 校验、E2E query 参数、文档都必须一起调整，否则会出现测试绿但真实入口错位的假象。
+- 第二轮修复又暴露出“需要点击两次才能打开”，最终通过活动 tab 预配置 side panel 收口，测试口径也从“不自动恢复”细化成“不自动展示，但下一次点击应可直接打开”。
+
 ## 4. 关键边界条件
 
 - 黑名单命中。
@@ -96,5 +103,5 @@
 ## 7. 阶段 2.5 入口壳层验收
 
 - 阶段 2.5 先验证 side panel 入口壳层基线，不把真实提取与聊天工作台当作已完成能力。
-- `tests/e2e/entry-shell.spec.ts` 必须验证 `page-shell`、标题、route 和环境标识存在。
+- `tests/e2e/entry-shell.spec.ts` 当前应验证 `sidebar.html` 可直接打开，并进入 `sidebar-shell` 的稳定态；不要再依赖瞬态 loading 或旧的 `page-shell` 占位结构。
 - Playwright E2E 必须先构建当前源码，再加载 `.output/chrome-mv3`，避免读取陈旧扩展产物导致壳层回归失真。

@@ -2,13 +2,34 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 修复“切换 `browserTab` 后 side panel 自动关闭失效、切回原 tab 仍会自动恢复”的阶段 3 遗留问题，并补齐对应回归测试与文档状态。
+**Goal:** 修复“切换 `browserTab` 后 side panel 自动关闭失效、切回原 tab 仍会自动恢复、修完后又出现需要点击两次才能打开”的阶段 3 浏览器入口遗留问题，并补齐对应回归测试与文档状态。
 
 **Architecture:** 保持 `background service worker` 作为唯一浏览器入口协调层，不改动 side panel 两阶段 bootstrap 主链路。修复重点放在 `browser-entry`：把“当前哪些 `browserTab` 已启用 side panel”从 worker 进程内存迁到 `chrome.storage.session` 级运行态存储，使 `tabs.onActivated` 在 worker 休眠/重启后仍能清理旧 tab 的启用态；同时为当前活动页预配置 side panel，避免切回后出现“需要点击两次才打开”的时序问题。
 
 **Tech Stack:** Chrome MV3、WXT、TypeScript、Vitest、Playwright、`chrome.storage.session`
 
 ---
+
+## 执行复盘（2026-04-03）
+
+本次修复不是一次完成，过程中出现过两次错误决策：
+
+1. 第一轮只把问题归因到 service worker 内存态丢失，先实现了 `chrome.storage.session` 版 `browser-panel-state`。
+2. 这一步确实修复了“worker 重启后无法清理旧 tab”的问题，但没有解释真实浏览器里切回原 tab 仍会恢复的现象。
+3. 继续调查构建产物后，发现 WXT 会把 `entrypoints/sidepanel/*` 识别成保留 side panel 入口，并自动写入 `manifest.side_panel.default_path`。这意味着 side panel 被浏览器当成全局默认 panel，业务层再怎么清理旧 tab，也会被默认配置干扰。
+4. 因此第二轮实现把扩展页路由从 `sidepanel.html` 改成了 `sidebar.html`，并把入口迁到 `entrypoints/sidebar/*`，同时同步更新 sender 校验、E2E、文档。
+5. 路由问题修完后，又暴露出新的时序问题：切换 tab 后需要点击两次扩展图标才能打开 side panel。
+6. 第二个错误决策是把 `sidePanel.setOptions({ enabled: true })` 放在 `action.onClicked` 回调里。真实浏览器第一次点击时只完成配置，第二次点击才真正打开。
+7. 最终实现把 side panel 预配置前移到 `tabs.onActivated` 和 `tabs.onUpdated`，当前活动 tab 只预配置、不自动展示；真正展示仍由用户点击扩展图标触发。
+
+最终落地的实现组合：
+
+- `browser-panel-state` 使用 `chrome.storage.session` 保存已启用 tab 集合。
+- `tabs.onActivated` 禁用旧 tab，并为当前活动 tab 同步 side panel 可用态。
+- `tabs.onUpdated` 在 URL 真变化或活动页加载完成时重新同步当前 tab，可注入页预配置、受限页禁用。
+- `tabs.onRemoved` 清理 tab 运行态。
+- 黑名单放行令牌只在 URL 真实变化时清理，避免普通加载过程误清当前放行。
+- E2E 增加了“切换后重新预配置，下一次点击可直接打开”的回归，`entry-shell` 测试也去掉了错误的瞬态 loading 断言。
 
 ## File Structure
 
@@ -20,23 +41,36 @@
 ### 修改文件
 
 - `src/services/browser-entry/browser-entry.ts`
-  - 注入 `browser-panel-state`，在扩展图标点击、`tabs.onActivated`、`tabs.onRemoved` 时统一维护 side panel 启用态。
+  - 注入 `browser-panel-state`，在扩展图标点击、`tabs.onActivated`、`tabs.onUpdated`、`tabs.onRemoved` 时统一维护 side panel 启用态与预配置。
 - `entrypoints/background.ts`
-  - 创建 `browser-panel-state` 实例并接入 `browserEntry`，补 `tabs.onRemoved` 清理。
+  - 创建 `browser-panel-state` 实例并接入 `browserEntry`，补 `tabs.onUpdated` / `tabs.onRemoved` 接线与 URL 变更清理。
+- `src/shared/extension-pages.ts`
+  - 把 side panel 扩展页路由从 `sidepanel.html` 改成 `sidebar.html`。
+- `entrypoints/sidebar/index.html`
+- `entrypoints/sidebar/main.tsx`
+  - 迁移 side panel 入口，避开 WXT 保留入口名。
+- `src/services/runtime-messaging/sender.ts`
+  - sender 校验同步改成 `sidebar.html`。
 - `tests/unit/services/browser-entry.spec.ts`
-  - 补 worker 重建后仍能清理旧 tab 启用态、tab 切换时禁用旧 tab 的失败单测。
+  - 补 worker 重建后仍能清理旧 tab 启用态、tab 切换时禁用旧 tab 并预配置当前 tab 的失败单测。
+- `tests/unit/services/runtime-messaging.spec.ts`
+  - sender 校验与错误文案同步更新到 `sidebar.html`。
+- `tests/unit/shared/extension-pages.spec.ts`
+  - 锁定 side panel 路由不能回退到 WXT 保留命名。
 - `tests/e2e/helpers/browser-entry-driver.ts`
   - 补获取活动 `browserTab` 与读取指定 tab side panel 配置的辅助方法。
 - `tests/e2e/browser-entry.spec.ts`
-  - 补 `browserTab A -> browserTab B -> browserTab A` 的“不自动恢复”端到端回归。
+  - 补 `browserTab A -> browserTab B -> browserTab A` 的“不自动展示但重新预配置”端到端回归。
+- `tests/e2e/entry-shell.spec.ts`
+  - 收紧为稳定态断言，避免错误依赖瞬态 loading。
 - `docs/browser-entry.md`
-  - 补充 `chrome.storage.session` 运行态说明和修复后的入口语义。
+  - 补充 `chrome.storage.session`、保留入口名陷阱与最终入口语义。
 - `docs/Platform/chrome-mv3-runtime.md`
-  - 明确 side panel 启用态不能只依赖 worker 内存，需可跨 worker 休眠恢复。
+  - 明确 side panel 启用态不能只依赖 worker 内存，且不能使用 WXT 保留入口名。
 - `docs/test/browser-automation.md`
-  - 把 `browserTab` 切换回归从“未覆盖/已知问题”更新为“已覆盖/已修复”。
+  - 收口测试复盘，记录真实点击时序与错误测试假设。
 - `docs/test/sidebar-core.md`
-  - 收口阶段 3 侧边栏回归现状。
+  - 收口阶段 3 侧边栏回归现状与入口壳层测试口径。
 - `docs/superpowers/plans/2026-04-03-stage-3-browser-entry-sidebar-extraction.md`
   - 更新阶段 3 复核结论，不再把该问题留在“未完成”里。
 - `tasks.md`
@@ -491,14 +525,14 @@ git commit -m "test: cover browser tab sidepanel auto hide"
   - 该状态只用于跨 service worker 休眠恢复旧 tab 的 side panel 清理，不属于业务持久化数据。
 
 <!-- docs/Platform/chrome-mv3-runtime.md -->
-- side panel 启用态不能只依赖 service worker 全局变量；若产品要求“切回原 tab 不自动恢复”，必须使用可跨 worker 休眠恢复的运行态存储辅助清理旧 tab。
+- side panel 启用态不能只依赖 service worker 全局变量；若产品要求“切回原 tab 不自动展示”，必须使用可跨 worker 休眠恢复的运行态存储辅助清理旧 tab，并为当前活动页重新预配置 side panel。
 
 <!-- docs/test/browser-automation.md -->
-- 已覆盖：普通网页点击扩展图标、受限页退化、两阶段 bootstrap、黑名单确认后提取、`browserTab` 切换自动隐藏且切回不自动恢复。
+- 已覆盖：普通网页点击扩展图标、受限页退化、两阶段 bootstrap、黑名单确认后提取、`browserTab` 切换自动隐藏且切回不自动展示，但下一次点击可直接打开。
 - 已知问题：本项已修复，后续只保留右键菜单和首次安装欢迎页的自动化补齐。
 
 <!-- docs/test/sidebar-core.md -->
-- 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、受限页退化、`browserTab` 切换隐藏后不自动恢复。
+- 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、受限页退化、`browserTab` 切换隐藏后不自动展示且重新预配置。
 - 已知问题：阶段 3 不再保留 “切换 `browserTab` 自动关闭 side panel 失效”。
 ```
 
@@ -507,12 +541,12 @@ git commit -m "test: cover browser tab sidepanel auto hide"
 ```md
 <!-- docs/superpowers/plans/2026-04-03-stage-3-browser-entry-sidebar-extraction.md -->
 - 已落地：
-  - `browserTab` 切换后会自动隐藏 side panel，切回原 `browserTab` 不自动恢复，需再次点击扩展图标重新打开。
+  - `browserTab` 切换后会自动隐藏 side panel，切回原 `browserTab` 不自动展示，但当前活动页会重新预配置，下一次点击可直接打开。
 - 未完成：
   - 右键菜单入口、首次安装欢迎页尚未形成 E2E 回归。
 
 <!-- tasks.md -->
-- [x] 统一 `browserTab` 行为：点击扩展按钮打开 side panel；切换 `browserTab` 自动隐藏；切回原 `browserTab` 不自动恢复。
+- [x] 统一 `browserTab` 行为：点击扩展按钮打开 side panel；切换 `browserTab` 自动隐藏；切回原 `browserTab` 不自动展示，但当前活动页会重新预配置。
 - [x] 阶段 3 当前已补齐 `browserTab` 切换隐藏语义回归；剩余遗留项仅为右键菜单和首次安装欢迎页 E2E。
 ```
 

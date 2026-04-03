@@ -24,6 +24,20 @@
   - 阶段 3 对外状态应调整为“主体已落地，右键菜单和首次安装快速上手文档仍待补齐”，不能笼统标记为全部完成。
   - Playwright 扩展 E2E 依赖共享 `.output/chrome-mv3` 构建目录，当前应串行执行不同 `pnpm test:e2e -- ...` 命令，避免并行构建互相覆盖。
 
+## 修复过程复盘（2026-04-03）
+
+阶段 3 的浏览器入口最终经历了三轮判断：
+
+1. 第一轮判断认为“切换 tab 不自动隐藏失效”主要来自 service worker 休眠后 `enabledTabIds` 内存丢失，因此先增加了 `chrome.storage.session` 运行态。
+2. 第二轮排查发现，仅靠运行态恢复不能解释真实浏览器中的自动恢复；继续检查 `.output/chrome-mv3/manifest.json` 后确认，WXT 对 `sidepanel.html` 保留入口名的自动注入才是结构性根因之一。
+3. 第三轮在修掉 `default_path` 后，又暴露出“需要点击两次扩展图标才能打开”的时序问题，最终确认必须把 side panel 预配置前移到 tab 激活和 URL 更新阶段。
+
+本阶段最终沉淀的经验：
+
+- 不要把 `entrypoints/sidepanel/*` 当成普通扩展页入口使用；在需要按 tab 控制 side panel 时，必须避开 WXT 保留入口名。
+- “不自动恢复”和“单击可打开”是同一条入口链路上的两个约束，不能只修其中一个。
+- E2E 若只验证 `handleActionClick` 的返回值，容易漏掉浏览器原生点击时序问题；需要同时验证 side panel 配置态和稳定 UI。
+
 ## File Structure
 
 ### 新建文件

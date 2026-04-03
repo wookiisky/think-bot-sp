@@ -295,7 +295,7 @@
 - 在普通网页点击扩展图标可打开 side panel。
 - side panel 能显示缓存或提取结果。
 - 受限页退化到 conversations 页面。
-- 切换 `browserTab` 后 side panel 自动隐藏，切回不自动恢复。
+- 切换 `browserTab` 后 side panel 自动隐藏，切回原 tab 不自动展示，但下一次点击应可直接打开。
 - 黑名单命中时先停在确认层，放行后才继续提取与自动触发。
 
 **状态（2026-04-03 复核）**
@@ -303,9 +303,16 @@
 - [x] 当前仓库已打通阶段 3 最小闭环：普通网页入口、两阶段 bootstrap、黑名单确认、正文提取展示。
 - [x] 当前仓库已落地阶段 3 关键实现：`browser-entry`、`sidebar` typed command、sender 校验、content script 采集、Readability/Jina 提取、页面/会话恢复查询。
 - [x] 当前仓库已通过阶段 3 基础回归：`pnpm build`、阶段 3 相关 unit/component 测试、`tests/e2e/browser-entry.spec.ts`、`tests/e2e/sidebar-extraction.spec.ts`。
-- [x] 切换 `browserTab` 后 side panel 自动隐藏与切回不自动恢复已补齐真实浏览器回归，不再作为已知问题。
+- [x] 切换 `browserTab` 后 side panel 自动隐藏、切回原 tab 不自动展示、当前活动页重新预配置并保证下一次点击可直接打开，已补齐真实浏览器回归。
 - [ ] 当前自动化遗漏：右键菜单打开 conversations、首次安装打开文档，尚未形成 E2E 回归。
 - [ ] 当前消息总线只完成阶段 3 one-shot command 和最小 `port-bus` 框架，`background` 侧 `onConnect` / 恢复握手尚未接入，不能按“已完成流式恢复框架”验收。
+
+**修复过程复盘（2026-04-03）**
+
+- 第一轮错误判断只盯住了 service worker 内存态，先补了 `chrome.storage.session` 运行态；这只解决了 worker 重启后的旧 tab 清理，不足以解释真实浏览器里的自动恢复。
+- 第二轮排查构建产物后确认，WXT 保留入口名 `sidepanel.html` 会自动注入 `manifest.side_panel.default_path`，这是浏览器入口语义失真的结构性原因。
+- 第三轮在路由改成 `sidebar.html` 后，又暴露出“需要点击两次才能打开”的时序问题，最终通过在 `tabs.onActivated` / `tabs.onUpdated` 里预配置当前活动页 side panel 收口。
+- 阶段 3 相关文档、单测、E2E 已同步反映这次修复过程，后续若再改浏览器入口，必须同时校验这三类约束：不自动展示、单击可打开、构建产物不含全局 `default_path`。
 
 **相关文档**
 
@@ -327,8 +334,8 @@
   - `tests/unit/services/blacklist.spec.ts` 覆盖命中拦截、确认放行、非法规则阻断。
 - [ ] 实现 typed command / port 协议、命令名常量、sender 校验与基础恢复握手。
 - [ ] 先写失败 E2E：
-  - `tests/e2e/browser-entry.spec.ts` 覆盖普通页打开 side panel、受限页退化、`browserTab` 切换隐藏后不自动恢复。
-  - `tests/e2e/sidebar-extraction.spec.ts` 覆盖 side panel 两阶段 bootstrap 初始化、缓存优先、黑名单先确认后提取、Readability/Jina 切换、`browserTab` 切换隐藏后不自动恢复。
+  - `tests/e2e/browser-entry.spec.ts` 覆盖普通页打开 side panel、受限页退化、`browserTab` 切换隐藏后不自动展示且下一次点击可直接打开。
+  - `tests/e2e/sidebar-extraction.spec.ts` 覆盖 side panel 两阶段 bootstrap 初始化、缓存优先、黑名单先确认后提取、Readability/Jina 切换、`browserTab` 切换隐藏后的入口语义不回归。
 - [ ] 实现 `browser entry`：
   - 扩展图标点击逻辑。
   - `browserTab` 切换后 side panel 启用态清理。

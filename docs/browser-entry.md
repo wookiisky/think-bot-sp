@@ -26,6 +26,27 @@
 - `sidebar.html` 支持通过 `tabId` 和 `pageUrl` query 显式恢复上下文，仅用于 E2E 和调试复现，不改变正式按钮点击链路。
 - 已启用的 `browserTab` 集合保存在 `chrome.storage.session`，只用于 service worker 休眠或重启后的旧 tab 清理，不属于业务持久化数据。
 
+## 2.2 本次修复复盘
+
+问题演进：
+
+1. 第一阶段现象是切换 `browserTab` 后 side panel 没有按预期自动隐藏。
+2. 第一轮错误判断把根因只归结为 service worker 内存态丢失，因此先把已启用 tab 集合迁到了 `chrome.storage.session`。
+3. 这一步只修复了“worker 重启后无法清理旧 tab”的一部分问题，但没有解释为什么真实浏览器里仍然会自动恢复。
+4. 继续排查后发现真正的结构性问题是保留了 WXT 特殊入口名 `sidepanel.html`，构建时会自动写入 `manifest.side_panel.default_path`，把 side panel 变成全局默认 panel。
+5. 路由改成 `sidebar.html` 后，自动恢复问题解决，但又暴露出第二个时序问题：需要点击两次扩展图标才能打开 side panel。
+6. 第二轮错误决策是把 `sidePanel.setOptions({ enabled: true })` 放在 `action.onClicked` 之后执行。浏览器第一次点击时只完成配置，第二次点击才真正打开。
+7. 最终修复是把“为当前活动页预配置 side panel”的时机前移到 `tabs.onActivated` 和 `tabs.onUpdated`，而不是等点击后再配。
+
+最终实现：
+
+- 路由从 `sidepanel.html` 改成 `sidebar.html`，并把入口移动到 `entrypoints/sidebar/*`。
+- `browser-entry` 通过 `chrome.storage.session` 维护已启用 `browserTab` 集合，解决 worker 休眠/重启后的旧 tab 清理。
+- `tabs.onActivated` 负责禁用旧 tab，并为当前活动 tab 预配置 side panel。
+- `tabs.onUpdated` 负责在当前活动 tab URL 变化后重新同步 side panel，可注入页预配置、受限页禁用。
+- 黑名单放行令牌只在 URL 真实变化时清理，避免普通加载完成把当前放行状态误删。
+- 扩展图标点击链路只承担“浏览器原生打开或受限页退化”的职责，不再承担首次配置职责。
+
 ## 3. 责任边界
 
 负责：
