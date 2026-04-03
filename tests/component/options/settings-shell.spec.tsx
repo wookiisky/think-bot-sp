@@ -107,7 +107,7 @@ describe('SettingsShell', () => {
 
     const shell = screen.getByTestId('settings-shell');
     expect(shell).toHaveAttribute('data-theme', 'dark');
-    expect(shell.className).toMatch(/dark/);
+    expect(shell).toHaveClass('dark');
   });
 
   it('触发保存时提交当前配置', async () => {
