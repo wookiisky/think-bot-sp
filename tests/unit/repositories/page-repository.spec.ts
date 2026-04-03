@@ -55,4 +55,48 @@ describe('page-repository', () => {
     await expect(cleanupExpiredPages(100)).resolves.toEqual(['https://example.com/old']);
     await expect(repo.getPage('https://example.com/old')).resolves.toBeNull();
   });
+
+  it('提取结果写回时保留旧页面状态并更新时间', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+    const existingPage = buildPageRecord({
+      url: 'https://example.com/article',
+      now: 100,
+      promptTabStates: [
+        {
+          promptTabId: 'chat',
+          initializedAt: 100,
+          lastAutoTriggerAt: null,
+          autoTriggerStatus: 'idle',
+          lastClearedAt: null,
+        },
+      ],
+    });
+
+    await repo.savePage({
+      ...existingPage,
+      title: '旧标题',
+      faviconUrl: 'https://example.com/favicon.ico',
+      content: '旧内容',
+      includePageContent: false,
+    });
+
+    const saved = await repo.saveExtractionResult({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      title: '新标题',
+      faviconUrl: 'https://example.com/new.ico',
+      content: '新内容',
+      extractionMethod: 'jina',
+    });
+
+    expect(saved.title).toBe('新标题');
+    expect(saved.faviconUrl).toBe('https://example.com/new.ico');
+    expect(saved.content).toBe('新内容');
+    expect(saved.extractionMethod).toBe('jina');
+    expect(saved.includePageContent).toBe(false);
+    expect(saved.promptTabStates).toEqual(existingPage.promptTabStates);
+    expect(saved.updatedAt).toBeGreaterThanOrEqual(existingPage.updatedAt);
+    expect(saved.expiresAt).toBeGreaterThan(saved.updatedAt);
+  });
 });

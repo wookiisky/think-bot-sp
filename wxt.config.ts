@@ -23,11 +23,16 @@ export default defineConfig({
       'contextMenus',
       'unlimitedStorage'
     ],
+    host_permissions: [
+      'http://*/*',
+      'https://*/*',
+      'https://r.jina.ai/*'
+    ],
     action: {
       default_title: 'think-bot-sp'
     },
     side_panel: {
-      default_path: 'side-panel.html'
+      default_path: 'sidepanel.html'
     }
   }
 });

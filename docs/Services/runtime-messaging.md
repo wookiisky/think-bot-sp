@@ -30,6 +30,12 @@
 
 one-shot command：
 
+- 阶段 3 已实现：
+  - `GET_SIDEBAR_BOOTSTRAP`
+  - `CONFIRM_BLACKLIST_CONTINUE`
+  - `SWITCH_EXTRACTION_METHOD`
+  - `RE_EXTRACT_CONTENT`
+- 后续阶段规划：
 - `GET_SIDEBAR_BOOTSTRAP`
 - `CONFIRM_BLACKLIST_CONTINUE`
 - `SWITCH_EXTRACTION_METHOD`
@@ -116,13 +122,14 @@ long-lived port 事件：
 
 - extension page 发 one-shot command 到 background。
 - side panel 首屏初始化统一走 `GET_SIDEBAR_BOOTSTRAP`，只拉取恢复和判定数据，不在该命令内隐式触发提取。
+- side panel sender 校验固定检查 `runtime.id` 和 URL `pathname` 为 `sidepanel.html`，允许 query 参数存在。
 - 流式任务创建后，UI 建立 port 订阅。
 - background 按 `sessionId` 路由事件。
 - side panel 重开后，通过 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
 - `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
-- `CONFIRM_BLACKLIST_CONTINUE` 只放行当前打开行为，不能持久化为全局白名单或页面长期状态。
+- `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
 
 ## 6. 错误与异常处理
 
