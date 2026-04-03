@@ -131,6 +131,7 @@ Provider 适配规则：
 - 异常流测试：取消、side panel 关闭重开恢复、loading 清理失败不覆盖主结果。
 - 不变量测试：终态消息不可继续追加 chunk 或覆盖终态结果。
 - 可观测性测试：事件顺序固定为 `STARTED -> CHUNK* -> FINISHED | FAILED | CANCELLED`。
+- E2E 允许通过 `globalThis.__THINK_BOT_TEST_STREAM__` 注入测试流桩，但仅限自动化环境，不得影响正式 provider 调用。
 
 ## 11. 相关文档
 

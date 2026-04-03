@@ -182,14 +182,14 @@
 
 流程：
 
-1. UI 校验文本或图片至少存在一种输入。
-2. UI 通过 one-shot command 提交发送请求。
-3. background 读取当前页面状态、模型配置、system prompt、快捷输入上下文。
-4. LLM Dispatch 组装 `ChatRequestContext`。
-5. background 创建 `StreamSession` 并落盘 loading state。
-6. side panel 或 conversations 页面通过 long-lived port 订阅流式事件。
-7. Dispatch 使用 `streamText` 推送 chunk、完成、错误或取消事件。
-8. 主回答完成后写入历史并清理 loading state。
+1. UI 校验文本或图片至少存在一种输入，并从配置里选定一个启用且完整的模型。
+2. UI 通过 `SEND_CHAT` 提交 `promptTabId / modelId / text / images / includePageContent`。
+3. background 读取模型配置，校验图片能力，不匹配时在任何持久化前直接失败。
+4. LLM Dispatch 先写用户消息、助手占位和 `LoadingStateRecord`。
+5. side panel 通过 long-lived port 订阅当前 `promptTab` 的流式事件。
+6. Dispatch 使用 `streamText` 输出主回答，每个 chunk 都先落 `ConversationRecord`，再推 `CHAT_STREAM_CHUNK`。
+7. side panel 关闭或 port 断开后，已落盘内容仍可见；重新打开时通过 `RESTORE_LOADING` 恢复最近一条未完成助手消息。
+8. 完成、取消、错误后收敛助手状态并清理 loading state。
 
 错误流：
 
@@ -204,6 +204,7 @@
 
 - API Key 只在 background 服务层使用。
 - side panel 关闭再打开后，仍能基于持久化 loading state 恢复 UI。
+- port 推送失败不能覆盖已落库的主生命周期结果。
 - 流式链路应记录发送受理、首个 chunk、完成、取消和失败事件。
 
 ## 8. 主流程：快捷输入与自动触发

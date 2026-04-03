@@ -45,7 +45,22 @@ export default defineBackground(() => {
         );
       },
     },
-    streamText,
+    streamText: async (input) => {
+      const testStream = (globalThis as typeof globalThis & {
+        __THINK_BOT_TEST_STREAM__?: Array<string>;
+      }).__THINK_BOT_TEST_STREAM__;
+      if (!testStream) {
+        return streamText(input);
+      }
+
+      return {
+        textStream: (async function* () {
+          for (const chunk of testStream) {
+            yield chunk;
+          }
+        })(),
+      };
+    },
   });
   const handleConfigCommand = createConfigCommandHandler({
     configRepository,

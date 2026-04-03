@@ -50,7 +50,7 @@
 - 语言模型采用“列表摘要 + 单项展开编辑”的交互：
   - 列表行展示显示名称、Provider、模型标识和启用状态。
   - 阶段2当前只交付单项切换和展开编辑，不交付新增、复制、删除、拖拽排序。
-  - 展开后按 Provider 展示差异字段，覆盖 Base URL、API Key、Model、Deployment、Temperature、Thinking Budget、最大输出 token。
+  - 展开后按 Provider 展示差异字段，覆盖 Base URL、API Key、Model、Deployment、Temperature、Thinking Budget、最大输出 token、`supportsImages`。
   - API Key 默认掩码显示，允许用户临时查看明文。
 - 快捷输入区域在阶段2只展示过滤后的只读预览，不交付编辑、排序和远端模板导入。
 - 语言和主题切换都支持即时预览并在保存后持久化。
@@ -93,6 +93,7 @@
 - 设置页必须保持完整 tab 页面观感，不能回退成弹窗式整页包裹卡片。
 - 默认模型候选只允许“启用且配置完整”的模型。
 - “启用且配置完整”的模型定义在设置页、侧边栏和对话管理页必须一致。
+- 图片输入能力必须通过 `supportsImages` 显式建模，不允许由 UI 或调度层按模型名猜测。
 - Provider 切换后，表单字段显隐和校验规则必须同步切换，不能保留上一个 Provider 的无效必填约束。
 - 国际化只允许使用平铺 key。
 - 图标资源不能通过在线字体加载。

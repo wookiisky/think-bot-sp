@@ -30,25 +30,13 @@
 
 one-shot command：
 
-- 阶段 3 已实现：
+- 阶段 4 当前已实现：
   - `GET_SIDEBAR_BOOTSTRAP`
   - `CONFIRM_BLACKLIST_CONTINUE`
   - `SWITCH_EXTRACTION_METHOD`
   - `RE_EXTRACT_CONTENT`
-- 后续阶段规划：
-- `GET_SIDEBAR_BOOTSTRAP`
-- `CONFIRM_BLACKLIST_CONTINUE`
-- `SWITCH_EXTRACTION_METHOD`
-- `RE_EXTRACT_CONTENT`
-- `CLEAR_PAGE_CONTEXT`
 - `SEND_CHAT`
 - `STOP_SESSION`
-- `STOP_BRANCH`
-- `DELETE_BRANCH`
-- `EDIT_USER_MESSAGE`
-- `RETRY_MESSAGE`
-- `EXPAND_MESSAGE_BRANCHES`
-- `CLEAR_TAB_CONVERSATION`
 - `EXPORT_CONVERSATION`
 - `GET_CONFIG`
 - `SAVE_CONFIG`
@@ -67,18 +55,18 @@ one-shot command：
 
 long-lived port 事件：
 
-- `STREAM_CHUNK`
-- `STREAM_DONE`
-- `STREAM_ERROR`
-- `STREAM_CANCELLED`
+- `CHAT_STREAM_STARTED`
+- `CHAT_STREAM_CHUNK`
+- `CHAT_STREAM_FINISHED`
+- `CHAT_STREAM_FAILED`
+- `CHAT_STREAM_CANCELLED`
 - `LOADING_STATE_UPDATE`
-- `BLACKLIST_DETECTED`
 - `RESTORE_LOADING`
 
-阶段 3 当前落地边界：
+阶段 4 当前落地边界：
 
-- 已落地：side panel one-shot command schema、sender 校验、最小 `port-bus` 事件模型与单测。
-- 未落地：`background` 侧 `chrome.runtime.onConnect` 接线、真实流式事件路由、worker 重启后的恢复握手。
+- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION` 命令、`RESTORE_LOADING` 恢复握手。
+- 未落地：分支级命令、消息编辑、重试、对话管理页复用同一条流式订阅。
 
 命令分组约束：
 
@@ -129,16 +117,12 @@ long-lived port 事件：
 - side panel 首屏初始化统一走 `GET_SIDEBAR_BOOTSTRAP`，只拉取恢复和判定数据，不在该命令内隐式触发提取。
 - side panel sender 校验固定检查 `runtime.id` 和 URL `pathname` 为 `sidebar.html`，允许 query 参数存在。
 - 流式任务创建后，UI 建立 port 订阅。
-- background 按 `sessionId` 路由事件。
-- side panel 重开后，通过 `RESTORE_LOADING` 重新订阅。
+- background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。
+- side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
 - `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
-
-阶段 3 当前复核备注：
-
-- 上述流式路由与 `RESTORE_LOADING` 仍是后续阶段目标，当前仓库还没有接入真实 long-lived port 运行链路。
 
 ## 6. 错误与异常处理
 
@@ -147,7 +131,7 @@ long-lived port 事件：
 - 参数结构非法：
   - 返回 schema 错误。
 - port 断开：
-  - 不视为任务终止，loading state 继续保留。
+  - 不视为任务终止，loading state 继续保留，side panel 重连后通过持久化恢复。
 - service worker 重启：
   - 新建端口后按持久化状态恢复。
 - 黑名单确认超时或页面上下文失效：
@@ -182,10 +166,10 @@ long-lived port 事件：
 - 异常流测试：side panel 关闭重连、conversations 页面恢复。
 - 不变量测试：同一 `sessionId` 的事件顺序正确。
 
-阶段 3 当前测试现状：
+阶段 4 当前测试现状：
 
-- 已覆盖：one-shot command 契约、sender 校验、`port-bus` 注册/断连/恢复事件。
-- 未覆盖：真实 `onConnect`、service worker 重启后的恢复握手、流式事件路由。
+- 已覆盖：one-shot command 契约、sender 校验、`port-bus` 路由、真实 `onConnect` 恢复握手、service worker 重启后的 `RESTORE_LOADING`、发送后的流式端到端闭环。
+- 未覆盖：分支级流式协议和对话管理页复用流式订阅。
 
 ## 11. 相关文档
 

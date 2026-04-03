@@ -28,6 +28,7 @@
   - 含义：分支级 loading、取消、错误恢复状态。
 - `resumeTarget`
   - 类型：`{ messageId, branchId? } | null`
+  - 含义：优先恢复的消息或分支锚点；阶段 4 若为空，可回退到当前 `loading` 的助手消息。
 - `cancelRequested`
   - 类型：`boolean`
 - `updatedAt`
@@ -62,6 +63,7 @@
 - 发送前创建。
 - 流式期间持续更新。
 - 结束后立刻回收。
+- side panel 重开或 worker 重启后，恢复链路优先读取 `LoadingStateRecord`，再结合 `ConversationRecord` 中仍处于 `loading` 的助手消息恢复可见状态。
 - 风险：
   - service worker 重启导致内存状态丢失。
   - side panel 关闭期间状态未落盘，导致恢复失败。

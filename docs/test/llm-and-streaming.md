@@ -39,6 +39,7 @@
   - 用户取消。
   - service worker 重启后恢复。
   - port 断开后重新订阅。
+  - port 推送失败不覆盖已持久化结果。
   - loading 清理失败不覆盖已完成的主生命周期结果。
   - side panel 关闭后重新打开，通过持久化 loading 恢复到正确消息锚点。
 
@@ -65,3 +66,4 @@
 - Gemini 模型
 - Anthropic 模型
 - 失败模型桩和延迟流式桩
+- E2E 专用 `__THINK_BOT_TEST_STREAM__` 流式桩
