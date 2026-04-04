@@ -24,7 +24,7 @@
 - 编辑用户消息并裁剪其后的依赖消息。
 - 追加、更新、删除分支。
 - 读写 loading state。
-- 清空单 `promptTab` 会话。
+- 清空单 `promptTab` 会话与 loading。
 - 批量清除页面下所有 loading。
 
 ## 4. 事务边界与并发约束
@@ -52,3 +52,4 @@
 - 停止/删除分支局部生效。
 - side panel 重开后 loading 恢复。
 - bootstrap 恢复链路中会话摘要、完整消息和 loading 关联正确。
+- 清空单 `promptTab` 时不会误删其他标签数据。

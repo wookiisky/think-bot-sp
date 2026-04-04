@@ -101,6 +101,7 @@
   - 按标题或 URL 搜索。
 - 典型更新：
   - 提取成功后更新内容与方法。
+  - 用户发送消息时回写页面级 `includePageContent`。
   - 编辑标题。
   - 恢复页面级 `includePageContent`。
   - 更新 `promptTab` 初始化状态与自动触发状态。
@@ -113,6 +114,7 @@
 - 90 天未更新则可被清理。
 - `promptTab` 首次手动发送或自动触发开始时写入对应 `promptTabStates.initializedAt`。
 - 清空当前 `promptTab` 时重置该 `promptTab` 的 `initializedAt / lastAutoTriggerAt / autoTriggerStatus`，并记录 `lastClearedAt`。
+- 页面级清空时整个 `PageRecord` 会与该页面下会话、loading 一起删除。
 - 风险：
   - URL 归一化不一致会导致重复页面。
   - 提取失败覆盖旧内容会导致历史丢失。

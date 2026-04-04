@@ -35,29 +35,41 @@ one-shot command：
   - `CONFIRM_BLACKLIST_CONTINUE`
   - `SWITCH_EXTRACTION_METHOD`
   - `RE_EXTRACT_CONTENT`
-- `SEND_CHAT`
-- `STOP_SESSION`
-- `GET_CONFIG`
-- `SAVE_CONFIG`
-- `RESET_CONFIG`
-- `IMPORT_CONFIG`
-- `EXPORT_CONFIG`
-- `GET_LOCAL_CACHE_STATS`
-- `CLEAR_LOCAL_CACHE`
-- `TEST_SYNC_CONNECTION`
-- `SYNC_NOW`
-- `EXPORT_CONVERSATION`
-- `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
-- `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
-- `LIST_PAGES`
-- `SEARCH_PAGES`
-- `GET_PAGE_DETAIL`
-- `UPDATE_PAGE_TITLE`
-- `DELETE_PAGE`
+- 当前已实现的其他命令：
+  - `CLEAR_PAGE_CONTEXT`
+  - `CLEAR_TAB_CONVERSATION`
+  - `SEND_CHAT`
+  - `EXPAND_MESSAGE_BRANCHES`
+  - `STOP_SESSION`
+  - `STOP_BRANCH`
+  - `DELETE_BRANCH`
+  - `EXPORT_CONVERSATION`
+  - `GET_CONFIG`
+  - `SAVE_CONFIG`
+  - `RESET_CONFIG`
+  - `IMPORT_CONFIG`
+  - `EXPORT_CONFIG`
+  - `GET_LOCAL_CACHE_STATS`
+  - `CLEAR_LOCAL_CACHE`
+  - `TEST_SYNC_CONNECTION`
+  - `SYNC_NOW`
+- 已定义但当前未实现：
+  - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
+  - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
+  - `LIST_PAGES`
+  - `SEARCH_PAGES`
+  - `GET_PAGE_DETAIL`
+  - `UPDATE_PAGE_TITLE`
+  - `DELETE_PAGE`
 
 long-lived port 事件：
 
 - `CHAT_STREAM_STARTED`
+- `BRANCH_STREAM_STARTED`
+- `BRANCH_STREAM_CHUNK`
+- `BRANCH_STREAM_FINISHED`
+- `BRANCH_STREAM_FAILED`
+- `BRANCH_STREAM_CANCELLED`
 - `CHAT_STREAM_CHUNK`
 - `CHAT_STREAM_FINISHED`
 - `CHAT_STREAM_FAILED`
@@ -67,10 +79,13 @@ long-lived port 事件：
 
 阶段 4 当前落地边界：
 
-- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
-- 未落地：分支级命令、消息编辑、重试、对话管理页复用同一条流式订阅。
+- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
+- 已落地补充：`RE_EXTRACT_CONTENT` 成功后会在 background 内部触发自动触发去重编排；手动发送与自动触发共享同一套活跃会话注册表。
+- 未落地：对话管理页复用同一条流式订阅、快捷输入远端模板命令。
 
 命令分组约束：
+
+- 以下分组描述的是命令归属边界，不等同于“当前已全部实现”。
 
 - 侧边栏页面使用：
   - `GET_SIDEBAR_BOOTSTRAP`
@@ -97,8 +112,6 @@ long-lived port 事件：
   - `CLEAR_LOCAL_CACHE`
   - `TEST_SYNC_CONNECTION`
   - `SYNC_NOW`
-  - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
-  - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
 - 对话管理页使用：
   - `LIST_PAGES`
   - `SEARCH_PAGES`
@@ -124,10 +137,13 @@ long-lived port 事件：
 - background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。
 - side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
+- 自动触发不暴露新的 one-shot command；由 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
 - `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
+- 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。
 - `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
+- `CLEAR_PAGE_CONTEXT` 必须先取消当前页面活跃会话并等待其生命周期收敛，再删除页面记录，避免流式尾包把刚清空的页面重新写回。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
 
 ## 6. 错误与异常处理
@@ -142,6 +158,8 @@ long-lived port 事件：
   - 新建端口后按持久化状态恢复。
 - 黑名单确认超时或页面上下文失效：
   - 拒绝本次放行请求，要求 UI 重新获取页面上下文。
+- 页面级清空：
+  - 活跃会话必须先取消，再进入删除页面数据的操作序列。
 - 同步命令：
   - `TEST_SYNC_CONNECTION` 或 `SYNC_NOW` 失败时返回显式错误，不允许 background 吞错后伪造成功响应。
 
@@ -173,12 +191,18 @@ long-lived port 事件：
 - 错误流测试：port 中断、service worker 重启。
 - 异常流测试：side panel 关闭重连、conversations 页面恢复。
 - 不变量测试：同一 `sessionId` 的事件顺序正确。
+- 不变量测试：自动触发会话也必须被 `STOP_SESSION / CLEAR_PAGE_CONTEXT` 看到，不能落到旁路会话表。
 
 阶段 4 当前测试现状：
 
 - 已覆盖：one-shot command 契约、sender 校验、`port-bus` 路由、真实 `onConnect` 恢复握手、service worker 重启后的 `RESTORE_LOADING`、发送后的流式端到端闭环。
+- 已覆盖：`CLEAR_PAGE_CONTEXT` 的取消后清理顺序、页面级 `includePageContent` 通过 `SEND_CHAT` 进入真实模型上下文。
+- 已覆盖：自动触发首次执行、重开 side panel 不重复触发、自动触发会话进入现有停止/清理链路。
+- 已覆盖：`CLEAR_TAB_CONVERSATION` 的目标标签取消与清理语义、`EXPORT_CONVERSATION` 的命令路由。
+- 已覆盖：`EXPAND_MESSAGE_BRANCHES / STOP_BRANCH / DELETE_BRANCH` 命令契约、分支级流式事件和命令路由。
+- 已覆盖：`EDIT_USER_MESSAGE / RETRY_MESSAGE` 命令契约，以及编辑裁剪、重试替换旧助手消息的命令路由。
 - 已覆盖：设置页配置命令、同步连接测试与手动同步命令。
-- 未覆盖：分支级流式协议和对话管理页复用流式订阅。
+- 未覆盖：对话管理页复用流式订阅、快捷输入远端模板命令。
 
 ## 11. 相关文档
 

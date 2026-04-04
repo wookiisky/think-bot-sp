@@ -101,3 +101,48 @@ export const resetPromptTabState = (page: z.infer<typeof pageRecordSchema>, prom
     updatedAt: now,
     expiresAt: now + NINETY_DAYS,
   });
+
+/** 更新单个 promptTab 的运行态，不动页面级正文与开关。 */
+export const updatePromptTabState = (
+  page: z.infer<typeof pageRecordSchema>,
+  input: {
+    /** promptTab 稳定 id。 */
+    promptTabId: string;
+    /** 初始化时间。 */
+    initializedAt?: number | null;
+    /** 最近一次自动触发时间。 */
+    lastAutoTriggerAt?: number | null;
+    /** 自动触发状态。 */
+    autoTriggerStatus?: 'idle' | 'queued' | 'running' | 'done' | 'error';
+    /** 最近一次清空时间。 */
+    lastClearedAt?: number | null;
+  },
+  now: number,
+) => {
+  const currentState =
+    page.promptTabStates.find((item) => item.promptTabId === input.promptTabId) ?? {
+      promptTabId: input.promptTabId,
+      initializedAt: null,
+      lastAutoTriggerAt: null,
+      autoTriggerStatus: 'idle' as const,
+      lastClearedAt: null,
+    };
+  const nextState = {
+    ...currentState,
+    promptTabId: input.promptTabId,
+    ...(input.initializedAt !== undefined ? { initializedAt: input.initializedAt } : {}),
+    ...(input.lastAutoTriggerAt !== undefined ? { lastAutoTriggerAt: input.lastAutoTriggerAt } : {}),
+    ...(input.autoTriggerStatus !== undefined ? { autoTriggerStatus: input.autoTriggerStatus } : {}),
+    ...(input.lastClearedAt !== undefined ? { lastClearedAt: input.lastClearedAt } : {}),
+  };
+  const exists = page.promptTabStates.some((item) => item.promptTabId === input.promptTabId);
+
+  return pageRecordSchema.parse({
+    ...page,
+    promptTabStates: exists
+      ? page.promptTabStates.map((item) => (item.promptTabId === input.promptTabId ? nextState : item))
+      : [...page.promptTabStates, nextState],
+    updatedAt: now,
+    expiresAt: now + NINETY_DAYS,
+  });
+};

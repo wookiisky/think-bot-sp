@@ -2,9 +2,14 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { getEnabledCompleteModels, isModelConfigComplete } from '../../domain/config/config-schema';
+import {
+  getEnabledCompleteModels,
+  isModelConfigComplete,
+  normalizeBranchModelSelections,
+} from '../../domain/config/config-schema';
 import { createLocaleService } from '../../services/i18n/locale-service';
 import { createLogger } from '../../services/logger/logger';
+import { downloadTextFile } from '../../shared/download-file';
 import { Icon } from '../../ui/icon';
 import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
@@ -31,23 +36,6 @@ type SyncFeedback = {
 
 const logger = createLogger('settings-shell');
 const localeService = createLocaleService();
-
-/** 把导出的配置内容下载为本地 json 文件。 */
-const downloadExportedConfig = (payload: string) => {
-  const filename = `think-bot-sp-config-${new Date().toISOString().slice(0, 10)}.json`;
-  const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-
-  link.href = objectUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(objectUrl);
-
-  return filename;
-};
 
 /** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入编辑。 */
 export const SettingsShell = () => {
@@ -159,7 +147,11 @@ export const SettingsShell = () => {
   const handleExport = async () => {
     try {
       const payload = await settingsApi.exportConfig();
-      const filename = downloadExportedConfig(payload);
+      const filename = downloadTextFile({
+        filename: `think-bot-sp-config-${new Date().toISOString().slice(0, 10)}.json`,
+        content: payload,
+        mimeType: 'application/json;charset=utf-8',
+      });
       logger.info('导出配置成功', { filename });
       setError(null);
     } catch (exportError) {
@@ -183,12 +175,13 @@ export const SettingsShell = () => {
   };
 
   const handleSave = async () => {
-    const defaultModel = draftConfig.basic.defaultModelId
-      ? draftConfig.models.find((item) => item.id === draftConfig.basic.defaultModelId)
+    const nextDraftConfig = normalizeBranchModelSelections(draftConfig);
+    const defaultModel = nextDraftConfig.basic.defaultModelId
+      ? nextDraftConfig.models.find((item) => item.id === nextDraftConfig.basic.defaultModelId)
       : null;
-    if (draftConfig.basic.defaultModelId && !defaultModel) {
+    if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
       setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型不存在，阻止保存', { defaultModelId: draftConfig.basic.defaultModelId });
+      logger.warn('默认模型不存在，阻止保存', { defaultModelId: nextDraftConfig.basic.defaultModelId });
       return;
     }
 
@@ -200,7 +193,7 @@ export const SettingsShell = () => {
 
     setSaving(true);
     try {
-      const nextConfig = await settingsApi.saveConfig(draftConfig);
+      const nextConfig = await settingsApi.saveConfig(nextDraftConfig);
       setSavedConfig(nextConfig);
       setDraftConfig(nextConfig);
       logger.info('保存设置成功', { language: nextConfig.basic.language });

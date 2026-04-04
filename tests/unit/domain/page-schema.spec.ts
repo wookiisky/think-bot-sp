@@ -5,6 +5,7 @@ import {
   normalizePageUrl,
   pageRecordSchema,
   resetPromptTabState,
+  updatePromptTabState,
 } from '../../../src/domain/page/page-schema';
 
 describe('page schema', () => {
@@ -60,5 +61,50 @@ describe('page schema', () => {
       lastClearedAt: 60,
     });
     expect(next.promptTabStates[1]).toEqual(page.promptTabStates[1]);
+  });
+
+  it('更新 promptTab 运行态时会保留其他页面字段并按需补新标签', () => {
+    const page = buildPageRecord({
+      url: 'https://example.com',
+      promptTabStates: [
+        {
+          promptTabId: 'chat',
+          initializedAt: 10,
+          lastAutoTriggerAt: null,
+          autoTriggerStatus: 'idle',
+          lastClearedAt: null,
+        },
+      ],
+      now: 50,
+    });
+
+    const next = updatePromptTabState(
+      page,
+      {
+        promptTabId: 'quick-1',
+        initializedAt: 60,
+        lastAutoTriggerAt: 60,
+        autoTriggerStatus: 'running',
+      },
+      70,
+    );
+
+    expect(next.includePageContent).toBe(true);
+    expect(next.promptTabStates).toEqual([
+      {
+        promptTabId: 'chat',
+        initializedAt: 10,
+        lastAutoTriggerAt: null,
+        autoTriggerStatus: 'idle',
+        lastClearedAt: null,
+      },
+      {
+        promptTabId: 'quick-1',
+        initializedAt: 60,
+        lastAutoTriggerAt: 60,
+        autoTriggerStatus: 'running',
+        lastClearedAt: null,
+      },
+    ]);
   });
 });

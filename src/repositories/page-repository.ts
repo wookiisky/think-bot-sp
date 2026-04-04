@@ -1,4 +1,4 @@
-import { buildPageRecord, pageRecordSchema } from '../domain/page/page-schema';
+import { buildPageRecord, pageRecordSchema, updatePromptTabState } from '../domain/page/page-schema';
 import { CONVERSATION_STORAGE_PREFIX, LOADING_STORAGE_PREFIX, PAGE_STORAGE_PREFIX } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
@@ -87,6 +87,67 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
         updatedAt: now,
         expiresAt: now + NINETY_DAYS,
       });
+
+      await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
+      return nextPage;
+    },
+
+    /** 更新页面级 includePageContent 开关，同时保留正文与页面状态。 */
+    async setIncludePageContent(input: {
+      /** 归一化后的页面 URL。 */
+      normalizedUrl: string;
+      /** 页面原始 URL。 */
+      url: string;
+      /** 当前页面级正文开关。 */
+      includePageContent: boolean;
+    }) {
+      const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
+      const currentValue = result[getPageKey(input.normalizedUrl)];
+      const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : null;
+      const now = Date.now();
+      const nextPage = pageRecordSchema.parse({
+        ...(currentPage ?? buildPageRecord({ url: input.url, now })),
+        includePageContent: input.includePageContent,
+        updatedAt: now,
+        expiresAt: now + NINETY_DAYS,
+      });
+
+      await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
+      return nextPage;
+    },
+
+    /** 更新单个 promptTab 的页面级运行态，同时保留正文与页面级开关。 */
+    async setPromptTabState(input: {
+      /** 归一化后的页面 URL。 */
+      normalizedUrl: string;
+      /** 页面原始 URL。 */
+      url: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 初始化时间。 */
+      initializedAt?: number | null;
+      /** 最近一次自动触发时间。 */
+      lastAutoTriggerAt?: number | null;
+      /** 自动触发状态。 */
+      autoTriggerStatus?: 'idle' | 'queued' | 'running' | 'done' | 'error';
+      /** 最近一次清空时间。 */
+      lastClearedAt?: number | null;
+    }) {
+      const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
+      const currentValue = result[getPageKey(input.normalizedUrl)];
+      const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : buildPageRecord({ url: input.url, now: Date.now() });
+      const now = Date.now();
+      const nextPage = updatePromptTabState(
+        currentPage,
+        {
+          promptTabId: input.promptTabId,
+          initializedAt: input.initializedAt,
+          lastAutoTriggerAt: input.lastAutoTriggerAt,
+          autoTriggerStatus: input.autoTriggerStatus,
+          lastClearedAt: input.lastClearedAt,
+        },
+        now,
+      );
 
       await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
       return nextPage;

@@ -47,6 +47,7 @@ const quickInputSchema = z.object({
   prompt: z.string().min(1),
   autoTrigger: z.boolean(),
   modelId: z.string().nullable(),
+  branchModelIds: z.array(z.string().min(1)).default([]),
   order: z.number().int().nonnegative(),
   deletedAt: z.number().int().nonnegative().nullable(),
 });
@@ -78,6 +79,7 @@ export const extensionConfigSchema = z
       theme: z.enum(['system', 'light', 'dark']),
       language: z.enum(['zh-CN', 'en']),
       defaultModelId: z.string().min(1).nullable(),
+      branchModelIds: z.array(z.string().min(1)).default([]),
       systemPrompt: z.string(),
       filterCot: z.boolean(),
       extractionMethod: z.enum(['readability', 'jina']),
@@ -117,6 +119,48 @@ export const isModelConfigComplete = (model: ModelConfig): boolean =>
 export const getEnabledCompleteModels = (config: ExtensionConfig): ModelConfig[] =>
   config.models.filter((model) => isModelConfigComplete(model));
 
+/** 过滤无效分支模型引用，保留原顺序并去重。 */
+export const sanitizeBranchModelIds = (config: ExtensionConfig, branchModelIds: string[]): string[] => {
+  const enabledModelIds = new Set(getEnabledCompleteModels(config).map((model) => model.id));
+  const seen = new Set<string>();
+
+  return branchModelIds.filter((modelId) => {
+    if (!enabledModelIds.has(modelId) || seen.has(modelId)) {
+      return false;
+    }
+    seen.add(modelId);
+    return true;
+  });
+};
+
+/** 归一化配置中的分支模型引用。 */
+export const normalizeBranchModelSelections = (config: ExtensionConfig): ExtensionConfig => ({
+  ...config,
+  basic: {
+    ...config.basic,
+    branchModelIds: sanitizeBranchModelIds(config, config.basic.branchModelIds),
+  },
+  quickInputs: config.quickInputs.map((quickInput) => ({
+    ...quickInput,
+    branchModelIds: sanitizeBranchModelIds(config, quickInput.branchModelIds),
+  })),
+});
+
+/** 解析当前 promptTab 应使用的分支模型，规则为全局配置与当前配置合并。 */
+export const resolvePromptTabBranchModelIds = (config: ExtensionConfig, promptTabId: string): string[] => {
+  const globalBranchModelIds = sanitizeBranchModelIds(config, config.basic.branchModelIds);
+  if (promptTabId === 'chat') {
+    return globalBranchModelIds;
+  }
+
+  const quickInput = config.quickInputs.find((item) => item.id === promptTabId && item.deletedAt === null);
+  if (!quickInput) {
+    return globalBranchModelIds;
+  }
+
+  return sanitizeBranchModelIds(config, [...globalBranchModelIds, ...quickInput.branchModelIds]);
+};
+
 /** 生成默认配置。 */
 export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): ExtensionConfig =>
   extensionConfigSchema.parse({
@@ -126,6 +170,7 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
       theme: 'system',
       language: 'zh-CN',
       defaultModelId: null,
+      branchModelIds: [],
       systemPrompt: '',
       filterCot: false,
       extractionMethod: 'readability',
@@ -133,7 +178,10 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
       ...(overrides.basic ?? {}),
     },
     models: overrides.models ?? [],
-    quickInputs: overrides.quickInputs ?? [],
+    quickInputs: (overrides.quickInputs ?? []).map((quickInput) => ({
+      branchModelIds: [],
+      ...quickInput,
+    })),
     sync: {
       enabled: false,
       provider: 'none',

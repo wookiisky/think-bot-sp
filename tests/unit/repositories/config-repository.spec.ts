@@ -41,7 +41,10 @@ describe('config-repository', () => {
     await repo.saveConfig(oldConfig);
 
     await expect(repo.importConfig('{"version":"0.0.0"}')).rejects.toThrow(/unsupported/i);
-    await expect(repo.getConfig()).resolves.toEqual(oldConfig);
+    await expect(repo.getConfig()).resolves.toMatchObject({
+      ...oldConfig,
+      updatedAt: expect.any(Number),
+    });
   });
 
   it('saveConfig 需要完整配置契约', async () => {

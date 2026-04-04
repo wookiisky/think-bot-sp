@@ -10,8 +10,15 @@ export const sidebarCommandTypeValues = [
   'CONFIRM_BLACKLIST_CONTINUE',
   'SWITCH_EXTRACTION_METHOD',
   'RE_EXTRACT_CONTENT',
+  'CLEAR_PAGE_CONTEXT',
+  'CLEAR_TAB_CONVERSATION',
   'SEND_CHAT',
+  'EDIT_USER_MESSAGE',
+  'RETRY_MESSAGE',
+  'EXPAND_MESSAGE_BRANCHES',
   'STOP_SESSION',
+  'STOP_BRANCH',
+  'DELETE_BRANCH',
   'EXPORT_CONVERSATION',
 ] as const;
 
@@ -81,6 +88,52 @@ export const sidebarSendChatCommandSchema = sidebarCommandBaseSchema.extend({
   includePageContent: z.boolean(),
 });
 
+/** 编辑目标用户消息并重发。 */
+export const sidebarEditUserMessageCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('EDIT_USER_MESSAGE'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 目标用户消息 id。 */
+  messageId: z.string().min(1),
+  /** 编辑后的用户文本。 */
+  text: z.string().min(1),
+});
+
+/** 重试目标助手消息，并用新的主回答替换旧结果。 */
+export const sidebarRetryMessageCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('RETRY_MESSAGE'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 被替换的旧助手消息 id。 */
+  messageId: z.string().min(1),
+});
+
+/** 为既有助手消息继续新增分支。 */
+export const sidebarExpandMessageBranchesCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('EXPAND_MESSAGE_BRANCHES'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 目标助手消息 id。 */
+  messageId: z.string().min(1),
+});
+
+/** 清空当前页面缓存、会话与 loading。 */
+export const sidebarClearPageContextCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('CLEAR_PAGE_CONTEXT'),
+});
+
+/** 清空当前 promptTab 会话与 loading。 */
+export const sidebarClearTabConversationCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('CLEAR_TAB_CONVERSATION'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+});
+
 /** 停止主聊天请求。 */
 export const sidebarStopSessionCommandSchema = sidebarCommandBaseSchema.extend({
   /** 命令类型。 */
@@ -89,6 +142,28 @@ export const sidebarStopSessionCommandSchema = sidebarCommandBaseSchema.extend({
   promptTabId: z.string().min(1),
   /** 会话 id。 */
   sessionId: z.string().min(1),
+});
+
+/** 停止单个分支流。 */
+export const sidebarStopBranchCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('STOP_BRANCH'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 目标分支 id。 */
+  branchId: z.string().min(1),
+});
+
+/** 删除单个分支。 */
+export const sidebarDeleteBranchCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('DELETE_BRANCH'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 目标助手消息 id。 */
+  messageId: z.string().min(1),
+  /** 目标分支 id。 */
+  branchId: z.string().min(1),
 });
 
 /** 导出当前会话。 */
@@ -105,8 +180,15 @@ export const sidebarCommandSchema = z.discriminatedUnion('type', [
   sidebarConfirmBlacklistContinueCommandSchema,
   sidebarSwitchExtractionMethodCommandSchema,
   sidebarReExtractContentCommandSchema,
+  sidebarClearPageContextCommandSchema,
+  sidebarClearTabConversationCommandSchema,
   sidebarSendChatCommandSchema,
+  sidebarEditUserMessageCommandSchema,
+  sidebarRetryMessageCommandSchema,
+  sidebarExpandMessageBranchesCommandSchema,
   sidebarStopSessionCommandSchema,
+  sidebarStopBranchCommandSchema,
+  sidebarDeleteBranchCommandSchema,
   sidebarExportConversationCommandSchema,
 ]);
 
@@ -169,6 +251,84 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     type: z.literal('PORT_RECOVERED'),
     /** port 名称。 */
     portName: sidebarPortNameSchema,
+  }),
+  z.object({
+    /** 事件类型。 */
+    type: z.literal('BRANCH_STREAM_STARTED'),
+    /** 归一化页面 URL。 */
+    normalizedUrl: z.string().min(1),
+    /** promptTab 稳定 id。 */
+    promptTabId: z.string().min(1),
+    /** 本次流式会话 id。 */
+    sessionId: z.string().min(1),
+    /** 助手消息 id。 */
+    messageId: z.string().min(1),
+    /** 分支稳定 id。 */
+    branchId: z.string().min(1),
+    /** 分支模型 id。 */
+    modelId: z.string().min(1),
+    /** 分支模型展示名。 */
+    modelLabel: z.string().min(1),
+  }),
+  z.object({
+    /** 事件类型。 */
+    type: z.literal('BRANCH_STREAM_CHUNK'),
+    /** 归一化页面 URL。 */
+    normalizedUrl: z.string().min(1),
+    /** promptTab 稳定 id。 */
+    promptTabId: z.string().min(1),
+    /** 本次流式会话 id。 */
+    sessionId: z.string().min(1),
+    /** 助手消息 id。 */
+    messageId: z.string().min(1),
+    /** 分支稳定 id。 */
+    branchId: z.string().min(1),
+    /** 增量文本。 */
+    chunk: z.string(),
+  }),
+  z.object({
+    /** 事件类型。 */
+    type: z.literal('BRANCH_STREAM_FINISHED'),
+    /** 归一化页面 URL。 */
+    normalizedUrl: z.string().min(1),
+    /** promptTab 稳定 id。 */
+    promptTabId: z.string().min(1),
+    /** 本次流式会话 id。 */
+    sessionId: z.string().min(1),
+    /** 助手消息 id。 */
+    messageId: z.string().min(1),
+    /** 分支稳定 id。 */
+    branchId: z.string().min(1),
+  }),
+  z.object({
+    /** 事件类型。 */
+    type: z.literal('BRANCH_STREAM_FAILED'),
+    /** 归一化页面 URL。 */
+    normalizedUrl: z.string().min(1),
+    /** promptTab 稳定 id。 */
+    promptTabId: z.string().min(1),
+    /** 本次流式会话 id。 */
+    sessionId: z.string().min(1),
+    /** 助手消息 id。 */
+    messageId: z.string().min(1),
+    /** 分支稳定 id。 */
+    branchId: z.string().min(1),
+    /** 错误消息。 */
+    errorMessage: z.string().min(1),
+  }),
+  z.object({
+    /** 事件类型。 */
+    type: z.literal('BRANCH_STREAM_CANCELLED'),
+    /** 归一化页面 URL。 */
+    normalizedUrl: z.string().min(1),
+    /** promptTab 稳定 id。 */
+    promptTabId: z.string().min(1),
+    /** 本次流式会话 id。 */
+    sessionId: z.string().min(1),
+    /** 助手消息 id。 */
+    messageId: z.string().min(1),
+    /** 分支稳定 id。 */
+    branchId: z.string().min(1),
   }),
   z.object({
     /** 事件类型。 */

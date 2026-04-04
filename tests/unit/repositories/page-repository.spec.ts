@@ -99,4 +99,84 @@ describe('page-repository', () => {
     expect(saved.updatedAt).toBeGreaterThanOrEqual(existingPage.updatedAt);
     expect(saved.expiresAt).toBeGreaterThan(saved.updatedAt);
   });
+
+  it('更新页面级 includePageContent 时保留正文和 promptTab 状态', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage({
+      ...buildPageRecord({
+        url: 'https://example.com/article',
+        now: 100,
+        promptTabStates: [
+          {
+            promptTabId: 'chat',
+            initializedAt: 90,
+            lastAutoTriggerAt: null,
+            autoTriggerStatus: 'idle',
+            lastClearedAt: null,
+          },
+        ],
+      }),
+      title: '示例页面',
+      content: '缓存正文',
+      includePageContent: true,
+    });
+
+    const saved = await repo.setIncludePageContent({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      includePageContent: false,
+    });
+
+    expect(saved.content).toBe('缓存正文');
+    expect(saved.title).toBe('示例页面');
+    expect(saved.includePageContent).toBe(false);
+    expect(saved.promptTabStates).toEqual([
+      {
+        promptTabId: 'chat',
+        initializedAt: 90,
+        lastAutoTriggerAt: null,
+        autoTriggerStatus: 'idle',
+        lastClearedAt: null,
+      },
+    ]);
+  });
+
+  it('更新 promptTab 状态时保留页面正文和页面级开关', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage({
+      ...buildPageRecord({
+        url: 'https://example.com/article',
+        now: 100,
+      }),
+      title: '示例页面',
+      content: '缓存正文',
+      includePageContent: false,
+    });
+
+    const saved = await repo.setPromptTabState({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      promptTabId: 'quick-1',
+      initializedAt: 110,
+      lastAutoTriggerAt: 110,
+      autoTriggerStatus: 'running',
+    });
+
+    expect(saved.title).toBe('示例页面');
+    expect(saved.content).toBe('缓存正文');
+    expect(saved.includePageContent).toBe(false);
+    expect(saved.promptTabStates).toEqual([
+      {
+        promptTabId: 'quick-1',
+        initializedAt: 110,
+        lastAutoTriggerAt: 110,
+        autoTriggerStatus: 'running',
+        lastClearedAt: null,
+      },
+    ]);
+  });
 });

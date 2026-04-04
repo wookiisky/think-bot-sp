@@ -184,17 +184,21 @@
 
 1. UI 校验文本或图片至少存在一种输入，并从配置里选定一个启用且完整的模型。
 2. UI 通过 `SEND_CHAT` 提交 `promptTabId / modelId / text / images / includePageContent`。
-3. background 读取模型配置，校验图片能力，不匹配时在任何持久化前直接失败。
-4. LLM Dispatch 先写用户消息、助手占位和 `LoadingStateRecord`。
-5. side panel 通过 long-lived port 订阅当前 `promptTab` 的流式事件。
-6. Dispatch 使用 `streamText` 输出主回答，每个 chunk 都先落 `ConversationRecord`，再推 `CHAT_STREAM_CHUNK`。
-7. side panel 关闭或 port 断开后，已落盘内容仍可见；重新打开时通过 `RESTORE_LOADING` 恢复最近一条未完成助手消息。
-8. 完成、取消、错误后收敛助手状态并清理 loading state。
+3. background 先把本次 `includePageContent` 回写到当前 `PageRecord.includePageContent`，再读取 `PageRecord.content`。
+4. background 读取模型配置，校验图片能力，不匹配时在任何持久化前直接失败。
+5. 若 `includePageContent=true` 且页面缓存正文非空，则把页面正文与用户消息拼成同一次用户输入；若缓存缺失，则自动退化为仅发送用户消息。
+6. LLM Dispatch 先写用户消息、助手占位和 `LoadingStateRecord`。
+7. side panel 通过 long-lived port 订阅当前 `promptTab` 的流式事件。
+8. Dispatch 使用 `streamText` 输出主回答，每个 chunk 都先落 `ConversationRecord`，再推 `CHAT_STREAM_CHUNK`。
+9. side panel 关闭或 port 断开后，已落盘内容仍可见；重新打开时通过 `RESTORE_LOADING` 恢复最近一条未完成助手消息。
+10. 完成、取消、错误后收敛助手状态并清理 loading state。
 
 错误流：
 
 - Provider 配置不完整：
   - 请求在进入模型层前失败。
+- 页面正文缺失：
+  - 不把空正文拼进请求，直接退化为仅发送用户消息。
 - 用户取消：
   - 视为正常终止，清理 loading state，不标记系统错误。
 - 流式中断：
@@ -203,11 +207,23 @@
 关键验证点：
 
 - API Key 只在 background 服务层使用。
+- 页面级 `includePageContent` 必须在后续 bootstrap 中可恢复，不允许只依赖设置页默认值。
+- `SEND_CHAT / STOP_SESSION` 必须以 `promptTabId` 为作用域，`Chat` 与快捷输入会话不能串写。
 - side panel 关闭再打开后，仍能基于持久化 loading state 恢复 UI。
 - port 推送失败不能覆盖已落库的主生命周期结果。
 - 流式链路应记录发送受理、首个 chunk、完成、取消和失败事件。
 
 ## 8. 主流程：快捷输入与自动触发
+
+当前代码已落地：
+
+- side panel 会把 `ExtensionConfig.quickInputs` 渲染为 `Chat + quickInputs` 多 `promptTab` 工作台。
+- 每个 `promptTab` 有独立草稿、模型选择、消息线程和 loading 恢复。
+- 切换 `promptTab` 只影响聊天与输入区，不影响提取区。
+- 页面提取成功后，background 会读取 `autoTrigger=true` 的快捷输入并执行后台去重自动触发。
+- 自动触发会话会注册到与手动发送相同的活跃会话表，因此页面级清空仍能先取消会话再删数据。
+
+当前流程：
 
 流程：
 
@@ -218,7 +234,7 @@
    - 当前 `promptTab` 是否已有历史。
    - 当前 `promptTab` 是否正在 loading。
    - 当前 `promptTab` 是否已初始化。
-4. 满足条件时后台发起发送，不切换当前可见 `promptTab`；若该快捷输入要求强制带入页面内容，只对本次请求注入 `forceIncludePageContent=true`，不改写页面级 `includePageContent`。
+4. 满足条件时后台发起发送，不切换当前可见 `promptTab`；当前实现统一对自动触发请求注入页面正文，但不改写页面级 `includePageContent`。
 5. 对应 `promptTab` 进入 loading，完成后切为 `has-content`。
 
 关键验证点：
@@ -282,9 +298,9 @@
 流程：
 
 1. 用户触发顶部垃圾桶按钮时，UI 发起页面级清空命令。
-2. background 取消该页面仍在进行中的请求。
+2. background 先取消该页面仍在进行中的请求，并等待这些请求的生命周期收敛。
 3. background 清理当前页面缓存、页面级状态、`promptTab` 会话和 loading state。
-4. side panel 保留当前布局骨架，并回到“页面待重新提取、`promptTab` 待重新初始化”的初始态。
+4. side panel 保留当前布局骨架，并回到“页面待重新提取、`promptTab` 待重新初始化”的初始态；当前输入草稿不因页面级清空而丢失。
 5. 用户触发底部清空按钮时，UI 发起当前 `promptTab` 会话清空命令。
 6. background 只清理当前 `promptTab` 会话和该 `promptTab` 相关 loading state。
 7. UI 保留页面提取内容、其他 `promptTab` 历史和页面级状态不变。
@@ -295,7 +311,23 @@
 - 页面级清空后，重新进入页面可以重新提取并重新自动触发。
 - `promptTab` 级清空后，不影响页面提取内容和其他 `promptTab`。
 
-## 12. 主流程：同步与删除
+## 12. 主流程：会话导出
+
+流程：
+
+1. 用户在当前 `promptTab` 点击“导出”。
+2. side panel 通过 `EXPORT_CONVERSATION` 把当前 `pageUrl + promptTabId` 提交给 background。
+3. background 从标准会话记录读取主回答和分支结构，渲染 Markdown。
+4. background 返回文件名、MIME 类型和 Markdown 内容。
+5. side panel 只负责触发本地下载，不在 UI 侧拼装导出内容。
+
+关键验证点：
+
+- 导出范围必须只属于当前 `promptTab`。
+- Markdown 必须包含页面标题、页面 URL、`promptTab`、主回答和分支结构。
+- 空会话必须明确失败，不能生成空文件。
+
+## 13. 主流程：同步与删除
 
 涉及模块：
 
@@ -323,7 +355,7 @@
 - 本地和远端同时修改不同对象时，不允许整份快照互相覆盖。
 - 同步链路应记录连接失败、同步开始、合并完成和推送失败等关键节点。
 
-## 13. 主流程：消息编辑与分支操作
+## 14. 主流程：消息编辑与分支操作
 
 流程：
 
@@ -335,7 +367,7 @@
    - 重新发起从该消息开始的新请求
 4. 用户消息重试：
    - 保留原用户消息
-   - 为该轮回答生成新的主结果或分支结果
+   - 用新的主回答替换旧助手消息及其后续结果
 5. 分支继续新增：
    - 只为目标助手消息追加新的 branch request
    - 保留已有分支不变
@@ -345,7 +377,7 @@
 关键验证点：
 
 - 编辑用户消息后，不允许保留过期的后续回答。
-- 重试和继续新增分支都不能覆盖已有分支。
+- 重试只替换主链上的目标助手消息，继续新增分支只追加到分支区。
 - 停止和删除必须局部生效。
 
 ## 14. 主流程：黑名单确认

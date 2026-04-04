@@ -143,6 +143,85 @@ describe('SettingsShell', () => {
     expect(mocks.saveConfig).toHaveBeenCalledWith(config);
   });
 
+  it('保存前会清理失效分支模型引用', async () => {
+    const config = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        branchModelIds: ['model-1', 'missing-branch-model'],
+      },
+      models: [
+        {
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4o-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'secret',
+          deployment: '',
+          temperature: 0.2,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: false,
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+      quickInputs: [
+        {
+          id: 'quick-1',
+          name: '总结',
+          prompt: '请总结当前页面',
+          autoTrigger: false,
+          modelId: null,
+          branchModelIds: ['missing-branch-model', 'model-1'],
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+    });
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.saveConfig.mockResolvedValueOnce(
+      createDefaultConfig({
+        ...config,
+        basic: {
+          ...config.basic,
+          branchModelIds: ['model-1'],
+        },
+        quickInputs: [
+          {
+            ...config.quickInputs[0],
+            branchModelIds: ['model-1'],
+          },
+        ],
+      }),
+    );
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(mocks.saveConfig).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        basic: expect.objectContaining({
+          branchModelIds: ['model-1'],
+        }),
+        quickInputs: [
+          expect.objectContaining({
+            id: 'quick-1',
+            branchModelIds: ['model-1'],
+          }),
+        ],
+      }),
+    );
+  });
+
   it('保存期间禁用基础设置可见控件和顶部动作', async () => {
     const config = createDefaultConfig({
       models: [

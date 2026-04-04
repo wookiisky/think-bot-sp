@@ -39,6 +39,7 @@
 - 一个 `promptTab` 同一时刻只允许一个主 session。
 - `branchId` 在同一 `sessionId` 下唯一。
 - 完成、取消、错误后必须清理或归档为可恢复终态，不能长期残留 loading。
+- 当前 UI 对分支停止和删除只依赖 `branchId`，不要求为每个分支额外暴露独立 sessionId 给前端。
 
 ## 4. 读写路径
 

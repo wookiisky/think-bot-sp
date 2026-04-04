@@ -234,4 +234,251 @@ describe('conversation-repository editing', () => {
       }),
     ).rejects.toThrow('assistant message is already terminal: assistant-3');
   });
+
+  it('编辑用户消息会裁剪其后的全部结果，并插入新的助手占位', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveConversation({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '旧问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '旧回答',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [
+            {
+              id: 'branch-1',
+              modelId: 'model-2',
+              modelLabel: '分支模型',
+              content: '旧分支',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+        {
+          id: 'user-2',
+          role: 'user',
+          content: '后续问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 3,
+          updatedAt: 3,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'done',
+        summary: '旧回答',
+      },
+      updatedAt: 3,
+    });
+
+    await repo.editUserMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'user-1',
+      content: '新问题',
+      newAssistantMessageId: 'assistant-edit',
+      modelId: 'model-1',
+      now: 10,
+    });
+
+    await expect(repo.getConversation('https://example.com/article', 'chat')).resolves.toEqual({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '新问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: 10,
+          createdAt: 1,
+          updatedAt: 10,
+        },
+        {
+          id: 'assistant-edit',
+          role: 'assistant',
+          content: '',
+          images: [],
+          status: 'loading',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 10,
+          updatedAt: 10,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-edit',
+        status: 'loading',
+        summary: '',
+      },
+      updatedAt: 10,
+    });
+  });
+
+  it('重试助手消息会替换旧助手消息，并裁剪其后的全部结果', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveConversation({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '旧回答',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [
+            {
+              id: 'branch-1',
+              modelId: 'model-2',
+              modelLabel: '分支模型',
+              content: '旧分支',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+        {
+          id: 'user-2',
+          role: 'user',
+          content: '后续问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 3,
+          updatedAt: 3,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'done',
+        summary: '旧回答',
+      },
+      updatedAt: 3,
+    });
+
+    await repo.retryAssistantMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      newAssistantMessageId: 'assistant-retry',
+      modelId: 'model-1',
+      now: 20,
+    });
+
+    await expect(repo.getConversation('https://example.com/article', 'chat')).resolves.toEqual({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-retry',
+          role: 'assistant',
+          content: '',
+          images: [],
+          status: 'loading',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [],
+          retryFromMessageId: 'assistant-1',
+          editedAt: null,
+          createdAt: 20,
+          updatedAt: 20,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-retry',
+        status: 'loading',
+        summary: '',
+      },
+      updatedAt: 20,
+    });
+  });
 });

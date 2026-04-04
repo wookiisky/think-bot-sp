@@ -14,6 +14,7 @@ import { createBlacklistService } from '../src/services/blacklist/blacklist-serv
 import { createContentSource } from '../src/services/extraction/content-source';
 import { createExtractionService } from '../src/services/extraction/extraction-service';
 import { createJinaClient } from '../src/services/extraction/jina-client';
+import { createConversationExporter } from '../src/services/export/conversation-exporter';
 import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dispatch-service';
 import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
 import { createLogger } from '../src/services/logger/logger';
@@ -21,6 +22,8 @@ import { createConfigCommandHandler, isConfigCommandMessage } from '../src/servi
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
 import { sidebarPortClientMessageSchema, sidebarPortEventSchema } from '../src/services/runtime-messaging/sidebar-contract';
+import { createSidebarSessionRegistry } from '../src/services/runtime-messaging/sidebar-session-registry';
+import { createSidebarAutoTriggerService } from '../src/services/sidebar-auto-trigger/sidebar-auto-trigger-service';
 import { createSyncService } from '../src/services/sync/sync-service';
 
 export default defineBackground(() => {
@@ -39,7 +42,9 @@ export default defineBackground(() => {
       }).__THINK_BOT_TEST_SYNC_PROVIDER__ ?? null,
   });
   const portBus = createPortBus();
+  const sessionRegistry = createSidebarSessionRegistry();
   const chatDispatchService = createChatDispatchService({
+    logger,
     configRepository,
     providerRegistry: {
       resolveProviderModel,
@@ -57,6 +62,15 @@ export default defineBackground(() => {
       },
     },
     streamText: async (input) => {
+      (
+        globalThis as typeof globalThis & {
+          __THINK_BOT_TEST_LAST_STREAM_MESSAGES__?: Array<{ role: string; content: string; images: string[] }>;
+        }
+      ).__THINK_BOT_TEST_LAST_STREAM_MESSAGES__ = input.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        images: message.images,
+      }));
       const testStream = (globalThis as typeof globalThis & {
         __THINK_BOT_TEST_STREAM__?: Array<string>;
       }).__THINK_BOT_TEST_STREAM__;
@@ -164,11 +178,26 @@ export default defineBackground(() => {
     jinaClient: createJinaClient(),
     pageRepository,
   });
+  const sidebarAutoTriggerService = createSidebarAutoTriggerService({
+    logger,
+    configRepository,
+    pageRepository,
+    conversationRepository,
+    chatDispatchService,
+    sessionRegistry,
+  });
+  const conversationExporter = createConversationExporter({
+    pageRepository,
+    conversationRepository,
+  });
   const handleSidebarCommand = createSidebarCommandHandler({
+    logger,
     runtime: chrome.runtime,
     pageRepository,
     conversationRepository,
     chatDispatchService,
+    conversationExporter,
+    sessionRegistry,
     blacklistRepository: {
       isBlocked: async ({ browserTabId, normalizedUrl }) => {
         const config = await configRepository.getConfig();
@@ -352,6 +381,12 @@ export default defineBackground(() => {
               type: 'RE_EXTRACT_CONTENT_SUCCESS',
               payload: result,
             });
+            void sidebarAutoTriggerService.handleExtractionCompleted({
+              browserTabId: message.tabId,
+              pageUrl: result.url,
+              normalizedUrl: result.normalizedUrl,
+              pageContent: result.content,
+            });
           })
           .catch((error: unknown) => {
             const reason = error instanceof Error ? error.message : String(error);
@@ -365,6 +400,11 @@ export default defineBackground(() => {
       }
 
       if (message.type === 'SWITCH_EXTRACTION_METHOD') {
+        logger.info('extraction.method_switched', {
+          browserTabId: message.tabId,
+          normalizedUrl: normalizePageUrl(message.pageUrl),
+          method: message.method,
+        });
         sendResponse({
           type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
           payload: {
@@ -380,9 +420,20 @@ export default defineBackground(() => {
           url: (sender as { url?: string | null }).url ?? null,
         },
       })
-        .then((result) => sendResponse(result))
+        .then((result) => {
+          logger.info('sidebar.command.succeeded', {
+            type: message.type,
+            browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
+          });
+          sendResponse(result);
+        })
         .catch((error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
+          logger.error('sidebar.command.failed', {
+            type: message.type,
+            browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
+            reason,
+          });
           sendResponse({ error: reason });
         });
       return true;

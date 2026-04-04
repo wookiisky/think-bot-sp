@@ -18,6 +18,7 @@
 - 批量获取历史页面元数据。
 - 按标题或 URL 搜索页面。
 - 更新标题、图标、提取内容、提取方式、页面级状态。
+- 更新页面级 `includePageContent`，且不覆盖正文与 `promptTabStates`。
 - 更新页面下 `promptTab` 初始化状态和自动触发状态。
 - 为 side panel bootstrap 提供页面缓存、页面级状态和 `promptTab` 去重状态读取。
 - 提供本地页面缓存统计与可安全清理的数据访问能力。

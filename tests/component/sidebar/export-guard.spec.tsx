@@ -23,6 +23,11 @@ describe('SidebarShell export guard', () => {
       confirmBlacklistContinue: vi.fn(),
       reExtractContent: vi.fn(),
       switchExtractionMethod: vi.fn(),
+      clearPageContext: vi.fn(),
+      clearTabConversation: vi.fn(),
+      openHistoryPage: vi.fn(),
+      openSettingsPage: vi.fn(),
+      openGithubProject: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({
         type: 'GET_CONFIG_SUCCESS',
         config: createDefaultConfig(),

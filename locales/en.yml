@@ -31,9 +31,13 @@ settings.webdavUsername: WebDAV Username
 settings.webdavPassword: WebDAV Password
 settings.blacklistSettings: Blacklist Settings
 settings.unsavedChanges: Unsaved changes
-settings.basicDescription: Manage theme, language, default model, and extraction defaults.
+settings.basicDescription: Manage theme, language, default model, global branch models, and extraction defaults.
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
+settings.branchModels: Global Branch Models
+settings.branchModelsDescription: Configure default branch models for Chat and quick inputs without their own overrides.
+settings.noBranchModels: No branch model available
+settings.branchModelsMissing: Some branch model references are unavailable and will be removed on save.
 settings.extractionMethod: Default Extraction Method
 settings.filterCot: Filter COT Content
 settings.includePageContentByDefault: Include Page Content By Default
@@ -60,4 +64,7 @@ settings.quickInputAutoTrigger: Auto Trigger
 settings.quickInputModel: Dedicated Model
 settings.quickInputNoModel: No Dedicated Model
 settings.quickInputModelMissing: The referenced model is unavailable. Please choose another one.
+settings.quickInputBranchModels: Dedicated Branch Models
+settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global branch models.
+settings.quickInputBranchModelsMissing: Some dedicated branch model references are unavailable and will be removed on save.
 settings.blacklistPlaceholderDescription: Blacklist editing is out of scope for this round. The section remains reserved.

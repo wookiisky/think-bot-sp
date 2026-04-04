@@ -19,6 +19,9 @@ import {
   extensionConfigSchema,
   getEnabledCompleteModels,
   isModelConfigComplete,
+  normalizeBranchModelSelections,
+  resolvePromptTabBranchModelIds,
+  sanitizeBranchModelIds,
 } from '../../../src/domain/config/config-schema';
 
 describe('config schema', () => {
@@ -32,9 +35,33 @@ describe('config schema', () => {
     expect(config.version).toBe(CONFIG_SCHEMA_VERSION);
     expect(config.updatedAt).toBe(123);
     expect(config.basic.defaultModelId).toBeNull();
+    expect(config.basic.branchModelIds).toEqual([]);
     expect(config.models).toEqual([]);
     expect(config.quickInputs).toEqual([]);
     expect(config.blacklist).toEqual([]);
+  });
+
+  it('旧配置缺少 branchModelIds 时 parse 后默认补空数组', () => {
+    const config = extensionConfigSchema.parse({
+      ...createDefaultConfig(),
+      basic: {
+        ...createDefaultConfig().basic,
+      },
+      quickInputs: [
+        {
+          id: 'quick-1',
+          name: '总结',
+          prompt: '请总结当前页面',
+          autoTrigger: false,
+          modelId: null,
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+    });
+
+    expect(config.basic.branchModelIds).toEqual([]);
+    expect(config.quickInputs[0]?.branchModelIds).toEqual([]);
   });
 
   it('过滤软删除和不完整模型', () => {
@@ -293,6 +320,86 @@ describe('config schema', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('会过滤失效或重复的分支模型引用，并按当前 promptTab 合并全局与专属配置', () => {
+    const config = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        branchModelIds: ['model-1', 'model-2', 'model-1', 'missing-model'],
+      },
+      models: [
+        {
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          order: 0,
+          deletedAt: null,
+          supportsImages: false,
+        },
+        {
+          id: 'model-2',
+          name: '备用模型',
+          provider: 'gemini',
+          enabled: true,
+          model: 'gemini-2.5-flash',
+          baseUrl: '',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          order: 1,
+          deletedAt: null,
+          supportsImages: false,
+        },
+        {
+          id: 'model-3',
+          name: '第三模型',
+          provider: 'anthropic',
+          enabled: true,
+          model: 'claude-3-5-sonnet',
+          baseUrl: '',
+          apiKey: 'key',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          order: 2,
+          deletedAt: null,
+          supportsImages: false,
+        },
+      ],
+      quickInputs: [
+        {
+          id: 'quick-1',
+          name: '总结',
+          prompt: '请总结当前页面',
+          autoTrigger: false,
+          modelId: null,
+          branchModelIds: ['model-3', 'model-2', 'missing-model'],
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+    });
+
+    expect(sanitizeBranchModelIds(config, ['model-1', 'missing-model', 'model-1', 'model-2'])).toEqual(['model-1', 'model-2']);
+    expect(normalizeBranchModelSelections(config).basic.branchModelIds).toEqual(['model-1', 'model-2']);
+    expect(normalizeBranchModelSelections(config).quickInputs[0]?.branchModelIds).toEqual(['model-3', 'model-2']);
+    expect(resolvePromptTabBranchModelIds(config, 'chat')).toEqual(['model-1', 'model-2']);
+    expect(resolvePromptTabBranchModelIds(config, 'quick-1')).toEqual(['model-1', 'model-2', 'model-3']);
   });
 
   it('构造稳定 storage key', () => {

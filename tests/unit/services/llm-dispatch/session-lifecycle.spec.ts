@@ -11,7 +11,7 @@ type Deferred = {
   /** 主动放行。 */
   resolve: () => void;
   /** 主动失败。 */
-  reject: (error: Error) => void;
+  reject: (_error: Error) => void;
 };
 
 /** 创建受控异步门闩。 */
@@ -68,11 +68,17 @@ describe('chat-dispatch-service session lifecycle', () => {
         sdkModel: { kind: 'sdk-model' },
       }),
     };
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
     const publishToPromptTab = vi.fn();
     const service = createChatDispatchService({
       configRepository,
       providerRegistry,
       conversationRepository,
+      logger,
       portBus: {
         publishToPromptTab,
       },
@@ -109,6 +115,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       modelId: 'model-1',
       content: '请总结页面',
       images: [],
+      pageContent: '',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -117,6 +124,25 @@ describe('chat-dispatch-service session lifecycle', () => {
       status: 'done',
     });
     await expect(conversationRepository.getLoadingState('https://example.com/article', 'chat')).resolves.toBeNull();
+    expect(logger.info).toHaveBeenCalledWith('chat.stream.started', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      provider: 'openai-compatible',
+    });
+    expect(logger.info).toHaveBeenCalledWith('chat.stream.first_chunk', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+    });
+    expect(logger.info).toHaveBeenCalledWith('chat.stream.completed', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+    });
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
       messages: [
         expect.objectContaining({
@@ -172,6 +198,82 @@ describe('chat-dispatch-service session lifecycle', () => {
     ]);
   });
 
+  it('带页面正文时会把正文和用户消息一起注入模型上下文', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    const streamText = vi.fn().mockResolvedValue({
+      textStream: (async function* () {
+        yield '已结合页面内容';
+      })(),
+    });
+    const service = createChatDispatchService({
+      configRepository: {
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-ctx',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab: vi.fn(),
+      },
+      streamText,
+      createSessionId: () => 'session-ctx',
+      createMessageId: (() => {
+        const ids = ['user-ctx', 'assistant-ctx'];
+        return () => ids.shift() ?? 'exhausted';
+      })(),
+      now: (() => {
+        const values = [15, 16, 17, 18];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.dispatchChat({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      modelId: 'model-ctx',
+      content: '请总结重点',
+      images: [],
+      pageContent: 'Example Domain 页面正文',
+    });
+
+    await session.done;
+    expect(streamText).toHaveBeenCalledWith({
+      model: { kind: 'sdk-model' },
+      messages: [
+        {
+          role: 'user',
+          content: '页面内容：\nExample Domain 页面正文\n\n用户消息：请总结重点',
+          images: [],
+        },
+      ],
+      abortSignal: expect.any(AbortSignal),
+    });
+  });
+
   it('cancel 会把助手消息收敛为 cancelled 并清理 loading', async () => {
     const storage = createFakeStorageArea();
     const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
@@ -204,6 +306,11 @@ describe('chat-dispatch-service session lifecycle', () => {
         sdkModel: { kind: 'sdk-model' },
       }),
     };
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
     const firstChunkPublished = createDeferred();
     const publishToPromptTab = vi.fn((event: { type: string }) => {
       if (event.type === 'CHAT_STREAM_CHUNK') {
@@ -214,6 +321,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       configRepository,
       providerRegistry,
       conversationRepository,
+      logger,
       portBus: {
         publishToPromptTab,
       },
@@ -246,6 +354,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       modelId: 'model-1',
       content: '继续补全',
       images: [],
+      pageContent: '',
     });
 
     await firstChunkPublished.promise;
@@ -257,6 +366,12 @@ describe('chat-dispatch-service session lifecycle', () => {
       status: 'cancelled',
     });
     await expect(conversationRepository.getLoadingState('https://example.com/article', 'chat')).resolves.toBeNull();
+    expect(logger.info).toHaveBeenCalledWith('chat.stream.cancelled', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'chat',
+      sessionId: 'session-2',
+      messageId: 'assistant-2',
+    });
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
       messages: [
         expect.objectContaining({
@@ -366,6 +481,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       modelId: 'model-1',
       content: '继续补全',
       images: [],
+      pageContent: '',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -482,6 +598,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         modelId: 'model-2',
         content: '请识别图片',
         images: ['data:image/png;base64,AAA'],
+        pageContent: '',
       }),
     ).rejects.toThrow('model does not support images');
 
@@ -554,6 +671,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         modelId: 'model-5',
         content: '这次会在 setup 失败',
         images: [],
+        pageContent: '',
       }),
     ).rejects.toThrow('save loading failed');
 
@@ -645,6 +763,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       modelId: 'model-6',
       content: '测试 cleanup 错误',
       images: [],
+      pageContent: '',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -761,6 +880,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       modelId: 'model-7',
       content: '测试 port 故障',
       images: [],
+      pageContent: '',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -790,6 +910,644 @@ describe('chat-dispatch-service session lifecycle', () => {
         status: 'done',
         summary: '即使端口断开也应完成',
       },
+    });
+  });
+
+  it('expandBranches 会按全局加当前配置合并分支模型，并允许分支各自收敛', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    await conversationRepository.saveConversation({
+      id: 'https://example.com/article:quick-summary',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '请继续分析',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '主回答',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-main',
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'done',
+        summary: '主回答',
+      },
+      updatedAt: 2,
+    });
+
+    const models = {
+      'model-main': {
+        id: 'model-main',
+        name: '主模型',
+        provider: 'openai-compatible',
+        enabled: true,
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'token',
+        deployment: '',
+        temperature: 0,
+        tools: [],
+        thinkingBudget: null,
+        maxOutputTokens: null,
+        supportsImages: true,
+        order: 0,
+        deletedAt: null,
+      },
+      'model-branch-a': {
+        id: 'model-branch-a',
+        name: '分支模型A',
+        provider: 'openai-compatible',
+        enabled: true,
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'token',
+        deployment: '',
+        temperature: 0,
+        tools: [],
+        thinkingBudget: null,
+        maxOutputTokens: null,
+        supportsImages: true,
+        order: 1,
+        deletedAt: null,
+      },
+      'model-branch-b': {
+        id: 'model-branch-b',
+        name: '分支模型B',
+        provider: 'openai-compatible',
+        enabled: true,
+        model: 'gpt-4.1-mini',
+        baseUrl: 'https://api.example.com',
+        apiKey: 'token',
+        deployment: '',
+        temperature: 0,
+        tools: [],
+        thinkingBudget: null,
+        maxOutputTokens: null,
+        supportsImages: true,
+        order: 2,
+        deletedAt: null,
+      },
+    };
+    const publishToPromptTab = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const streamText = vi.fn().mockImplementation(async ({ model }) => {
+      const modelId = (model as { modelId: string }).modelId;
+      if (modelId === 'model-branch-a') {
+        return {
+          textStream: (async function* () {
+            yield '分支A结果';
+          })(),
+        };
+      }
+      return {
+        textStream: (async function* () {
+          yield '分支B前缀';
+          throw new Error('branch provider timeout');
+        })(),
+      };
+    });
+    const service = createChatDispatchService({
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue({
+          version: '2.0.0',
+          updatedAt: 10,
+          basic: {
+            theme: 'system',
+            language: 'zh-CN',
+            defaultModelId: 'model-main',
+            branchModelIds: ['model-main', 'model-branch-a'],
+            systemPrompt: '',
+            filterCot: false,
+            extractionMethod: 'readability',
+            includePageContentByDefault: true,
+          },
+          models: Object.values(models),
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结',
+              autoTrigger: false,
+              modelId: 'model-main',
+              branchModelIds: ['model-branch-b'],
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          sync: {
+            enabled: false,
+            provider: 'none',
+            gistToken: '',
+            gistId: '',
+            webdavUrl: '',
+            webdavUsername: '',
+            webdavPassword: '',
+            lastSyncAt: null,
+          },
+          blacklist: [],
+        }),
+        getModelById: vi.fn().mockImplementation(async (modelId: keyof typeof models) => models[modelId] ?? null),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockImplementation((model) => ({
+          providerId: 'openai-compatible',
+          modelId: model.id,
+          modelLabel: model.name,
+          supportsImages: true,
+          sdkModel: { modelId: model.id },
+        })),
+      },
+      conversationRepository,
+      logger,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText,
+      createSessionId: (() => {
+        const ids = ['branch-session-a', 'branch-session-b'];
+        return () => ids.shift() ?? 'exhausted-session';
+      })(),
+      createMessageId: (() => {
+        const ids = ['branch-a', 'branch-b'];
+        return () => ids.shift() ?? 'exhausted-branch';
+      })(),
+      now: (() => {
+        const values = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const sessions = await service.expandBranches({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      messageId: 'assistant-1',
+    });
+    const results = await Promise.all(sessions.map((session) => session.done));
+
+    expect(results).toEqual([
+      {
+        sessionId: 'branch-session-a',
+        messageId: 'assistant-1',
+        status: 'done',
+        errorMessage: null,
+      },
+      {
+        sessionId: 'branch-session-b',
+        messageId: 'assistant-1',
+        status: 'error',
+        errorMessage: 'branch provider timeout',
+      },
+    ]);
+    await expect(conversationRepository.getLoadingState('https://example.com/article', 'quick-summary')).resolves.toBeNull();
+    await expect(conversationRepository.getConversation('https://example.com/article', 'quick-summary')).resolves.toEqual(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'assistant-1',
+            branches: [
+              expect.objectContaining({
+                id: 'branch-a',
+                modelId: 'model-branch-a',
+                modelLabel: '分支模型A',
+                content: '分支A结果',
+                status: 'done',
+                errorMessage: null,
+              }),
+              expect.objectContaining({
+                id: 'branch-b',
+                modelId: 'model-branch-b',
+                modelLabel: '分支模型B',
+                content: '分支B前缀',
+                status: 'error',
+                errorMessage: 'branch provider timeout',
+              }),
+            ],
+          }),
+        ]),
+      }),
+    );
+    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(collectPublishedEvents(publishToPromptTab)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'BRANCH_STREAM_STARTED',
+          branchId: 'branch-a',
+          modelId: 'model-branch-a',
+        }),
+        expect.objectContaining({
+          type: 'BRANCH_STREAM_STARTED',
+          branchId: 'branch-b',
+          modelId: 'model-branch-b',
+        }),
+        expect.objectContaining({
+          type: 'BRANCH_STREAM_FINISHED',
+          branchId: 'branch-a',
+        }),
+        expect.objectContaining({
+          type: 'BRANCH_STREAM_FAILED',
+          branchId: 'branch-b',
+          errorMessage: 'branch provider timeout',
+        }),
+      ]),
+    );
+    expect(logger.info).toHaveBeenCalledWith('branch.stream.started', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'quick-summary',
+      sessionId: 'branch-session-a',
+      messageId: 'assistant-1',
+      branchId: 'branch-a',
+      provider: 'openai-compatible',
+      modelId: 'model-branch-a',
+    });
+    expect(logger.info).toHaveBeenCalledWith('branch.stream.first_chunk', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'quick-summary',
+      sessionId: 'branch-session-a',
+      messageId: 'assistant-1',
+      branchId: 'branch-a',
+    });
+    expect(logger.info).toHaveBeenCalledWith('branch.stream.completed', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'quick-summary',
+      sessionId: 'branch-session-a',
+      messageId: 'assistant-1',
+      branchId: 'branch-a',
+    });
+    expect(logger.error).toHaveBeenCalledWith('branch.stream.failed', {
+      normalizedUrl: 'https://example.com/article',
+      promptTab: 'quick-summary',
+      sessionId: 'branch-session-b',
+      messageId: 'assistant-1',
+      branchId: 'branch-b',
+      reason: 'branch provider timeout',
+    });
+  });
+
+  it('editUserMessage 会裁剪后续结果并基于编辑后的消息重新生成主回答', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    await conversationRepository.saveConversation({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '旧问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '旧回答',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'done',
+        summary: '旧回答',
+      },
+      updatedAt: 2,
+    });
+
+    const streamText = vi.fn().mockResolvedValue({
+      textStream: (async function* () {
+        yield '编辑后回答';
+      })(),
+    });
+    const publishToPromptTab = vi.fn();
+    const service = createChatDispatchService({
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue({
+          version: '2.0.0',
+          updatedAt: 1,
+          basic: {
+            theme: 'system',
+            language: 'zh-CN',
+            defaultModelId: 'model-1',
+            branchModelIds: [],
+            systemPrompt: '',
+            filterCot: false,
+            extractionMethod: 'readability',
+            includePageContentByDefault: true,
+          },
+          models: [],
+          quickInputs: [],
+          sync: {
+            enabled: false,
+            provider: 'none',
+            gistToken: '',
+            gistId: '',
+            webdavUrl: '',
+            webdavUsername: '',
+            webdavPassword: '',
+            lastSyncAt: null,
+          },
+          blacklist: [],
+        }),
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText,
+      createSessionId: () => 'session-edit',
+      createMessageId: () => 'assistant-edit',
+      now: (() => {
+        const values = [10, 11, 12, 13, 14];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.editUserMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'user-1',
+      content: '新问题',
+    });
+
+    await expect(session.done).resolves.toMatchObject({
+      sessionId: 'session-edit',
+      messageId: 'assistant-edit',
+      status: 'done',
+    });
+    expect(streamText).toHaveBeenCalledWith({
+      model: { kind: 'sdk-model' },
+      messages: [
+        {
+          role: 'user',
+          content: '新问题',
+          images: [],
+        },
+      ],
+      abortSignal: expect.any(AbortSignal),
+    });
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
+      messages: [
+        expect.objectContaining({
+          id: 'user-1',
+          content: '新问题',
+          editedAt: 10,
+        }),
+        expect.objectContaining({
+          id: 'assistant-edit',
+          content: '编辑后回答',
+          retryFromMessageId: null,
+          status: 'done',
+        }),
+      ],
+    });
+    expect(collectPublishedEvents(publishToPromptTab)).toEqual([
+      {
+        type: 'CHAT_STREAM_STARTED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-edit',
+        messageId: 'assistant-edit',
+      },
+      {
+        type: 'CHAT_STREAM_CHUNK',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-edit',
+        messageId: 'assistant-edit',
+        chunk: '编辑后回答',
+      },
+      {
+        type: 'CHAT_STREAM_FINISHED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-edit',
+        messageId: 'assistant-edit',
+      },
+    ]);
+  });
+
+  it('retryMessage 会替换旧助手消息并保留同轮用户上下文', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    await conversationRepository.saveConversation({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '旧回答',
+          images: [],
+          status: 'error',
+          errorMessage: '旧错误',
+          modelId: 'model-1',
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'error',
+        summary: '旧回答',
+      },
+      updatedAt: 2,
+    });
+
+    const streamText = vi.fn().mockResolvedValue({
+      textStream: (async function* () {
+        yield '重试后回答';
+      })(),
+    });
+    const service = createChatDispatchService({
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue({
+          version: '2.0.0',
+          updatedAt: 1,
+          basic: {
+            theme: 'system',
+            language: 'zh-CN',
+            defaultModelId: 'model-1',
+            branchModelIds: [],
+            systemPrompt: '',
+            filterCot: false,
+            extractionMethod: 'readability',
+            includePageContentByDefault: true,
+          },
+          models: [],
+          quickInputs: [],
+          sync: {
+            enabled: false,
+            provider: 'none',
+            gistToken: '',
+            gistId: '',
+            webdavUrl: '',
+            webdavUsername: '',
+            webdavPassword: '',
+            lastSyncAt: null,
+          },
+          blacklist: [],
+        }),
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab: vi.fn(),
+      },
+      streamText,
+      createSessionId: () => 'session-retry',
+      createMessageId: () => 'assistant-retry',
+      now: (() => {
+        const values = [20, 21, 22, 23, 24];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.retryMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+    });
+
+    await expect(session.done).resolves.toMatchObject({
+      sessionId: 'session-retry',
+      messageId: 'assistant-retry',
+      status: 'done',
+    });
+    expect(streamText).toHaveBeenCalledWith({
+      model: { kind: 'sdk-model' },
+      messages: [
+        {
+          role: 'user',
+          content: '问题',
+          images: [],
+        },
+      ],
+      abortSignal: expect.any(AbortSignal),
+    });
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
+      messages: [
+        expect.objectContaining({
+          id: 'user-1',
+          content: '问题',
+        }),
+        expect.objectContaining({
+          id: 'assistant-retry',
+          content: '重试后回答',
+          retryFromMessageId: 'assistant-1',
+          status: 'done',
+        }),
+      ],
     });
   });
 });

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
+import { sanitizeBranchModelIds } from '../../domain/config/config-schema';
 
 type CacheStats = {
   /** 本地缓存条目数。 */
@@ -40,6 +41,9 @@ export const BasicSettingsPanel = ({
   onClearCache,
   t,
 }: BasicSettingsPanelProps) => {
+  const branchModelIds = sanitizeBranchModelIds(config, config.basic.branchModelIds);
+  const hasMissingBranchModels = branchModelIds.length !== config.basic.branchModelIds.length;
+
   const updateBasic = (patch: Partial<ExtensionConfig['basic']>) => {
     onChange({
       ...config,
@@ -47,6 +51,12 @@ export const BasicSettingsPanel = ({
         ...config.basic,
         ...patch,
       },
+    });
+  };
+  /** 切换全局分支模型。 */
+  const toggleBranchModel = (modelId: string, checked: boolean) => {
+    updateBasic({
+      branchModelIds: checked ? [...branchModelIds, modelId] : branchModelIds.filter((id) => id !== modelId),
     });
   };
 
@@ -120,6 +130,30 @@ export const BasicSettingsPanel = ({
               </SelectContent>
             </Select>
           </label>
+
+          <fieldset className="grid gap-3 rounded-2xl border border-border/70 px-4 py-3">
+            <legend className="px-1 text-sm font-medium">{t('settings.branchModels')}</legend>
+            <p className="m-0 text-sm text-muted-foreground">{t('settings.branchModelsDescription')}</p>
+            {defaultModels.length > 0 ? (
+              <div className="grid gap-2">
+                {defaultModels.map((model) => (
+                  <label key={model.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      aria-label={`${t('settings.branchModels')}:${model.name}`}
+                      type="checkbox"
+                      checked={branchModelIds.includes(model.id)}
+                      disabled={disabled}
+                      onChange={(event) => toggleBranchModel(model.id, event.target.checked)}
+                    />
+                    <span>{model.name}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="m-0 text-sm text-muted-foreground">{t('settings.noBranchModels')}</p>
+            )}
+            {hasMissingBranchModels ? <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.branchModelsMissing')}</p> : null}
+          </fieldset>
 
           <label className="grid gap-2">
             <span className="text-sm font-medium">System Prompt</span>

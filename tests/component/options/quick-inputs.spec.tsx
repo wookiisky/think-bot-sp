@@ -21,6 +21,10 @@ const t = (key: string) =>
     'settings.quickInputModel': '专属模型',
     'settings.quickInputNoModel': '不指定模型',
     'settings.quickInputModelMissing': '引用的模型已失效，建议重新选择。',
+    'settings.quickInputBranchModels': '专属分支模型',
+    'settings.quickInputBranchModelsDescription': '当前快捷输入会在全局分支模型基础上叠加这些模型。',
+    'settings.quickInputBranchModelsMissing': '部分专属分支模型引用已失效，保存时会自动清理。',
+    'settings.noBranchModels': '暂无可用分支模型',
     'settings.enabled': '已启用',
     'settings.disabled': '已停用',
   })[key] ?? key;
@@ -88,6 +92,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面',
               autoTrigger: false,
               modelId: null,
+              branchModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -97,6 +102,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请翻译当前页面',
               autoTrigger: false,
               modelId: null,
+              branchModelIds: [],
               order: 1,
               deletedAt: null,
             },
@@ -114,6 +120,7 @@ describe('QuickInputsPanel', () => {
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '主模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '专属分支模型:主模型' }));
 
     await user.click(screen.getByRole('button', { name: '上移' }));
 
@@ -157,6 +164,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面',
               autoTrigger: false,
               modelId: 'missing-model',
+              branchModelIds: ['missing-branch-model'],
               order: 0,
               deletedAt: null,
             },
@@ -168,6 +176,7 @@ describe('QuickInputsPanel', () => {
     const user = userEvent.setup();
 
     expect(screen.getByText('引用的模型已失效，建议重新选择。')).toBeInTheDocument();
+    expect(screen.getByText('部分专属分支模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '不指定模型' }));

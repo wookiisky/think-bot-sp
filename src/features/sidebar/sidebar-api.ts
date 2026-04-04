@@ -1,6 +1,11 @@
 /* eslint-disable no-unused-vars */
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import type { SidebarConversationRecord, SidebarLoadingStateRecord } from '../../services/runtime-messaging/sidebar-contract';
+import { EXTENSION_PAGES } from '../../shared/extension-pages';
+import type {
+  SidebarConversationRecord,
+  SidebarLoadingStateRecord,
+  SidebarPageRecord,
+} from '../../services/runtime-messaging/sidebar-contract';
 
 type ExtractionMethod = 'readability' | 'jina';
 
@@ -12,12 +17,7 @@ type SidebarBootstrapResponse = {
   /** 归一化后的页面 URL。 */
   normalizedUrl: string;
   /** 当前页面缓存。 */
-  page: {
-    /** 已使用的提取方式。 */
-    extractionMethod: ExtractionMethod;
-    /** 已缓存的正文。 */
-    content: string;
-  } | null;
+  page: SidebarPageRecord | null;
   /** 页面下的会话摘要。 */
   conversations: SidebarConversationRecord[];
   /** 页面下的加载态摘要。 */
@@ -67,8 +67,50 @@ type SendChatResponse = {
   payload: {
     /** 新建流式会话 id。 */
     sessionId: string;
+    /** 持久化后的用户消息 id。 */
+    userMessageId: string | null;
     /** 助手消息 id。 */
     messageId: string;
+  };
+};
+
+type EditUserMessageResponse = {
+  /** 响应类型。 */
+  type: 'EDIT_USER_MESSAGE_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 目标用户消息 id。 */
+    editedMessageId: string;
+    /** 新助手消息 id。 */
+    messageId: string;
+    /** 新建流式会话 id。 */
+    sessionId: string;
+  };
+};
+
+type RetryMessageResponse = {
+  /** 响应类型。 */
+  type: 'RETRY_MESSAGE_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 被替换的旧助手消息 id。 */
+    replacedMessageId: string;
+    /** 新助手消息 id。 */
+    messageId: string;
+    /** 新建流式会话 id。 */
+    sessionId: string;
+  };
+};
+
+type ExpandMessageBranchesResponse = {
+  /** 响应类型。 */
+  type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 目标助手消息 id。 */
+    messageId: string;
+    /** 新增分支 id 列表。 */
+    branchIds: string[];
   };
 };
 
@@ -81,6 +123,72 @@ type StopSessionResponse = {
     sessionId: string;
     /** 是否实际停止。 */
     stopped: boolean;
+  };
+};
+
+type StopBranchResponse = {
+  /** 响应类型。 */
+  type: 'STOP_BRANCH_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 分支 id。 */
+    branchId: string;
+    /** 是否实际停止。 */
+    stopped: boolean;
+  };
+};
+
+type DeleteBranchResponse = {
+  /** 响应类型。 */
+  type: 'DELETE_BRANCH_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 助手消息 id。 */
+    messageId: string;
+    /** 分支 id。 */
+    branchId: string;
+    /** 是否已删除。 */
+    deleted: boolean;
+  };
+};
+
+type ClearPageContextResponse = {
+  /** 响应类型。 */
+  type: 'CLEAR_PAGE_CONTEXT_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 已清理的归一化页面 URL。 */
+    normalizedUrl: string;
+    /** 是否已完成清理。 */
+    cleared: boolean;
+  };
+};
+
+type ClearTabConversationResponse = {
+  /** 响应类型。 */
+  type: 'CLEAR_TAB_CONVERSATION_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 已清理的归一化页面 URL。 */
+    normalizedUrl: string;
+    /** 已清理的 promptTab 稳定 id。 */
+    promptTabId: string;
+    /** 是否已完成清理。 */
+    cleared: boolean;
+  };
+};
+
+type ExportConversationResponse = {
+  /** 响应类型。 */
+  type: 'EXPORT_CONVERSATION_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 下载文件名。 */
+    filename: string;
+    /** Markdown 内容。 */
+    content: string;
+    /** MIME 类型。 */
+    mimeType: 'text/markdown;charset=utf-8';
   };
 };
 
@@ -106,16 +214,52 @@ type SidebarApi = {
   switchExtractionMethod: (
     ..._input: [{ tabId: number; pageUrl: string; method: ExtractionMethod }]
   ) => Promise<SwitchExtractionMethodResponse>;
+  /** 清理当前页面缓存与会话。 */
+  clearPageContext: (..._input: [{ tabId: number; pageUrl: string }]) => Promise<ClearPageContextResponse>;
+  /** 清理当前 promptTab 会话与 loading。 */
+  clearTabConversation: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => Promise<ClearTabConversationResponse>;
   /** 发送主聊天请求。 */
   sendChat: (
     ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; modelId: string; text: string; images: string[]; includePageContent: boolean }]
   ) => Promise<SendChatResponse>;
+  /** 编辑目标用户消息并重发。 */
+  editUserMessage: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; text: string }]
+  ) => Promise<EditUserMessageResponse>;
+  /** 重试目标助手消息，并替换旧结果。 */
+  retryMessage: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
+  ) => Promise<RetryMessageResponse>;
+  /** 为既有助手消息继续新增分支。 */
+  expandMessageBranches: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
+  ) => Promise<ExpandMessageBranchesResponse>;
   /** 停止当前流式会话。 */
   stopSession: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string; sessionId: string }]) => Promise<StopSessionResponse>;
+  /** 停止单个分支流。 */
+  stopBranch: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string; branchId: string }]) => Promise<StopBranchResponse>;
+  /** 删除单个分支。 */
+  deleteBranch: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; branchId: string }]
+  ) => Promise<DeleteBranchResponse>;
   /** 导出当前会话。 */
-  exportConversation: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => Promise<unknown>;
+  exportConversation: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => Promise<ExportConversationResponse>;
+  /** 打开历史页。 */
+  openHistoryPage: () => Promise<void>;
+  /** 打开设置页。 */
+  openSettingsPage: () => Promise<void>;
+  /** 打开 GitHub 仓库。 */
+  openGithubProject: () => Promise<void>;
   /** 建立流式订阅 port。 */
   connectStream: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => SidebarStreamPort;
+};
+
+/** 仓库 GitHub 地址。 */
+const GITHUB_PROJECT_URL = 'https://github.com/wookiisky/think-bot-sp';
+
+/** 统一在新标签页打开目标地址。 */
+const openTab = async (url: string) => {
+  await chrome.tabs.create({ url });
 };
 
 /** 创建 side panel API，统一封装 runtime message 调用。 */
@@ -149,9 +293,39 @@ export const createSidebarApi = (): SidebarApi => ({
       ...input,
     });
   },
+  clearPageContext(input) {
+    return chrome.runtime.sendMessage({
+      type: 'CLEAR_PAGE_CONTEXT',
+      ...input,
+    });
+  },
+  clearTabConversation(input) {
+    return chrome.runtime.sendMessage({
+      type: 'CLEAR_TAB_CONVERSATION',
+      ...input,
+    });
+  },
   sendChat(input) {
     return chrome.runtime.sendMessage({
       type: 'SEND_CHAT',
+      ...input,
+    });
+  },
+  editUserMessage(input) {
+    return chrome.runtime.sendMessage({
+      type: 'EDIT_USER_MESSAGE',
+      ...input,
+    });
+  },
+  retryMessage(input) {
+    return chrome.runtime.sendMessage({
+      type: 'RETRY_MESSAGE',
+      ...input,
+    });
+  },
+  expandMessageBranches(input) {
+    return chrome.runtime.sendMessage({
+      type: 'EXPAND_MESSAGE_BRANCHES',
       ...input,
     });
   },
@@ -161,11 +335,32 @@ export const createSidebarApi = (): SidebarApi => ({
       ...input,
     });
   },
+  stopBranch(input) {
+    return chrome.runtime.sendMessage({
+      type: 'STOP_BRANCH',
+      ...input,
+    });
+  },
+  deleteBranch(input) {
+    return chrome.runtime.sendMessage({
+      type: 'DELETE_BRANCH',
+      ...input,
+    });
+  },
   exportConversation(input) {
     return chrome.runtime.sendMessage({
       type: 'EXPORT_CONVERSATION',
       ...input,
     });
+  },
+  openHistoryPage() {
+    return openTab(chrome.runtime.getURL(EXTENSION_PAGES.conversations));
+  },
+  openSettingsPage() {
+    return Promise.resolve(chrome.runtime.openOptionsPage());
+  },
+  openGithubProject() {
+    return openTab(GITHUB_PROJECT_URL);
   },
   connectStream(input) {
     const port = chrome.runtime.connect({

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from '../../components/ui/textarea';
 import { getEnabledCompleteModels } from '../../domain/config/config-schema';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { sanitizeBranchModelIds } from '../../domain/config/config-schema';
 
 type QuickInputsPanelProps = {
   /** 当前草稿配置。 */
@@ -31,6 +32,8 @@ export const QuickInputsPanel = ({ config, disabled, onChange, t }: QuickInputsP
   const activeQuickInput = visibleQuickInputs.find((item) => item.id === selectedQuickInputId) ?? visibleQuickInputs[0] ?? null;
   const hasMissingModelReference =
     !!activeQuickInput?.modelId && !availableModels.some((model) => model.id === activeQuickInput.modelId);
+  const branchModelIds = activeQuickInput ? sanitizeBranchModelIds(config, activeQuickInput.branchModelIds) : [];
+  const hasMissingBranchModels = !!activeQuickInput && branchModelIds.length !== activeQuickInput.branchModelIds.length;
   const modelSelectValue = hasMissingModelReference
     ? `__missing__:${activeQuickInput?.modelId ?? ''}`
     : activeQuickInput?.modelId ?? '__none__';
@@ -82,9 +85,21 @@ export const QuickInputsPanel = ({ config, disabled, onChange, t }: QuickInputsP
     prompt: '',
     autoTrigger: false,
     modelId: null,
+    branchModelIds: [],
     order: config.quickInputs.length,
     deletedAt: null,
   });
+
+  /** 切换当前快捷输入的专属分支模型。 */
+  const toggleActiveBranchModel = (modelId: string, checked: boolean) => {
+    if (!activeQuickInput) {
+      return;
+    }
+
+    updateActiveQuickInput({
+      branchModelIds: checked ? [...branchModelIds, modelId] : branchModelIds.filter((id) => id !== modelId),
+    });
+  };
 
   const handleAddQuickInput = () => {
     const nextQuickInput = createQuickInput();
@@ -247,6 +262,32 @@ export const QuickInputsPanel = ({ config, disabled, onChange, t }: QuickInputsP
             {hasMissingModelReference ? (
               <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputModelMissing')}</p>
             ) : null}
+
+            <fieldset className="grid gap-3 rounded-2xl border border-border/70 px-4 py-3">
+              <legend className="px-1 text-sm font-medium">{t('settings.quickInputBranchModels')}</legend>
+              <p className="m-0 text-sm text-muted-foreground">{t('settings.quickInputBranchModelsDescription')}</p>
+              {availableModels.length > 0 ? (
+                <div className="grid gap-2">
+                  {availableModels.map((model) => (
+                    <label key={model.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        aria-label={`${t('settings.quickInputBranchModels')}:${model.name}`}
+                        type="checkbox"
+                        checked={branchModelIds.includes(model.id)}
+                        disabled={disabled}
+                        onChange={(event) => toggleActiveBranchModel(model.id, event.target.checked)}
+                      />
+                      <span>{model.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className="m-0 text-sm text-muted-foreground">{t('settings.noBranchModels')}</p>
+              )}
+              {hasMissingBranchModels ? (
+                <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputBranchModelsMissing')}</p>
+              ) : null}
+            </fieldset>
           </section>
         ) : null}
       </CardContent>

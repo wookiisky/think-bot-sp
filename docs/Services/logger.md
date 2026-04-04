@@ -52,11 +52,25 @@
 - `extraction.jina_fallback_started`
 - `extraction.completed`
 - `chat.send.accepted`
+- `chat.edit.accepted`
+- `chat.retry.accepted`
 - `chat.stream.started`
 - `chat.stream.first_chunk`
 - `chat.stream.completed`
 - `chat.stream.cancelled`
 - `chat.stream.failed`
+- `branch.expand.accepted`
+- `branch.stream.started`
+- `branch.stream.first_chunk`
+- `branch.stream.completed`
+- `branch.stream.cancelled`
+- `branch.stream.failed`
+- `branch.cancel.requested`
+- `branch.delete.completed`
+- `conversation.export.requested`
+- `conversation.export.completed`
+- `page.clear.completed`
+- `prompt_tab.clear.completed`
 - `port.connected`
 - `port.disconnected`
 - `port.restore_requested`
@@ -67,16 +81,18 @@
 - `blacklist.detected`
 - `blacklist.bypass_confirmed`
 
-阶段 4 当前最小契约：
+当前稳定契约：
 
-- 已稳定使用的关键事件包含 `extraction.started`、`extraction.completed`、`blacklist.bypass_confirmed`、`chat.stream.started`、`chat.stream.failed`、`port.connected`、`port.disconnected`、`port.restore_requested`。
+- 已稳定使用的关键事件包含 `panel.init.started`、`page.info.loaded`、`blacklist.detected`、`blacklist.bypass_confirmed`、`extraction.started`、`extraction.completed`、`chat.send.accepted`、`chat.stream.started`、`chat.stream.first_chunk`、`chat.stream.completed`、`chat.stream.cancelled`、`chat.stream.failed`、`branch.expand.accepted`、`branch.stream.started`、`branch.stream.completed`、`branch.stream.failed`、`conversation.export.requested`、`conversation.export.completed`、`page.clear.completed`、`prompt_tab.clear.completed`、`port.connected`、`port.disconnected`、`port.restore_requested`。
 - 当前敏感字段脱敏集合包含 `apiKey`、`gistToken`、`webdavPassword`、`authorization`。
 
 ## 5. 关键流程
 
 - side panel 打开和初始化时记录入口、当前 `browserTab` 和初始化结果。
 - `GET_SIDEBAR_BOOTSTRAP`、提取、重提取和方法切换时记录开始、回退和完成。
-- `SEND_CHAT`、流式开始、首包、完成、取消、错误时记录请求链路。
+- `SEND_CHAT / EDIT_USER_MESSAGE / RETRY_MESSAGE`、流式开始、首包、完成、取消、错误时记录请求链路。
+- 分支继续新增、分支开始、分支首包、分支完成、分支取消、分支失败时记录请求链路。
+- 页面级清空、标签级清空、导出时记录完成链路。
 - port 建连、断开、恢复订阅时记录连接状态。
 - 同步测试连接、正式同步、对象级合并完成或失败时记录关键节点。
 - 黑名单命中和用户确认结果时记录阻断和放行链路。
