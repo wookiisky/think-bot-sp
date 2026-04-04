@@ -53,14 +53,15 @@ one-shot command：
   - `CLEAR_LOCAL_CACHE`
   - `TEST_SYNC_CONNECTION`
   - `SYNC_NOW`
-- 已定义但当前未实现：
-  - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
-  - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
+- 当前已实现的对话管理页命令：
   - `LIST_PAGES`
   - `SEARCH_PAGES`
   - `GET_PAGE_DETAIL`
   - `UPDATE_PAGE_TITLE`
   - `DELETE_PAGE`
+- 已定义但当前未实现：
+  - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
+  - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
 
 long-lived port 事件：
 
@@ -82,6 +83,8 @@ long-lived port 事件：
 - 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
 - 已落地补充：`RE_EXTRACT_CONTENT` 成功后会在 background 内部触发自动触发去重编排；手动发送与自动触发共享同一套活跃会话注册表。
 - 未落地：对话管理页复用同一条流式订阅、快捷输入远端模板命令。
+- 已落地补充：对话管理页复用 `SEND_CHAT / STOP_SESSION / STOP_BRANCH / DELETE_BRANCH / EDIT_USER_MESSAGE / RETRY_MESSAGE / EXPAND_MESSAGE_BRANCHES / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 与同一条流式事件协议。
+- 未落地：快捷输入远端模板命令。
 
 命令分组约束：
 
@@ -160,6 +163,9 @@ long-lived port 事件：
   - 拒绝本次放行请求，要求 UI 重新获取页面上下文。
 - 页面级清空：
   - 活跃会话必须先取消，再进入删除页面数据的操作序列。
+- 对话管理页删除页面：
+  - 活跃会话必须先取消。
+  - 同步开启时先写入 tombstone，再清理本地页面、会话与 loading。
 - 同步命令：
   - `TEST_SYNC_CONNECTION` 或 `SYNC_NOW` 失败时返回显式错误，不允许 background 吞错后伪造成功响应。
 

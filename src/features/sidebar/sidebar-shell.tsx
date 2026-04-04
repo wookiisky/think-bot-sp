@@ -1,12 +1,27 @@
 import { useEffect, useState } from 'react';
 
 import { getEnabledCompleteModels } from '../../domain/config/config-schema';
+import {
+  CHAT_PROMPT_TAB_ID,
+  buildActiveSessionIdMap,
+  buildComposerStateMap,
+  buildMessageStateMap,
+  buildPromptTabs,
+  buildRestoreMessageIdMap,
+  createChatPromptTab,
+  getPromptTabStatus,
+  pickInitialPromptTabId,
+  toModelOptions,
+  toOptimisticUserContent,
+  type ChatMessageState,
+  type ComposerState,
+  type EditingState,
+  type ModelOption,
+  type PromptTabDefinition,
+  upsertAssistantBranch,
+  upsertAssistantMessage,
+} from '../workspace/workspace-state';
 import { downloadTextFile } from '../../shared/download-file';
-import type {
-  SidebarConversationRecord,
-  SidebarLoadingStateRecord,
-  SidebarPageRecord,
-} from '../../services/runtime-messaging/sidebar-contract';
 import { ChatInput } from './chat-input';
 import { ChatThread } from './chat-thread';
 import type { SidebarApi } from './sidebar-api';
@@ -92,55 +107,6 @@ type SidebarShellProps = {
   pageUrl: string;
 };
 
-const CHAT_PROMPT_TAB_ID = 'chat';
-
-/** 以 assistant 消息 id 为键做增量合并。 */
-const upsertAssistantMessage = (
-  messages: ChatMessageState[],
-  messageId: string,
-  buildNext: (_current: ChatMessageState | null) => ChatMessageState,
-) => {
-  let found = false;
-  const next = messages.map((message) => {
-    if (message.id !== messageId) {
-      return message;
-    }
-    found = true;
-    return buildNext(message);
-  });
-
-  return found ? next : [...next, buildNext(null)];
-};
-
-/** 以分支 id 为键做增量合并。 */
-const upsertAssistantBranch = (
-  messages: ChatMessageState[],
-  messageId: string,
-  branchId: string,
-  buildNext: (_current: BranchMessageState | null) => BranchMessageState,
-) =>
-  messages.map((message) => {
-    if (message.id !== messageId || message.role !== 'assistant') {
-      return message;
-    }
-
-    let found = false;
-    return {
-      ...message,
-      branches: message.branches.map((branch) => {
-        if (branch.id !== branchId) {
-          return branch;
-        }
-        found = true;
-        return buildNext(branch);
-      }),
-      ...(found ? {} : { branches: [...message.branches, buildNext(null)] }),
-    };
-  });
-
-/** 生成本地乐观用户消息内容。 */
-const toOptimisticUserContent = (text: string, images: string[]) => (text.trim().length > 0 ? text : images.length > 0 ? '[图片]' : '');
-
 /** 提取区最小高度。 */
 const MIN_EXTRACTION_PANEL_HEIGHT = 160;
 /** 提取区默认高度。 */
@@ -152,173 +118,6 @@ const MAX_EXTRACTION_PANEL_HEIGHT = 420;
 const clampExtractionPanelHeight = (height: number) =>
   Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
 
-/** 归一化侧边栏模型列表。 */
-const toModelOptions = (..._input: [ReturnType<typeof getEnabledCompleteModels>]): ModelOption[] =>
-  _input[0].map((model) => ({
-    id: model.id,
-    name: model.name,
-    supportsImages: model.supportsImages,
-  }));
-
-/** 取一个可用模型 id。 */
-const resolveModelId = (preferredModelId: string | null, models: ModelOption[], fallbackModelId: string) => {
-  if (preferredModelId && models.some((model) => model.id === preferredModelId)) {
-    return preferredModelId;
-  }
-  return fallbackModelId;
-};
-
-/** 构造默认 chat 标签。 */
-const createChatPromptTab = (preferredModelId: string): PromptTabDefinition => ({
-  id: CHAT_PROMPT_TAB_ID,
-  name: 'Chat',
-  defaultText: '',
-  preferredModelId,
-  autoTrigger: false,
-  promptTabState: null,
-});
-
-/** 把会话记录转成侧边栏消息结构。 */
-const toChatMessageStates = (..._input: [SidebarConversationRecord['messages']]): ChatMessageState[] =>
-  _input[0].map((message) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    status: message.status,
-    errorMessage: message.errorMessage,
-    branches: message.branches.map((branch) => ({
-      id: branch.id,
-      modelId: branch.modelId,
-      modelLabel: branch.modelLabel,
-      content: branch.content,
-      status: branch.status,
-      errorMessage: branch.errorMessage,
-    })),
-  }));
-
-/** 生成可见 promptTab 列表。 */
-const buildPromptTabs = ({
-  page,
-  quickInputs,
-  models,
-  fallbackModelId,
-}: {
-  page: SidebarPageRecord | null;
-  quickInputs: Array<{
-    id: string;
-    name: string;
-    prompt: string;
-    autoTrigger: boolean;
-    modelId: string | null;
-    order: number;
-    deletedAt: number | null;
-  }>;
-  models: ModelOption[];
-  fallbackModelId: string;
-}) => {
-  const promptTabStateMap = new Map(page?.promptTabStates.map((item) => [item.promptTabId, item]) ?? []);
-  const visibleQuickInputs = [...quickInputs]
-    .filter((item) => item.deletedAt === null)
-    .sort((left, right) => left.order - right.order);
-
-  return [
-    {
-      ...createChatPromptTab(fallbackModelId),
-      promptTabState: promptTabStateMap.get(CHAT_PROMPT_TAB_ID) ?? null,
-    },
-    ...visibleQuickInputs.map((item) => ({
-      id: item.id,
-      name: item.name,
-      defaultText: item.prompt,
-      preferredModelId: resolveModelId(item.modelId, models, fallbackModelId),
-      autoTrigger: item.autoTrigger,
-      promptTabState: promptTabStateMap.get(item.id) ?? null,
-    })),
-  ];
-};
-
-/** 为每个标签生成本地草稿。 */
-const buildComposerStateMap = (..._input: [PromptTabDefinition[]]): Record<string, ComposerState> =>
-  Object.fromEntries(
-    _input[0].map((promptTab) => [
-      promptTab.id,
-      {
-        text: promptTab.defaultText,
-        images: [],
-        selectedModelId: promptTab.preferredModelId,
-      },
-    ]),
-  );
-
-/** 为每个标签生成消息列表。 */
-const buildMessageStateMap = (..._input: [PromptTabDefinition[], SidebarConversationRecord[]]): Record<string, ChatMessageState[]> =>
-  Object.fromEntries(
-    _input[0].map((promptTab) => {
-      const conversation = _input[1].find((item) => item.promptTabId === promptTab.id) ?? null;
-      return [promptTab.id, toChatMessageStates(conversation?.messages ?? [])];
-    }),
-  );
-
-/** 为每个标签生成恢复中的助手消息 id。 */
-const buildRestoreMessageIdMap = ({
-  promptTabs,
-  conversations,
-  loadingStates,
-}: {
-  promptTabs: PromptTabDefinition[];
-  conversations: SidebarConversationRecord[];
-  loadingStates: SidebarLoadingStateRecord[];
-}) =>
-  Object.fromEntries(
-    promptTabs.map((promptTab) => {
-      const conversation = conversations.find((item) => item.promptTabId === promptTab.id) ?? null;
-      const loadingState = loadingStates.find((item) => item.promptTabId === promptTab.id) ?? null;
-      const loadingAssistantMessage = conversation?.messages.find((item) => item.role === 'assistant' && item.status === 'loading') ?? null;
-      return [promptTab.id, loadingState?.resumeTarget?.messageId ?? loadingAssistantMessage?.id ?? null];
-    }),
-  );
-
-/** 为每个标签生成当前活跃会话。 */
-const buildActiveSessionIdMap = (..._input: [PromptTabDefinition[], SidebarLoadingStateRecord[]]): Record<string, string | null> =>
-  Object.fromEntries(
-    _input[0].map((promptTab) => {
-      const loadingState = _input[1].find((item) => item.promptTabId === promptTab.id) ?? null;
-      return [promptTab.id, loadingState?.sessionId ?? null];
-    }),
-  );
-
-/** 选择首次展示的标签。 */
-const pickInitialPromptTabId = (..._input: [PromptTabDefinition[], SidebarLoadingStateRecord[]]) => {
-  const loadingPromptTab = _input[0].find((promptTab) =>
-    _input[1].some((loadingState) => loadingState.promptTabId === promptTab.id && loadingState.promptTabStatus === 'loading'),
-  );
-  return loadingPromptTab?.id ?? CHAT_PROMPT_TAB_ID;
-};
-
-/** 取标签状态文案。 */
-const getPromptTabStatus = (..._input: [PromptTabDefinition, string | null]): string => {
-  if (_input[1]) {
-    return '生成中';
-  }
-
-  const promptTabState = _input[0].promptTabState;
-  if (!promptTabState) {
-    return '';
-  }
-  if (promptTabState.autoTriggerStatus === 'running') {
-    return '自动触发中';
-  }
-  if (promptTabState.autoTriggerStatus === 'error') {
-    return '自动触发失败';
-  }
-  if (promptTabState.autoTriggerStatus === 'done') {
-    return '自动触发完成';
-  }
-  if (promptTabState.initializedAt !== null) {
-    return '已初始化';
-  }
-  return '';
-};
 
 /** 渲染阶段 5 的多 promptTab 侧边栏工作台。 */
 export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {

@@ -10,6 +10,9 @@ export const CONVERSATION_STORAGE_PREFIX = 'conversation:';
 /** loading 记录 key 前缀。 */
 export const LOADING_STORAGE_PREFIX = 'loading:';
 
+/** 同步状态存储 key。 */
+export const SYNC_STATE_STORAGE_KEY = 'sync:state';
+
 const normalizePromptTabId = (promptTabId: string): string => {
   if (promptTabId.includes(':')) {
     throw new Error('promptTabId cannot contain ":"');

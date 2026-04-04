@@ -41,6 +41,11 @@
 ## 3. 索引与限制
 
 - 本地状态 key：`sync:state`
+- 当前本地状态最小闭环：
+  - `schemaVersion`
+  - `snapshotVersion`
+  - `tombstones`
+  - `lastSyncAt`
 - 远端文件固定为单一快照文件，不做旧结构兼容。
 - `normalizedUrl` 在墓碑中唯一。
 - `LoadingStateRecord` 不进入同步快照。

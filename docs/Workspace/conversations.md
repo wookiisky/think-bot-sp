@@ -167,3 +167,13 @@
 - 对话管理页在真实历史工作台交付前，入口层统一复用 `src/ui/page-shell.tsx` 作为共享壳层。
 - 该壳层与 side panel / welcome 共用 `assets/styles/globals.css`、`src/components/ui/card.tsx`、`src/components/ui/badge.tsx` 等基础件来源。
 - 阶段 2.5 的目标是统一入口页样式基线和主题 token，不在本阶段引入对话管理页真实业务区块。
+
+## 14. 当前实现状态
+
+- 已落地真实历史工作台，不再使用 `PageShell` 占位页。
+- 已落地页面列表、搜索、标题编辑、删除、详情恢复、继续对话与 loading 恢复。
+- 已复用 side panel 的聊天命令、流式事件协议、`ChatThread` 和 `ChatInput`。
+- 删除语义当前已接入：
+  - 同步关闭：直接本地级联硬删。
+  - 同步开启：先写入 page tombstone，再清理本地页面、会话与 loading。
+- 草稿和图片预览仍保持页面内运行态，不在 conversations 关闭后持久化恢复。

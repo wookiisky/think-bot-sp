@@ -930,10 +930,20 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       return conversations.filter((conversation) => conversation.normalizedUrl === normalizedUrl);
     },
 
+    /** 读取全部 conversation。 */
+    async getAllConversations() {
+      return getAllConversations();
+    },
+
     /** 按页面列出 loading 状态。 */
     async listPageLoadingStates(normalizedUrl: string) {
       const loadingStates = await getAllLoadingStates();
       return loadingStates.filter((loadingState) => loadingState.normalizedUrl === normalizedUrl);
+    },
+
+    /** 读取全部 loading 状态。 */
+    async getAllLoadingStates() {
+      return getAllLoadingStates();
     },
 
     /** 按页面清理 conversation 和 loading。 */

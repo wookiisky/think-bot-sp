@@ -179,4 +179,78 @@ describe('page-repository', () => {
       },
     ]);
   });
+
+  it('页面列表按 updatedAt 倒序返回', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/a', now: 1 }),
+      title: 'A',
+      updatedAt: 10,
+      expiresAt: 11,
+    });
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/b', now: 1 }),
+      title: 'B',
+      updatedAt: 30,
+      expiresAt: 31,
+    });
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/c', now: 1 }),
+      title: 'C',
+      updatedAt: 20,
+      expiresAt: 21,
+    });
+
+    await expect(repo.listRecentPages()).resolves.toMatchObject([
+      { normalizedUrl: 'https://example.com/b', title: 'B' },
+      { normalizedUrl: 'https://example.com/c', title: 'C' },
+      { normalizedUrl: 'https://example.com/a', title: 'A' },
+    ]);
+  });
+
+  it('搜索只匹配标题和 URL', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/article/alpha', now: 1 }),
+      title: 'Alpha 页面',
+      content: '不会参与搜索',
+    });
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://another.com/notes', now: 1 }),
+      title: 'Beta 页面',
+      content: 'alpha 内容',
+    });
+
+    await expect(repo.searchPages('alpha')).resolves.toMatchObject([
+      { normalizedUrl: 'https://example.com/article/alpha', title: 'Alpha 页面' },
+    ]);
+  });
+
+  it('更新标题时保留其他字段并刷新 updatedAt', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/article', now: 100 }),
+      title: '旧标题',
+      content: '正文',
+      includePageContent: false,
+      faviconUrl: 'https://example.com/favicon.ico',
+    });
+
+    const saved = await repo.updatePageTitle({
+      normalizedUrl: 'https://example.com/article',
+      title: '新标题',
+    });
+
+    expect(saved.title).toBe('新标题');
+    expect(saved.content).toBe('正文');
+    expect(saved.includePageContent).toBe(false);
+    expect(saved.faviconUrl).toBe('https://example.com/favicon.ico');
+    expect(saved.updatedAt).toBeGreaterThan(100);
+  });
 });

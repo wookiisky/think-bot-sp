@@ -9,11 +9,12 @@ test('loads the MV3 extension and opens options/conversations shells', async ({
 
   const options = await context.newPage();
   await options.goto(`chrome-extension://${extensionId}/options.html`);
-  await expect(options.getByRole('heading', { name: 'Options' })).toBeVisible();
-  await expect(options.getByText(/environment/i)).toBeVisible();
+  await expect(options.getByTestId('settings-shell')).toBeVisible();
+  await expect(options.getByRole('heading', { name: '设置', exact: true })).toBeVisible();
 
   const conversations = await context.newPage();
   await conversations.goto(`chrome-extension://${extensionId}/conversations.html`);
-  await expect(conversations.getByRole('heading', { name: 'Conversations' })).toBeVisible();
-  await expect(conversations.getByText(/environment/i)).toBeVisible();
+  await expect(conversations.getByRole('heading', { name: '历史工作台' })).toBeVisible();
+  await expect(conversations.getByTestId('conversations-shell')).toBeVisible();
+  await expect(conversations.getByPlaceholder('搜索标题或 URL')).toBeVisible();
 });

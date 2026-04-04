@@ -43,6 +43,8 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       .filter(([key]) => key.startsWith(PAGE_STORAGE_PREFIX))
       .map(([, value]) => pageRecordSchema.parse(value));
   };
+  /** 按更新时间倒序返回页面列表。 */
+  const sortRecentPages = <T extends { updatedAt: number }>(pages: T[]) => [...pages].sort((left, right) => right.updatedAt - left.updatedAt);
 
   return {
     /** 保存页面记录。 */
@@ -156,6 +158,49 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
     /** 列出全部页面记录。 */
     async getAllPages() {
       return getAllPages();
+    },
+
+    /** 按最近更新时间返回页面列表。 */
+    async listRecentPages() {
+      return sortRecentPages(await getAllPages());
+    },
+
+    /** 按标题和 URL 搜索页面。 */
+    async searchPages(query: string) {
+      const normalizedQuery = query.trim().toLowerCase();
+      const pages = await getAllPages();
+      if (!normalizedQuery) {
+        return sortRecentPages(pages);
+      }
+
+      return sortRecentPages(
+        pages.filter((page) => page.title.toLowerCase().includes(normalizedQuery) || page.url.toLowerCase().includes(normalizedQuery)),
+      );
+    },
+
+    /** 仅更新页面标题。 */
+    async updatePageTitle(input: {
+      /** 归一化后的页面 URL。 */
+      normalizedUrl: string;
+      /** 新标题。 */
+      title: string;
+    }) {
+      const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
+      const currentValue = result[getPageKey(input.normalizedUrl)];
+      const current = currentValue ? pageRecordSchema.parse(currentValue) : null;
+      if (!current) {
+        throw new Error(`page not found: ${input.normalizedUrl}`);
+      }
+      const now = Date.now();
+
+      const next = pageRecordSchema.parse({
+        ...current,
+        title: input.title,
+        updatedAt: now,
+        expiresAt: now + NINETY_DAYS,
+      });
+      await storage.set({ [getPageKey(input.normalizedUrl)]: next });
+      return next;
     },
 
     /** 清理过期页面。 */

@@ -68,3 +68,12 @@
 - 含 loading 的历史记录
 - 含分支结果和分支错误的历史记录
 - 同步开启与关闭两套删除场景
+
+## 7. 当前自动化覆盖
+
+- 已覆盖单测：页面列表排序、搜索、标题更新、`LIST_PAGES / SEARCH_PAGES / GET_PAGE_DETAIL / UPDATE_PAGE_TITLE / DELETE_PAGE`。
+- 已覆盖组件测试：列表加载、搜索过滤、标题编辑、页面删除。
+- 已覆盖入口 E2E 基线：`conversations.html` 能进入真实工作台结构。
+- 尚未补齐的自动化：
+  - 真实扩展环境下的继续对话流程
+  - conversations 页流式恢复的端到端验证

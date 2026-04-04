@@ -60,4 +60,52 @@ describe('sync-service', () => {
     expect(testProvider.testConnection).toHaveBeenCalledWith(config.sync);
     expect(testProvider.syncNow).toHaveBeenCalledWith(config);
   });
+
+  it('真实同步时使用 sync-repository 构建快照并在成功后回写状态', async () => {
+    const buildSnapshot = vi.fn().mockResolvedValue({
+      schemaVersion: '2.0.0',
+      snapshotVersion: 3,
+      exportedAt: 123,
+      config: createDefaultConfig(),
+      pages: [{ id: 'page-1' }],
+      conversations: [{ id: 'conversation-1' }],
+      tombstones: [{ normalizedUrl: 'https://example.com/deleted', deletedAt: 100 }],
+      lastSyncAt: null,
+    });
+    const markSyncCompleted = vi.fn().mockResolvedValue(undefined);
+    const syncService = createSyncService({
+      now: () => 456,
+      syncRepository: {
+        buildSnapshot,
+        markSyncCompleted,
+      },
+      fetchImpl: vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+      }),
+    });
+    const config = createDefaultConfig({
+      sync: {
+        enabled: true,
+        provider: 'gist',
+        gistToken: 'token',
+        gistId: 'gist-id',
+        webdavUrl: '',
+        webdavUsername: '',
+        webdavPassword: '',
+        lastSyncAt: null,
+      },
+    });
+
+    const result = await syncService.syncNow(config);
+
+    expect(buildSnapshot).toHaveBeenCalledWith(config);
+    expect(markSyncCompleted).toHaveBeenCalledWith({
+      snapshotVersion: 3,
+      lastSyncAt: 456,
+    });
+    expect(result.provider).toBe('gist');
+    expect(result.lastSyncAt).toBe(456);
+    expect(result.snapshotBytes).toBeGreaterThan(0);
+  });
 });

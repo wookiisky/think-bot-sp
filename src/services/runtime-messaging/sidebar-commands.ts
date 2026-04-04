@@ -19,6 +19,7 @@ import {
   type SidebarLoadingStateRecord,
   type SidebarPageRecord,
 } from './sidebar-contract';
+import { deletePageWithPolicy } from './page-delete';
 import type { SidebarSession, SidebarSessionScope } from './sidebar-session-registry';
 import { assertSidebarPageSender, type SidebarMessageSender } from './sender';
 
@@ -60,6 +61,21 @@ type PageRepository = {
   }) => Promise<SidebarPageRecord | null>;
   /** 清理页面级数据。 */
   deletePage?: (normalizedUrl: string) => Promise<void>;
+};
+
+type ConfigRepository = {
+  /** 读取当前配置。 */
+  getConfig: () => Promise<{
+    sync: {
+      enabled: boolean;
+      provider: string;
+    };
+  }>;
+};
+
+type SyncRepository = {
+  /** 追加页面级墓碑。 */
+  appendPageTombstone: (input: { normalizedUrl: string; deletedAt: number }) => Promise<void>;
 };
 
 type ConversationRepository = {
@@ -176,6 +192,10 @@ export const createSidebarCommandHandler = ({
   conversationExporter,
   sessionRegistry,
   logger,
+  configRepository,
+  syncRepository,
+  assertPageSender = assertSidebarPageSender,
+  now = () => Date.now(),
 }: {
   pageRepository: PageRepository;
   conversationRepository: ConversationRepository;
@@ -198,6 +218,10 @@ export const createSidebarCommandHandler = ({
     cancelPromptTabSessions: (input: { normalizedUrl: string; promptTabId: string }) => Promise<number>;
   };
   logger?: SidebarCommandLogger;
+  configRepository?: ConfigRepository;
+  syncRepository?: SyncRepository;
+  assertPageSender?: (sender: SidebarMessageSender, runtimeId: string) => void;
+  now?: () => number;
 }) => {
   const commandLogger = logger ?? {
     info: () => undefined,
@@ -214,7 +238,7 @@ export const createSidebarCommandHandler = ({
     switch (input.type) {
       case 'GET_SIDEBAR_BOOTSTRAP': {
         const command = sidebarBootstrapCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         commandLogger.info('panel.init.started', {
@@ -265,7 +289,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'SEND_CHAT': {
         const command = sidebarSendChatCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!chatDispatchService) {
           throw new Error('unsupported command: SEND_CHAT');
         }
@@ -319,7 +343,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'EDIT_USER_MESSAGE': {
         const command = sidebarEditUserMessageCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!chatDispatchService) {
           throw new Error('unsupported command: EDIT_USER_MESSAGE');
         }
@@ -358,7 +382,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'RETRY_MESSAGE': {
         const command = sidebarRetryMessageCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!chatDispatchService) {
           throw new Error('unsupported command: RETRY_MESSAGE');
         }
@@ -396,7 +420,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'EXPAND_MESSAGE_BRANCHES': {
         const command = sidebarExpandMessageBranchesCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!chatDispatchService) {
           throw new Error('unsupported command: EXPAND_MESSAGE_BRANCHES');
         }
@@ -433,7 +457,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'STOP_SESSION': {
         const command = sidebarStopSessionCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         const stopped = sessionRegistry.cancelSession({
           sessionId: command.sessionId,
@@ -457,7 +481,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'STOP_BRANCH': {
         const command = sidebarStopBranchCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         const stopped = sessionRegistry.cancelBranchSession({
           normalizedUrl,
@@ -481,7 +505,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'DELETE_BRANCH': {
         const command = sidebarDeleteBranchCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!conversationRepository.deleteAssistantBranch || !conversationRepository.removeBranchLoadingState) {
           throw new Error('unsupported command: DELETE_BRANCH');
         }
@@ -519,14 +543,22 @@ export const createSidebarCommandHandler = ({
       }
       case 'CLEAR_PAGE_CONTEXT': {
         const command = sidebarClearPageContextCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!pageRepository.deletePage) {
           throw new Error('unsupported command: CLEAR_PAGE_CONTEXT');
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         await sessionRegistry.cancelPageSessions(normalizedUrl);
-        await pageRepository.deletePage(normalizedUrl);
+        await deletePageWithPolicy({
+          normalizedUrl,
+          pageRepository: {
+            deletePage: pageRepository.deletePage,
+          },
+          configRepository,
+          syncRepository,
+          now,
+        });
         commandLogger.info('page.clear.completed', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -542,7 +574,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'CLEAR_TAB_CONVERSATION': {
         const command = sidebarClearTabConversationCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!conversationRepository.clearPromptTabData) {
           throw new Error('unsupported command: CLEAR_TAB_CONVERSATION');
         }
@@ -579,7 +611,7 @@ export const createSidebarCommandHandler = ({
       }
       case 'EXPORT_CONVERSATION': {
         const command = sidebarExportConversationCommandSchema.parse(input);
-        assertSidebarPageSender(context.sender, runtime.id);
+        assertPageSender(context.sender, runtime.id);
         if (!conversationExporter) {
           throw new Error('unsupported command: EXPORT_CONVERSATION');
         }

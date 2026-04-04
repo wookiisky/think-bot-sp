@@ -8,6 +8,7 @@ import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapt
 import { createConfigRepository } from '../src/repositories/config-repository';
 import { createConversationRepository } from '../src/repositories/conversation-repository';
 import { createPageRepository } from '../src/repositories/page-repository';
+import { createSyncRepository } from '../src/repositories/sync-repository';
 import { createBrowserEntryService } from '../src/services/browser-entry/browser-entry';
 import { createBrowserEntryPanelState } from '../src/services/browser-entry/browser-panel-state';
 import { createBlacklistService } from '../src/services/blacklist/blacklist-service';
@@ -19,10 +20,12 @@ import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dis
 import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
 import { createLogger } from '../src/services/logger/logger';
 import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
+import { createConversationsCommandHandler, isConversationsCommandMessage } from '../src/services/runtime-messaging/conversations-commands';
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
 import { sidebarPortClientMessageSchema, sidebarPortEventSchema } from '../src/services/runtime-messaging/sidebar-contract';
 import { createSidebarSessionRegistry } from '../src/services/runtime-messaging/sidebar-session-registry';
+import { assertConversationsPageSender, isConversationsPageSender, isSidebarPageSender } from '../src/services/runtime-messaging/sender';
 import { createSidebarAutoTriggerService } from '../src/services/sidebar-auto-trigger/sidebar-auto-trigger-service';
 import { createSyncService } from '../src/services/sync/sync-service';
 
@@ -32,6 +35,12 @@ export default defineBackground(() => {
   const configRepository = createConfigRepository(storage);
   const pageRepository = createPageRepository(storage);
   const conversationRepository = createConversationRepository(storage);
+  const syncRepository = createSyncRepository({
+    storage,
+    configRepository,
+    pageRepository,
+    conversationRepository,
+  });
   const syncService = createSyncService({
     getTestProvider: () =>
       (globalThis as typeof globalThis & {
@@ -40,6 +49,7 @@ export default defineBackground(() => {
           syncNow: (config: unknown) => Promise<{ provider: 'gist' | 'webdav'; lastSyncAt: number; snapshotBytes: number }>;
         };
       }).__THINK_BOT_TEST_SYNC_PROVIDER__ ?? null,
+    syncRepository,
   });
   const portBus = createPortBus();
   const sessionRegistry = createSidebarSessionRegistry();
@@ -198,6 +208,8 @@ export default defineBackground(() => {
     chatDispatchService,
     conversationExporter,
     sessionRegistry,
+    configRepository,
+    syncRepository,
     blacklistRepository: {
       isBlocked: async ({ browserTabId, normalizedUrl }) => {
         const config = await configRepository.getConfig();
@@ -214,6 +226,30 @@ export default defineBackground(() => {
         return bypassStore.has(toBypassKey(browserTabId, normalizedUrl)) ? null : service.checkUrl(normalizedUrl).matchedRuleId;
       },
     },
+  });
+  const handleConversationsChatCommand = createSidebarCommandHandler({
+    logger,
+    runtime: chrome.runtime,
+    pageRepository,
+    conversationRepository,
+    chatDispatchService,
+    conversationExporter,
+    sessionRegistry,
+    configRepository,
+    syncRepository,
+    blacklistRepository: {
+      isBlocked: async () => false,
+      getMatchedRuleId: async () => null,
+    },
+    assertPageSender: assertConversationsPageSender,
+  });
+  const handleConversationsCommand = createConversationsCommandHandler({
+    runtime: chrome.runtime,
+    pageRepository,
+    conversationRepository,
+    configRepository,
+    syncRepository,
+    sessionRegistry,
   });
 
   chrome.runtime.onConnect.addListener((port) => {
@@ -348,6 +384,11 @@ export default defineBackground(() => {
     }
 
     if (isSidebarCommandMessage(message)) {
+      const senderInfo = {
+        id: (sender as { id?: string | null }).id ?? null,
+        url: (sender as { url?: string | null }).url ?? null,
+      };
+
       if (message.type === 'CONFIRM_BLACKLIST_CONTINUE') {
         const normalizedUrl = normalizePageUrl(message.pageUrl);
         bypassStore.set(toBypassKey(message.tabId, normalizedUrl), Date.now());
@@ -414,12 +455,14 @@ export default defineBackground(() => {
         return true;
       }
 
-      void handleSidebarCommand(message, {
-        sender: {
-          id: (sender as { id?: string | null }).id ?? null,
-          url: (sender as { url?: string | null }).url ?? null,
-        },
-      })
+      const runtimeId = chrome.runtime.id;
+      const commandHandler = isSidebarPageSender(senderInfo, runtimeId)
+        ? handleSidebarCommand
+        : isConversationsPageSender(senderInfo, runtimeId)
+          ? handleConversationsChatCommand
+          : handleSidebarCommand;
+
+      void commandHandler(message, { sender: senderInfo })
         .then((result) => {
           logger.info('sidebar.command.succeeded', {
             type: message.type,
@@ -434,6 +477,26 @@ export default defineBackground(() => {
             browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
             reason,
           });
+          sendResponse({ error: reason });
+        });
+      return true;
+    }
+
+    if (isConversationsCommandMessage(message)) {
+      const type = message.type;
+      void handleConversationsCommand(message, {
+        sender: {
+          id: (sender as { id?: string | null }).id ?? null,
+          url: (sender as { url?: string | null }).url ?? null,
+        },
+      })
+        .then((result) => {
+          logger.info('conversations.command.succeeded', { type });
+          sendResponse(result);
+        })
+        .catch((error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          logger.error('conversations.command.failed', { type, reason });
           sendResponse({ error: reason });
         });
       return true;

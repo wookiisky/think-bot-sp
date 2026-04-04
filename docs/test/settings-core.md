@@ -95,3 +95,4 @@
 - 阶段2的“云同步”已交付最小配置级闭环；“标签页 / 黑名单设置”仍只验证导航与已交付内容，不视为完整编辑能力。
 - 阶段 2.5 额外要求设置页根节点保留 `data-testid="settings-shell"`、`data-theme` 与主题 class，顶部动作区保留 `settings-shell-actions`，导航区保留 `settings-shell-nav`。
 - 阶段 2.5 组件回归以 `tests/component/options/settings-shell.spec.tsx`、`tests/component/options/model-form.spec.tsx`、`tests/component/options/quick-inputs.spec.tsx` 为主，不允许用页面内 mock 绕过真实设置页壳层。
+- 全局主题回归要求 `assets/styles/globals.css` 保持 `Sky` 主色、`Amber` 图表色与 `Radius: None` 令牌基线，视觉调整不应改动设置页命令链路和测试标识。
