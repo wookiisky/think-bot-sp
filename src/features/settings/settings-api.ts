@@ -89,6 +89,32 @@ export const settingsApi = {
     return response.payload;
   },
 
+  /** 测试同步连接。 */
+  async testSyncConnection(sync: ExtensionConfig['sync']) {
+    const response = await requestConfig<RuntimeResponse<{ result: { provider: string; ok: true; message: string } }>>({
+      type: 'TEST_SYNC_CONNECTION',
+      sync,
+    });
+    return response.result;
+  },
+
+  /** 执行同步并回写最近同步时间。 */
+  async syncNow(config: ExtensionConfig) {
+    const response = await requestConfig<
+      RuntimeResponse<{
+        result: { provider: string; lastSyncAt: number; snapshotBytes: number };
+        config: ExtensionConfig;
+      }>
+    >({
+      type: 'SYNC_NOW',
+      config,
+    });
+    return {
+      config: response.config,
+      result: response.result,
+    };
+  },
+
   /** 读取本地缓存统计。 */
   async getLocalCacheStats() {
     const response = await requestConfig<RuntimeResponse<{ stats: CacheStats }>>({

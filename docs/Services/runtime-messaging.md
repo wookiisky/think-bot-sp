@@ -37,14 +37,16 @@ one-shot command：
   - `RE_EXTRACT_CONTENT`
 - `SEND_CHAT`
 - `STOP_SESSION`
-- `EXPORT_CONVERSATION`
 - `GET_CONFIG`
 - `SAVE_CONFIG`
 - `RESET_CONFIG`
 - `IMPORT_CONFIG`
 - `EXPORT_CONFIG`
+- `GET_LOCAL_CACHE_STATS`
+- `CLEAR_LOCAL_CACHE`
 - `TEST_SYNC_CONNECTION`
 - `SYNC_NOW`
+- `EXPORT_CONVERSATION`
 - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
 - `IMPORT_REMOTE_QUICK_INPUT_TEMPLATES`
 - `LIST_PAGES`
@@ -65,7 +67,7 @@ long-lived port 事件：
 
 阶段 4 当前落地边界：
 
-- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION` 命令、`RESTORE_LOADING` 恢复握手。
+- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
 - 未落地：分支级命令、消息编辑、重试、对话管理页复用同一条流式订阅。
 
 命令分组约束：
@@ -91,6 +93,8 @@ long-lived port 事件：
   - `RESET_CONFIG`
   - `IMPORT_CONFIG`
   - `EXPORT_CONFIG`
+  - `GET_LOCAL_CACHE_STATS`
+  - `CLEAR_LOCAL_CACHE`
   - `TEST_SYNC_CONNECTION`
   - `SYNC_NOW`
   - `FETCH_REMOTE_QUICK_INPUT_TEMPLATES`
@@ -120,6 +124,8 @@ long-lived port 事件：
 - background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。
 - side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
+- `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
+- `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
 - `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
@@ -136,6 +142,8 @@ long-lived port 事件：
   - 新建端口后按持久化状态恢复。
 - 黑名单确认超时或页面上下文失效：
   - 拒绝本次放行请求，要求 UI 重新获取页面上下文。
+- 同步命令：
+  - `TEST_SYNC_CONNECTION` 或 `SYNC_NOW` 失败时返回显式错误，不允许 background 吞错后伪造成功响应。
 
 ## 7. 数据与状态
 
@@ -169,6 +177,7 @@ long-lived port 事件：
 阶段 4 当前测试现状：
 
 - 已覆盖：one-shot command 契约、sender 校验、`port-bus` 路由、真实 `onConnect` 恢复握手、service worker 重启后的 `RESTORE_LOADING`、发送后的流式端到端闭环。
+- 已覆盖：设置页配置命令、同步连接测试与手动同步命令。
 - 未覆盖：分支级流式协议和对话管理页复用流式订阅。
 
 ## 11. 相关文档

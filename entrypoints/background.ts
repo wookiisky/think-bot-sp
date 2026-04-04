@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /// <reference types="chrome" />
 
 import { streamText } from 'ai';
@@ -20,6 +21,7 @@ import { createConfigCommandHandler, isConfigCommandMessage } from '../src/servi
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
 import { sidebarPortClientMessageSchema, sidebarPortEventSchema } from '../src/services/runtime-messaging/sidebar-contract';
+import { createSyncService } from '../src/services/sync/sync-service';
 
 export default defineBackground(() => {
   const logger = createLogger('background');
@@ -27,6 +29,15 @@ export default defineBackground(() => {
   const configRepository = createConfigRepository(storage);
   const pageRepository = createPageRepository(storage);
   const conversationRepository = createConversationRepository(storage);
+  const syncService = createSyncService({
+    getTestProvider: () =>
+      (globalThis as typeof globalThis & {
+        __THINK_BOT_TEST_SYNC_PROVIDER__?: {
+          testConnection: (sync: unknown) => Promise<{ provider: 'gist' | 'webdav'; ok: true; message: string }>;
+          syncNow: (config: unknown) => Promise<{ provider: 'gist' | 'webdav'; lastSyncAt: number; snapshotBytes: number }>;
+        };
+      }).__THINK_BOT_TEST_SYNC_PROVIDER__ ?? null,
+  });
   const portBus = createPortBus();
   const chatDispatchService = createChatDispatchService({
     configRepository,
@@ -65,6 +76,7 @@ export default defineBackground(() => {
   const handleConfigCommand = createConfigCommandHandler({
     configRepository,
     pageRepository,
+    syncService,
   });
   const bypassStore = new Map<string, number>();
   /** 生成当前标签页的黑名单放行 key。 */

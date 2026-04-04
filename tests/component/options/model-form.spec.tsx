@@ -111,4 +111,50 @@ describe('ModelForm', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ supportsImages: true }));
     expect(screen.getByRole('checkbox', { name: '支持图片输入' })).toBeChecked();
   });
+
+  it('支持编辑名称、模型标识、启用状态和采样参数', async () => {
+    const onChange = vi.fn();
+
+    const Harness = () => {
+      const [model, setModel] = useState(createModel());
+      return (
+        <ModelForm
+          model={model}
+          onChange={(nextModel) => {
+            onChange(nextModel);
+            setModel(nextModel);
+          }}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    const user = userEvent.setup();
+    await user.clear(screen.getByLabelText('模型名称'));
+    await user.type(screen.getByLabelText('模型名称'), '研究模型');
+    await user.clear(screen.getByLabelText('Model'));
+    await user.type(screen.getByLabelText('Model'), 'gpt-5.4');
+    await user.click(screen.getByRole('checkbox', { name: '启用模型' }));
+    await user.clear(screen.getByLabelText('Temperature'));
+    await user.type(screen.getByLabelText('Temperature'), '0.7');
+    await user.clear(screen.getByLabelText('Thinking Budget'));
+    await user.type(screen.getByLabelText('Thinking Budget'), '2048');
+    await user.clear(screen.getByLabelText('Max Output Tokens'));
+    await user.type(screen.getByLabelText('Max Output Tokens'), '4096');
+    await user.clear(screen.getByLabelText('Tools'));
+    await user.type(screen.getByLabelText('Tools'), 'url-context, search');
+
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        name: '研究模型',
+        model: 'gpt-5.4',
+        enabled: false,
+        temperature: 0.7,
+        thinkingBudget: 2048,
+        maxOutputTokens: 4096,
+        tools: ['url-context', 'search'],
+      }),
+    );
+  });
 });

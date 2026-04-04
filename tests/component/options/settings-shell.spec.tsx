@@ -143,7 +143,7 @@ describe('SettingsShell', () => {
     expect(mocks.saveConfig).toHaveBeenCalledWith(config);
   });
 
-  it('保存期间禁用保存按钮和语言选择器', async () => {
+  it('保存期间禁用基础设置可见控件和顶部动作', async () => {
     const config = createDefaultConfig({
       models: [
         {
@@ -197,9 +197,9 @@ describe('SettingsShell', () => {
 
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: '语言' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: '模型' })).toBeDisabled();
-    expect(screen.getByRole('combobox', { name: 'Provider' })).toBeDisabled();
-    expect(screen.getByLabelText('API Key')).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '主题' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: '默认模型' })).toBeDisabled();
+    expect(screen.getByLabelText('System Prompt')).toBeDisabled();
     expect(screen.getByRole('button', { name: '导入配置' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '导出配置' })).toBeDisabled();
     expect(screen.getByRole('button', { name: '清理本地缓存' })).toBeDisabled();
@@ -258,6 +258,7 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('tab', { name: '标签页' }));
 
     expect(screen.queryByText('删除项')).not.toBeInTheDocument();
     expect(screen.getByText('翻译')).toBeInTheDocument();
@@ -361,6 +362,28 @@ describe('SettingsShell', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('导出失败');
   });
 
+  it('导入失败后显示导入错误文案并保留当前页面状态', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('{"version":"0.0.0"}');
+    const config = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        systemPrompt: '保留当前草稿',
+      },
+    });
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.importConfig.mockRejectedValueOnce(new Error('导入失败'));
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('button', { name: '导入配置' }));
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('alert')).toHaveTextContent('导入失败');
+    expect(screen.getByLabelText('System Prompt')).toHaveValue('保留当前草稿');
+  });
+
   it('切换模型后 API Key 立即恢复掩码', async () => {
     const config = createDefaultConfig({
       basic: {
@@ -410,9 +433,10 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('tab', { name: '语言模型' }));
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
-    await selectOption('模型', '模型二');
+    fireEvent.click(screen.getByRole('button', { name: /模型二/ }));
 
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
   });
@@ -433,6 +457,50 @@ describe('SettingsShell', () => {
     });
     expect(await screen.findByText('0 项')).toBeInTheDocument();
     expect(screen.getByText('0 B')).toBeInTheDocument();
+  });
+
+  it('清理缓存失败后显示错误并保留当前缓存统计', async () => {
+    const config = createDefaultConfig();
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+    mocks.clearLocalCache.mockRejectedValueOnce(new Error('缓存清理失败'));
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('button', { name: '清理本地缓存' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('缓存清理失败');
+    expect(screen.getByText('3 项')).toBeInTheDocument();
+    expect(screen.getByText('128 B')).toBeInTheDocument();
+  });
+
+  it('快速重复点击保存时只触发一次保存请求', async () => {
+    const config = createDefaultConfig();
+    let resolveSave: (() => void) | null = null;
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.saveConfig.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSave = () => resolve(config);
+        }),
+    );
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    const user = userEvent.setup();
+    const saveButton = screen.getByRole('button', { name: '保存' });
+    await user.click(saveButton);
+    await user.click(saveButton);
+
+    expect(mocks.saveConfig).toHaveBeenCalledTimes(1);
+
+    resolveSave?.();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '保存' })).not.toBeDisabled();
+    });
   });
 
   it('点击恢复默认后用后台默认配置刷新页面', async () => {

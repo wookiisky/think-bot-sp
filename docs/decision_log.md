@@ -1,5 +1,32 @@
 # 决策记录
 
+## 2026-04-04：阶段 2 同步先落“配置快照手动推送”最小闭环
+
+- 背景：
+  - 设置页已经具备本地配置闭环，但“云同步”一直停留在导航占位，文档和代码口径开始分叉。
+  - MV3 service worker 生命周期短，测试环境下的同步 provider 注入如果在启动时固化，E2E 很容易误走真实网络。
+- 决策：
+  - 阶段 2 只交付配置级别的手动同步闭环：设置页可编辑 provider 配置、测试连接、手动同步并回写 `lastSyncAt`。
+  - 当前同步快照只包含 `schemaVersion / exportedAt / config`，不拉取远端，不做页面、会话、墓碑和冲突合并。
+  - background 中测试 provider 必须按命令调用时动态解析，不能在 service worker 启动时拍平为一次性快照。
+- 原因：
+  - 先把用户真正能操作的最小同步能力跑通，避免继续维持占位 UI。
+  - 控制实现范围，避免在设置页阶段把同步扩展成历史数据合并工程。
+  - 保证浏览器自动化测试稳定，不让 MV3 worker 生命周期反向污染测试结果。
+- 影响范围：
+  - `Workspace/settings.md`
+  - `Services/sync.md`
+  - `Services/runtime-messaging.md`
+  - `test/settings-core.md`
+  - `test/sync-and-delete.md`
+- 放弃方案：
+  - 在当前阶段直接实现全量快照拉取、对象级合并和删除传播。
+  - 把测试 provider 绑定在 service worker 启动时的全局变量快照上。
+- 后续同步：
+  - `prd_docs/product-functional-spec.md`
+  - `docs/index.md`
+  - `app.md`
+
 ## 2026-04-01：debug 日志采用运行时结构化 console，不做持久化
 
 - 背景：
@@ -238,23 +265,3 @@
 - 放弃方案：
   - 在打开 side panel 后立即开始提取，再由 UI 补弹黑名单确认层。
   - 自动触发直接复用页面级 `includePageContent` 持久状态改写。
-
-## 2026-04-02：阶段2只做本地同步字段持久化，不做远端同步执行
-
-- 背景：
-  - 阶段2已经补齐设置页、配置仓储、页面仓储和相关回归测试。
-  - 现在需要先稳定本地闭环，再把远端同步执行拆到后续阶段单独实现。
-- 决策：
-  - 阶段2只负责把设置页里的同步相关字段写入本地配置，不交付“保存并同步”入口和连接测试执行链路。
-  - 不在当前阶段执行真正的远端同步，不把 Gist/WebDAV 的落盘过程视为已完成能力。
-- 原因：
-  - 先保证本地配置保存、刷新、导入导出和缓存统计这一条最小闭环稳定。
-  - 远端同步执行依赖额外的失败重试、凭证处理和冲突控制，应该单独评估和测试。
-- 影响范围：
-  - `Workspace/settings.md`
-  - `dao/config-repository.md`
-  - `dao/page-repository.md`
-  - `test/settings-core.md`
-- 放弃方案：
-  - 在阶段2同时完成远端同步执行。
-  - 把同步执行和本地保存混成同一个不可拆分流程。

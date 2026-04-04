@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Separator } from '../../components/ui/separator';
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { isModelConfigComplete } from '../../domain/config/config-schema';
+import { getEnabledCompleteModels, isModelConfigComplete } from '../../domain/config/config-schema';
 import { createLocaleService } from '../../services/i18n/locale-service';
 import { createLogger } from '../../services/logger/logger';
 import { Icon } from '../../ui/icon';
-import { ModelForm } from './model-form';
+import { BasicSettingsPanel } from './basic-settings-panel';
+import { CloudSyncPanel } from './cloud-sync-panel';
+import { LanguageModelsPanel } from './language-models-panel';
 import { QuickInputsPanel } from './quick-inputs-panel';
 import { settingsApi } from './settings-api';
+import { SettingsActions } from './settings-actions';
+import { SettingsNav } from './settings-nav';
+import { hasUnsavedChanges, type SettingsSection, type SettingsViewError } from './settings-shell-state';
 
 type CacheStats = {
   /** 本地缓存条目数。 */
@@ -21,46 +22,15 @@ type CacheStats = {
   bytes: number;
 };
 
-type QuickInputItem = {
-  /** 快捷输入 id。 */
-  id: string;
-  /** 快捷输入名称。 */
-  name: string;
-  /** 快捷输入提示词。 */
-  prompt: string;
-  /** 排序序号。 */
-  order: number;
-  /** 软删除时间。 */
-  deletedAt: number | null;
+type SyncFeedback = {
+  /** 反馈语气。 */
+  tone: 'success' | 'error';
+  /** 展示给用户的反馈内容。 */
+  message: string;
 };
 
 const logger = createLogger('settings-shell');
 const localeService = createLocaleService();
-
-const navigationItems = [
-  { key: 'settings.models', icon: 'settings' as const },
-  { key: 'settings.promptTabs', icon: 'menu' as const },
-  { key: 'settings.blacklist', icon: 'menu' as const },
-  { key: 'settings.sync', icon: 'cache' as const },
-  { key: 'settings.cache', icon: 'cache' as const },
-];
-
-/** 只保留有效快捷输入，并按顺序展示。 */
-const normalizeQuickInputs = (items: ExtensionConfig['quickInputs']): QuickInputItem[] =>
-  [...items]
-    .filter((item) => item.deletedAt === null)
-    .sort((left, right) => left.order - right.order)
-    .map((item) => ({
-      id: item.id,
-      name: item.name,
-      prompt: item.prompt,
-      order: item.order,
-      deletedAt: item.deletedAt,
-    }));
-
-/** 取出当前默认可编辑的模型。 */
-const resolveActiveModel = (config: ExtensionConfig, selectedModelId: string | null) =>
-  config.models.find((item) => item.id === (selectedModelId ?? config.basic.defaultModelId)) ?? config.models[0] ?? null;
 
 /** 把导出的配置内容下载为本地 json 文件。 */
 const downloadExportedConfig = (payload: string) => {
@@ -79,14 +49,19 @@ const downloadExportedConfig = (payload: string) => {
   return filename;
 };
 
-/** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入预览。 */
+/** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入编辑。 */
 export const SettingsShell = () => {
-  const [config, setConfig] = useState<ExtensionConfig | null>(null);
+  const [savedConfig, setSavedConfig] = useState<ExtensionConfig | null>(null);
+  const [draftConfig, setDraftConfig] = useState<ExtensionConfig | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [localeResources, setLocaleResources] = useState<Awaited<ReturnType<typeof localeService.loadResources>> | null>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection>('basic');
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<{ title: string; message: string } | null>(null);
+  const [testingSync, setTestingSync] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<SettingsViewError | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -105,7 +80,8 @@ export const SettingsShell = () => {
           return;
         }
 
-        setConfig(nextConfig);
+        setSavedConfig(nextConfig);
+        setDraftConfig(nextConfig);
         setCacheStats(nextCacheStats);
         setLocaleResources(nextLocaleResources);
         setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
@@ -131,7 +107,7 @@ export const SettingsShell = () => {
     };
   }, []);
 
-  if (!config || !localeResources || !cacheStats) {
+  if (!savedConfig || !draftConfig || !localeResources || !cacheStats) {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)] px-6 py-8">
         <p className="m-0 text-sm text-foreground">{error ? `${error.title}：${error.message}` : '正在加载设置页…'}</p>
@@ -139,26 +115,17 @@ export const SettingsShell = () => {
     );
   }
 
-  const language = config.basic.language;
+  const language = draftConfig.basic.language;
   const t = (key: string) => localeResources.t(key, language);
-  const activeModel = resolveActiveModel(config, selectedModelId);
+  const dirty = hasUnsavedChanges(savedConfig, draftConfig);
+  const enabledModels = getEnabledCompleteModels(draftConfig);
 
-  const updateConfig = (next: ExtensionConfig) => {
-    setConfig(next);
+  const updateDraftConfig = (next: ExtensionConfig) => {
+    setDraftConfig(next);
   };
 
   const setOperationError = (title: string, message: string) => {
     setError({ title, message });
-  };
-
-  const handleLanguageChange = (nextLanguage: ExtensionConfig['basic']['language']) => {
-    updateConfig({
-      ...config,
-      basic: {
-        ...config.basic,
-        language: nextLanguage,
-      },
-    });
   };
 
   const refreshCacheStats = async () => {
@@ -174,12 +141,14 @@ export const SettingsShell = () => {
         return;
       }
 
-      const nextConfig = await settingsApi.importConfig(payload);
-      updateConfig(nextConfig);
-      setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
-      await refreshCacheStats();
+        const nextConfig = await settingsApi.importConfig(payload);
+        setSavedConfig(nextConfig);
+        setDraftConfig(nextConfig);
+        setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
+        await refreshCacheStats();
       logger.info('导入配置成功');
       setError(null);
+      setSyncFeedback(null);
     } catch (importError) {
       const message = importError instanceof Error ? importError.message : 'unknown error';
       logger.error('导入配置失败', { message });
@@ -214,10 +183,12 @@ export const SettingsShell = () => {
   };
 
   const handleSave = async () => {
-    const defaultModel = config.basic.defaultModelId ? config.models.find((item) => item.id === config.basic.defaultModelId) : null;
-    if (config.basic.defaultModelId && !defaultModel) {
+    const defaultModel = draftConfig.basic.defaultModelId
+      ? draftConfig.models.find((item) => item.id === draftConfig.basic.defaultModelId)
+      : null;
+    if (draftConfig.basic.defaultModelId && !defaultModel) {
       setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型不存在，阻止保存', { defaultModelId: config.basic.defaultModelId });
+      logger.warn('默认模型不存在，阻止保存', { defaultModelId: draftConfig.basic.defaultModelId });
       return;
     }
 
@@ -229,8 +200,9 @@ export const SettingsShell = () => {
 
     setSaving(true);
     try {
-      const nextConfig = await settingsApi.saveConfig(config);
-      updateConfig(nextConfig);
+      const nextConfig = await settingsApi.saveConfig(draftConfig);
+      setSavedConfig(nextConfig);
+      setDraftConfig(nextConfig);
       logger.info('保存设置成功', { language: nextConfig.basic.language });
       setError(null);
     } catch (saveError) {
@@ -246,7 +218,8 @@ export const SettingsShell = () => {
     setSaving(true);
     try {
       const nextConfig = await settingsApi.resetConfig();
-      updateConfig(nextConfig);
+      setSavedConfig(nextConfig);
+      setDraftConfig(nextConfig);
       setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
       logger.info('恢复默认配置成功', {
         language: nextConfig.basic.language,
@@ -262,15 +235,59 @@ export const SettingsShell = () => {
     }
   };
 
+  const handleTestSyncConnection = async () => {
+    setTestingSync(true);
+    try {
+      const result = await settingsApi.testSyncConnection(draftConfig.sync);
+      setSyncFeedback({
+        tone: 'success',
+        message: result.message,
+      });
+      setError(null);
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : 'unknown error';
+      setSyncFeedback({
+        tone: 'error',
+        message,
+      });
+      setOperationError('同步连接测试失败', message);
+    } finally {
+      setTestingSync(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setSyncing(true);
+    try {
+      const response = await settingsApi.syncNow(draftConfig);
+      setSavedConfig(response.config);
+      setDraftConfig(response.config);
+      setSyncFeedback({
+        tone: 'success',
+        message: `已同步 ${response.result.snapshotBytes} B`,
+      });
+      setError(null);
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : 'unknown error';
+      setSyncFeedback({
+        tone: 'error',
+        message,
+      });
+      setOperationError('同步失败', message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <main
       data-testid="settings-shell"
       data-layout="tab-page"
-      data-theme={config.basic.theme}
+      data-theme={draftConfig.basic.theme}
       className={cn(
         'min-h-screen px-6 py-8 text-foreground',
         'bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)]',
-        config.basic.theme === 'dark' && 'dark',
+        draftConfig.basic.theme === 'dark' && 'dark',
       )}
     >
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -286,168 +303,92 @@ export const SettingsShell = () => {
               </div>
             </div>
 
-            <div data-testid="settings-shell-actions" className="flex flex-wrap justify-end gap-2">
-              <Button type="button" onClick={handleSave} disabled={saving}>
-                <Icon name="save" size={14} />
-                {t('settings.save')}
-              </Button>
-              <Button type="button" variant="outline" onClick={handleReset} disabled={saving}>
-                {t('settings.reset')}
-              </Button>
-              <Button type="button" variant="outline" onClick={handleImport} disabled={saving}>
-                {t('settings.import')}
-              </Button>
-              <Button type="button" variant="outline" onClick={handleExport} disabled={saving}>
-                {t('settings.export')}
-              </Button>
-            </div>
+            <SettingsActions
+              hasUnsavedChanges={dirty}
+              disabled={saving}
+              onSave={handleSave}
+              onReset={handleReset}
+              onImport={handleImport}
+              onExport={handleExport}
+              t={t}
+            />
           </div>
-
-          <nav aria-label="设置导航" data-testid="settings-shell-nav" className="flex flex-wrap gap-2">
-            {navigationItems.map((item) => (
-              <span key={item.key} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/50 px-3 py-1.5 text-xs/relaxed">
-                <Icon name={item.icon} size={14} />
-                {t(item.key)}
-              </span>
-            ))}
-          </nav>
         </header>
 
-        <section className="grid gap-6">
+        <section className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+          <SettingsNav activeSection={activeSection} onSectionChange={setActiveSection} t={t} />
+
           {error ? (
-            <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error.title}：{error.message}
+            <section className="lg:col-start-2">
+              <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error.title}：{error.message}
+              </section>
             </section>
           ) : null}
 
-          <section className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
-            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Icon name="settings" size={14} />
-                  {t('settings.models')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 px-5 py-5">
-                {activeModel ? (
-                  <>
-                    {config.models.length > 1 ? (
-                      <label className="grid gap-2">
-                        <span className="text-sm font-medium">模型</span>
-                        <Select
-                          value={activeModel.id}
-                          disabled={saving}
-                          onValueChange={setSelectedModelId}
-                        >
-                          <SelectTrigger aria-label="模型" className="w-full">
-                            <SelectValue placeholder="选择模型" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {config.models.map((item) => (
-                              <SelectItem key={item.id} value={item.id}>
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </label>
-                    ) : null}
+          <section className="grid gap-6 lg:col-start-2">
+            {activeSection === 'basic' ? (
+              <BasicSettingsPanel
+                config={draftConfig}
+                defaultModels={enabledModels}
+                cacheStats={cacheStats}
+                disabled={saving}
+                onChange={updateDraftConfig}
+                onClearCache={handleClearCache}
+                t={t}
+              />
+            ) : null}
 
-                    <ModelForm
-                      key={activeModel.id}
-                      model={activeModel}
-                      disabled={saving}
-                      onChange={(nextModel) => {
-                        updateConfig({
-                          ...config,
-                          models: config.models.map((item) => (item.id === nextModel.id ? nextModel : item)),
-                        });
-                      }}
-                    />
-                  </>
-                ) : (
-                  <p className="m-0 text-sm text-muted-foreground">暂无模型配置</p>
-                )}
-              </CardContent>
-            </Card>
+            {activeSection === 'promptTabs' ? (
+              <section
+                id="settings-panel-promptTabs"
+                role="tabpanel"
+                aria-labelledby="settings-tab-promptTabs"
+                className="grid gap-6"
+              >
+                <QuickInputsPanel config={draftConfig} disabled={saving} onChange={updateDraftConfig} t={t} />
+              </section>
+            ) : null}
 
-            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                <CardTitle className="text-base">{t('settings.language')}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 px-5 py-5">
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium">{t('settings.language')}</span>
-                  <Select
-                    value={language}
-                    disabled={saving}
-                    onValueChange={(value) => handleLanguageChange(value as ExtensionConfig['basic']['language'])}
-                  >
-                    <SelectTrigger aria-label={t('settings.language')} className="w-full">
-                      <SelectValue placeholder={t('settings.language')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="zh-CN">中文</SelectItem>
-                      <SelectItem value="en">English</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </label>
+            {activeSection === 'models' ? (
+              <LanguageModelsPanel
+                config={draftConfig}
+                selectedModelId={selectedModelId}
+                disabled={saving}
+                onSelectModel={setSelectedModelId}
+                onChange={updateDraftConfig}
+                t={t}
+              />
+            ) : null}
 
-                <label className="grid gap-2">
-                  <span className="text-sm font-medium">{t('settings.theme')}</span>
-                  <Select
-                    value={config.basic.theme}
-                    disabled={saving}
-                    onValueChange={(value) =>
-                      updateConfig({
-                        ...config,
-                        basic: {
-                          ...config.basic,
-                          theme: value as ExtensionConfig['basic']['theme'],
-                        },
-                      })
-                    }
-                  >
-                    <SelectTrigger aria-label={t('settings.theme')} className="w-full">
-                      <SelectValue placeholder={t('settings.theme')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="system">System</SelectItem>
-                      <SelectItem value="light">Light</SelectItem>
-                      <SelectItem value="dark">Dark</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </label>
+            {activeSection === 'sync' ? (
+              <CloudSyncPanel
+                config={draftConfig}
+                disabled={saving}
+                testing={testingSync}
+                syncing={syncing}
+                feedback={syncFeedback}
+                onChange={updateDraftConfig}
+                onTestConnection={handleTestSyncConnection}
+                onSyncNow={handleSyncNow}
+                t={t}
+              />
+            ) : null}
 
-                <p className="m-0 text-sm leading-6 text-muted-foreground">切换后会立即预览标题文案和设置页主题。</p>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-              <CardHeader className="gap-3 border-b border-border/70 px-5 py-4">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Icon name="cache" size={14} />
-                  {t('settings.cache')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 px-5 py-5">
-                <div className="flex flex-wrap gap-3 text-sm text-foreground">
-                  <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
-                  <span data-testid="cache-bytes">{formatBytes(cacheStats.bytes)}</span>
-                </div>
-                <Button type="button" variant="outline" onClick={handleClearCache} disabled={saving}>
-                  清理本地缓存
-                </Button>
-              </CardContent>
-            </Card>
+            {activeSection === 'blacklist' ? (
+              <section
+                id="settings-panel-blacklist"
+                role="tabpanel"
+                aria-labelledby="settings-tab-blacklist"
+                className="rounded-3xl border border-border/70 bg-card px-5 py-5 ring-1 ring-foreground/8"
+              >
+                <h2 className="m-0 text-base font-semibold">{t('settings.blacklistSettings')}</h2>
+                <p className="mb-0 mt-2 text-sm text-muted-foreground">{t('settings.blacklistPlaceholderDescription')}</p>
+              </section>
+            ) : null}
           </section>
-
-          <Separator />
-          <QuickInputsPanel quickInputs={normalizeQuickInputs(config.quickInputs)} />
         </section>
       </section>
     </main>
   );
 };
-
-const formatBytes = (bytes: number) => `${bytes} B`;

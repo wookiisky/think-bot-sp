@@ -1,4 +1,6 @@
 settings.title: 设置
+settings.nav: 设置导航
+settings.basic: 基础设置
 settings.language: 语言
 settings.theme: 主题
 settings.save: 保存
@@ -10,3 +12,52 @@ settings.promptTabs: 标签页
 settings.blacklist: 黑名单
 settings.sync: 同步
 settings.cache: 本地缓存
+settings.languageModels: 语言模型
+settings.syncPanel: 云同步
+settings.syncDescription: 配置远端提供方，先验证连接，再手动触发一次同步。
+settings.syncEnabled: 启用同步
+settings.syncProvider: 同步提供方
+settings.syncTest: 测试连接
+settings.syncNow: 立即同步
+settings.syncLastSyncedAt: 最近同步时间
+settings.syncNever: 从未同步
+settings.syncProviderNone: 不启用
+settings.syncProviderGist: Gist
+settings.syncProviderWebdav: WebDAV
+settings.gistToken: Gist Token
+settings.gistId: Gist ID
+settings.webdavUrl: WebDAV URL
+settings.webdavUsername: WebDAV 用户名
+settings.webdavPassword: WebDAV 密码
+settings.blacklistSettings: 黑名单设置
+settings.unsavedChanges: 有未保存更改
+settings.basicDescription: 管理主题、语言、默认模型和提取默认行为。
+settings.defaultModel: 默认模型
+settings.noDefaultModel: 不设置默认模型
+settings.extractionMethod: 默认提取方式
+settings.filterCot: 过滤 COT 内容
+settings.includePageContentByDefault: 默认附带页面正文
+settings.previewHint: 即时预览
+settings.previewDescription: 切换语言和主题后立即预览。
+settings.cacheDescription: 查看页面缓存占用并执行安全清理。
+settings.clearCache: 清理本地缓存
+settings.modelsDescription: 先提供列表摘要与单项编辑，后续再补齐更多管理动作。
+settings.enabled: 已启用
+settings.disabled: 已停用
+settings.noModels: 暂无模型配置
+settings.addModel: 新增模型
+settings.copyModel: 复制模型
+settings.deleteModel: 删除模型
+settings.moveUp: 上移
+settings.moveDown: 下移
+settings.quickInputsDescription: 管理快捷输入模板。
+settings.noQuickInputs: 暂无快捷输入
+settings.addQuickInput: 新增快捷输入
+settings.deleteQuickInput: 删除快捷输入
+settings.quickInputName: 快捷输入名称
+settings.quickInputPrompt: 快捷输入提示词
+settings.quickInputAutoTrigger: 自动触发
+settings.quickInputModel: 专属模型
+settings.quickInputNoModel: 不指定模型
+settings.quickInputModelMissing: 引用的模型已失效，建议重新选择。
+settings.blacklistPlaceholderDescription: 黑名单编辑不在本轮范围内，这里先保留栏目位置。

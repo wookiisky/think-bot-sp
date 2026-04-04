@@ -1,4 +1,6 @@
 settings.title: Settings
+settings.nav: Settings Navigation
+settings.basic: Basic Settings
 settings.language: Language
 settings.theme: Theme
 settings.save: Save
@@ -10,3 +12,52 @@ settings.promptTabs: Tabs
 settings.blacklist: Blacklist
 settings.sync: Sync
 settings.cache: Local Cache
+settings.languageModels: Language Models
+settings.syncPanel: Cloud Sync
+settings.syncDescription: Configure the remote provider, verify the connection, then trigger a manual sync.
+settings.syncEnabled: Enable Sync
+settings.syncProvider: Sync Provider
+settings.syncTest: Test Connection
+settings.syncNow: Sync Now
+settings.syncLastSyncedAt: Last Synced At
+settings.syncNever: Never Synced
+settings.syncProviderNone: Disabled
+settings.syncProviderGist: Gist
+settings.syncProviderWebdav: WebDAV
+settings.gistToken: Gist Token
+settings.gistId: Gist ID
+settings.webdavUrl: WebDAV URL
+settings.webdavUsername: WebDAV Username
+settings.webdavPassword: WebDAV Password
+settings.blacklistSettings: Blacklist Settings
+settings.unsavedChanges: Unsaved changes
+settings.basicDescription: Manage theme, language, default model, and extraction defaults.
+settings.defaultModel: Default Model
+settings.noDefaultModel: No Default Model
+settings.extractionMethod: Default Extraction Method
+settings.filterCot: Filter COT Content
+settings.includePageContentByDefault: Include Page Content By Default
+settings.previewHint: Instant Preview
+settings.previewDescription: Language and theme changes apply immediately.
+settings.cacheDescription: Review local cache usage and clear reclaimable data.
+settings.clearCache: Clear Local Cache
+settings.modelsDescription: This stage keeps list summary and single-item editing only.
+settings.enabled: Enabled
+settings.disabled: Disabled
+settings.noModels: No model configured
+settings.addModel: Add Model
+settings.copyModel: Copy Model
+settings.deleteModel: Delete Model
+settings.moveUp: Move Up
+settings.moveDown: Move Down
+settings.quickInputsDescription: Manage quick input templates.
+settings.noQuickInputs: No quick inputs configured
+settings.addQuickInput: Add Quick Input
+settings.deleteQuickInput: Delete Quick Input
+settings.quickInputName: Quick Input Name
+settings.quickInputPrompt: Quick Input Prompt
+settings.quickInputAutoTrigger: Auto Trigger
+settings.quickInputModel: Dedicated Model
+settings.quickInputNoModel: No Dedicated Model
+settings.quickInputModelMissing: The referenced model is unavailable. Please choose another one.
+settings.blacklistPlaceholderDescription: Blacklist editing is out of scope for this round. The section remains reserved.

@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { z } from 'zod';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
@@ -9,6 +10,8 @@ type SupportedCommandType =
   | 'RESET_CONFIG'
   | 'IMPORT_CONFIG'
   | 'EXPORT_CONFIG'
+  | 'TEST_SYNC_CONNECTION'
+  | 'SYNC_NOW'
   | 'GET_LOCAL_CACHE_STATS'
   | 'CLEAR_LOCAL_CACHE';
 
@@ -18,6 +21,8 @@ export const supportedCommandTypes = new Set<SupportedCommandType>([
   'RESET_CONFIG',
   'IMPORT_CONFIG',
   'EXPORT_CONFIG',
+  'TEST_SYNC_CONNECTION',
+  'SYNC_NOW',
   'GET_LOCAL_CACHE_STATS',
   'CLEAR_LOCAL_CACHE',
 ] as const);
@@ -44,6 +49,16 @@ const importConfigCommandSchema = z.object({
   payload: z.string().min(1),
 });
 
+const testSyncConnectionCommandSchema = z.object({
+  type: z.literal('TEST_SYNC_CONNECTION'),
+  sync: extensionConfigSchema.shape.sync,
+});
+
+const syncNowCommandSchema = z.object({
+  type: z.literal('SYNC_NOW'),
+  config: extensionConfigSchema,
+});
+
 type ConfigRepositories = {
   /** 读取当前配置。 */
   getConfig: () => Promise<unknown>;
@@ -55,6 +70,8 @@ type ConfigRepositories = {
   importConfig: (payload: string) => Promise<unknown>;
   /** 导出当前配置。 */
   exportConfig: () => Promise<string>;
+  /** 写回最近同步时间。 */
+  updateSyncMetadata: (lastSyncAt: number) => Promise<unknown>;
 };
 
 type PageRepositories = {
@@ -64,13 +81,22 @@ type PageRepositories = {
   clearCache: () => Promise<{ removedKeys: number }>;
 };
 
+type SyncService = {
+  /** 测试同步连接。 */
+  testConnection: (sync: ExtensionConfig['sync']) => Promise<unknown>;
+  /** 执行同步。 */
+  syncNow: (config: ExtensionConfig) => Promise<{ provider: string; lastSyncAt: number; snapshotBytes: number }>;
+};
+
 /** 创建配置相关的 runtime command 处理器。 */
 export const createConfigCommandHandler = ({
   configRepository,
   pageRepository,
+  syncService,
 }: {
   configRepository: ConfigRepositories;
   pageRepository: PageRepositories;
+  syncService: SyncService;
 }) => {
   return async (input: unknown) => {
     const parsedMessage = messageTypeSchema.safeParse(input);
@@ -109,6 +135,23 @@ export const createConfigCommandHandler = ({
           type: 'EXPORT_CONFIG_SUCCESS',
           payload: await configRepository.exportConfig(),
         };
+      case 'TEST_SYNC_CONNECTION': {
+        const command = testSyncConnectionCommandSchema.parse(input);
+        return {
+          type: 'TEST_SYNC_CONNECTION_SUCCESS',
+          result: await syncService.testConnection(command.sync),
+        };
+      }
+      case 'SYNC_NOW': {
+        const command = syncNowCommandSchema.parse(input);
+        const savedConfig = (await configRepository.saveConfig(command.config)) as ExtensionConfig;
+        const result = await syncService.syncNow(savedConfig);
+        return {
+          type: 'SYNC_NOW_SUCCESS',
+          config: await configRepository.updateSyncMetadata(result.lastSyncAt),
+          result,
+        };
+      }
       case 'GET_LOCAL_CACHE_STATS':
         return {
           type: 'GET_LOCAL_CACHE_STATS_SUCCESS',

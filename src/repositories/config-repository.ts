@@ -57,6 +57,21 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
       return next;
     },
 
+    /** 写回最近同步时间。 */
+    async updateSyncMetadata(lastSyncAt: number) {
+      const current = await readConfig();
+      const next = extensionConfigSchema.parse({
+        ...current,
+        updatedAt: Date.now(),
+        sync: {
+          ...current.sync,
+          lastSyncAt,
+        },
+      });
+      await storage.set({ [CONFIG_STORAGE_KEY]: next });
+      return next;
+    },
+
     /** 获取启用且完整的模型。 */
     async getEnabledCompleteModels() {
       return getEnabledCompleteModels(await readConfig());

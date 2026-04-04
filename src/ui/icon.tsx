@@ -1,6 +1,6 @@
 import '../../assets/styles/material-symbols.css';
 
-type IconName = 'settings' | 'language' | 'save' | 'cache' | 'menu' | 'chevron-right';
+export type IconName = 'settings' | 'language' | 'save' | 'cache' | 'menu' | 'chevron-right';
 
 type IconProps = {
   /** 图标名称。 */
