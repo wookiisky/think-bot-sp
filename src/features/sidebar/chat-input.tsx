@@ -1,4 +1,10 @@
 import { useEffect, useState } from 'react';
+import { ArrowUpIcon, DownloadIcon, EraserIcon, ImagePlusIcon, LoaderCircleIcon, SquareIcon, Trash2Icon } from 'lucide-react';
+
+import { cn } from '../../lib/utils';
+import { Button, buttonVariants } from '../../components/ui/button';
+import { Textarea } from '../../components/ui/textarea';
+import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 
 /** 输入区最小高度。 */
 const MIN_COMPOSER_HEIGHT = 120;
@@ -32,6 +38,8 @@ type ChatInputProps = {
     /** 是否支持图片输入。 */
     supportsImages: boolean;
   }>;
+  /** 文案翻译函数。 */
+  t: WorkspaceTranslator;
   /** 选择模型。 */
   onSelectModel(modelId: string): void;
   /** 更新文本。 */
@@ -59,6 +67,7 @@ export const ChatInput = ({
   includePageContent,
   selectedModelId,
   models,
+  t,
   onSelectModel,
   onTextChange,
   onImagesChange,
@@ -100,14 +109,14 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section className="border-t border-border px-4 py-3">
+    <section className="border-t border-border bg-card/70 px-4 py-3 backdrop-blur-sm">
       <div className="mb-3 flex justify-center">
         <div
           role="separator"
           aria-orientation="horizontal"
-          aria-label="调整输入区高度"
+          aria-label={t('workspace.resizeComposer')}
           data-testid="chat-input-resize-handle"
-          className="h-2 w-16 cursor-row-resize rounded-full bg-border"
+          className="h-2 w-16 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setResizeSession({
               startY: event.clientY,
@@ -116,122 +125,174 @@ export const ChatInput = ({
           }}
         />
       </div>
-      <div className="mb-3 flex items-center gap-3">
-        <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-          <span>模型</span>
-          <select
-            aria-label="选择模型"
-            className="rounded-md border border-border bg-background px-3 py-2"
-            disabled={disabled || models.length === 0}
-            value={selectedModelId}
-            onChange={(event) => onSelectModel(event.target.value)}
-          >
-            {models.length === 0 ? <option value="">暂无可用模型</option> : null}
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 pt-6 text-sm">
-          <input
-            aria-label="包含页面内容"
-            type="checkbox"
-            checked={includePageContent}
-            onChange={(event) => onIncludePageContentChange(event.target.checked)}
-          />
-          <span>包含页面内容</span>
-        </label>
-      </div>
 
-      <textarea
-        aria-label="聊天输入"
-        className="w-full rounded-md border border-border bg-background p-3"
-        value={text}
-        disabled={disabled}
-        style={{ height: `${composerHeight}px` }}
-        onChange={(event) => onTextChange(event.target.value)}
-      />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('workspace.model')}</span>
+            <select
+              aria-label={t('workspace.selectModel')}
+              className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              disabled={disabled || models.length === 0}
+              value={selectedModelId}
+              onChange={(event) => onSelectModel(event.target.value)}
+            >
+              {models.length === 0 ? <option value="">{t('workspace.noModels')}</option> : null}
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      {images.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-3">
-          {images.map((image, index) => (
-            <figure key={`${image.slice(0, 32)}:${index}`} className="space-y-2">
-              <img
-                src={image}
-                alt={`已选图片 ${index + 1}`}
-                className="h-20 w-20 rounded-md border border-border object-cover"
-              />
-              <button
-                type="button"
-                aria-label={`移除图片 ${index + 1}`}
-                onClick={() => onImagesChange(images.filter((_, imageIndex) => imageIndex !== index))}
-              >
-                移除
-              </button>
-            </figure>
-          ))}
+          <label className="flex h-7 items-center gap-2 rounded-md border border-input bg-input/20 px-2 text-xs text-muted-foreground">
+            <input
+              aria-label={t('workspace.includePageContent')}
+              type="checkbox"
+              checked={includePageContent}
+              onChange={(event) => onIncludePageContentChange(event.target.checked)}
+            />
+            <span>{t('workspace.includePageContent')}</span>
+          </label>
         </div>
-      ) : null}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <label className="text-sm">
-          <span className="sr-only">添加图片</span>
-          <input
-            aria-label="添加图片"
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={disabled || !supportsImages}
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              if (files.length === 0) {
-                return;
-              }
-              void Promise.all(files.map((file) => fileToDataUrl(file)))
-                .then((dataUrls) => {
-                  onImagesChange([...images, ...dataUrls]);
-                })
-                .finally(() => {
-                  event.currentTarget.value = '';
+        <Textarea
+          aria-label={t('workspace.chatInput')}
+          className="bg-background/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+          value={text}
+          disabled={disabled}
+          style={{ height: `${composerHeight}px` }}
+          onChange={(event) => onTextChange(event.target.value)}
+        />
+
+        {images.length > 0 ? (
+          <div className="flex flex-wrap gap-3">
+            {images.map((image, index) => (
+              <figure
+                key={`${image.slice(0, 32)}:${index}`}
+                className="group relative overflow-hidden rounded-md border border-border bg-background shadow-sm"
+              >
+                <img
+                  src={image}
+                  alt={`${t('workspace.selectedImage')} ${index + 1}`}
+                  className="size-20 object-cover"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon-xs"
+                  aria-label={`${t('workspace.removeImage')} ${index + 1}`}
+                  className="absolute right-1 top-1 opacity-90 shadow-sm"
+                  onClick={() => onImagesChange(images.filter((_, imageIndex) => imageIndex !== index))}
+                >
+                  <Trash2Icon />
+                </Button>
+              </figure>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              aria-disabled={disabled || !supportsImages}
+              className={cn(
+                buttonVariants({ variant: 'outline', size: 'icon-sm' }),
+                'relative cursor-pointer',
+                (disabled || !supportsImages) && 'pointer-events-none opacity-50',
+              )}
+              title={t('workspace.addImage')}
+            >
+              <ImagePlusIcon />
+              <span className="sr-only">{t('workspace.addImage')}</span>
+              <input
+                aria-label={t('workspace.addImage')}
+                type="file"
+                accept="image/*"
+                multiple
+                className="sr-only"
+                disabled={disabled || !supportsImages}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files ?? []);
+                  if (files.length === 0) {
+                    return;
+                  }
+                  void Promise.all(files.map((file) => fileToDataUrl(file)))
+                    .then((dataUrls) => {
+                      onImagesChange([...images, ...dataUrls]);
+                    })
+                    .finally(() => {
+                      event.currentTarget.value = '';
+                    });
+                }}
+              />
+            </label>
+
+            <Button
+              type="button"
+              size="icon-sm"
+              aria-label={t('workspace.send')}
+              title={t('workspace.send')}
+              disabled={isSendDisabled}
+              onClick={() => {
+                if (text.trim().length === 0 && images.length === 0) {
+                  return;
+                }
+                if (!selectedModelId) {
+                  return;
+                }
+
+                void onSend({
+                  text,
+                  images,
+                  modelId: selectedModelId,
+                  includePageContent,
                 });
-            }}
-          />
-        </label>
-        <button
-          type="button"
-          disabled={isSendDisabled}
-          onClick={() => {
-            if (text.trim().length === 0 && images.length === 0) {
-              return;
-            }
-            if (!selectedModelId) {
-              return;
-            }
+              }}
+            >
+              {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
+            </Button>
 
-            void onSend({
-              text,
-              images,
-              modelId: selectedModelId,
-              includePageContent,
-            });
-          }}
-        >
-          发送
-        </button>
-        <button type="button" disabled={!sending} onClick={() => void onStop()}>
-          停止
-        </button>
-        <button type="button" onClick={() => void onClear()}>
-          清空当前标签
-        </button>
-        <button type="button" onClick={() => void onExport()}>
-          导出
-        </button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label={t('workspace.stop')}
+              title={t('workspace.stop')}
+              disabled={!sending}
+              onClick={() => void onStop()}
+            >
+              <SquareIcon />
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('workspace.clearCurrentTab')}
+              title={t('workspace.clearCurrentTab')}
+              onClick={() => void onClear()}
+            >
+              <EraserIcon />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t('workspace.exportConversation')}
+              title={t('workspace.exportConversation')}
+              onClick={() => void onExport()}
+            >
+              <DownloadIcon />
+            </Button>
+          </div>
+        </div>
+
+        {!supportsImages && selectedModelId ? <p className="text-xs text-muted-foreground">{t('workspace.currentModelNoImage')}</p> : null}
       </div>
-
-      {!supportsImages && selectedModelId ? <p className="mt-2 text-xs text-muted-foreground">当前模型不支持图片输入</p> : null}
     </section>
   );
 };

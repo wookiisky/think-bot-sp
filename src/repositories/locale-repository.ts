@@ -20,7 +20,7 @@ export const createLocaleRepository = () => {
 
   return {
     /** 加载语言资源。 */
-    async loadResources() {
+    loadResources() {
       return {
         locales: ['zh-CN', 'en'] as const,
         resources,

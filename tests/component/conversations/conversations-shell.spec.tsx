@@ -171,7 +171,7 @@ describe('ConversationsShell', () => {
     await waitFor(() => expect(api.listPages).toHaveBeenCalledTimes(1));
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Chat' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
   });
 
   it('支持搜索过滤历史页面', async () => {

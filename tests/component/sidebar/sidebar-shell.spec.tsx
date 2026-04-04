@@ -124,7 +124,7 @@ describe('SidebarShell', () => {
 
     await waitFor(() => expect(api.getSidebarBootstrap).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('sidebar-extraction-panel')).toBeVisible();
-    expect(screen.getByRole('tab', { name: 'Chat' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(await screen.findByText('提取内容')).toBeVisible();
   });
 
@@ -259,7 +259,7 @@ describe('SidebarShell', () => {
       tabId: 7,
       pageUrl: 'https://example.com/article',
     });
-    expect(screen.getByText('还没有聊天记录。')).toBeVisible();
+    expect(screen.getByText('还没有聊天记录')).toBeVisible();
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留这段草稿');
     expect(screen.getByText('已清空当前页面数据')).toBeVisible();
     confirmSpy.mockRestore();
@@ -474,14 +474,14 @@ describe('SidebarShell', () => {
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
     await screen.findByText('Chat 历史回答');
-    expect(screen.getByRole('tab', { name: /Chat/ })).toBeVisible();
+    expect(screen.getByRole('tab', { name: /聊天/ })).toBeVisible();
     expect(screen.getByRole('tab', { name: /总结/ })).toBeVisible();
     expect(screen.getByRole('tab', { name: /翻译/ })).toBeVisible();
     expect(screen.queryByRole('tab', { name: /隐藏标签/ })).toBeNull();
 
     await user.type(screen.getByLabelText('聊天输入'), '保留的 chat 草稿');
     await user.click(screen.getByRole('tab', { name: /总结/ }));
-    expect(screen.getByText('自动触发完成')).toBeVisible();
+    expect(screen.getByRole('tab', { name: /总结/ })).toHaveAttribute('title', expect.stringContaining('自动触发完成'));
     expect(screen.getByLabelText('聊天输入')).toHaveValue('请总结当前页面');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-2');
     expect(screen.getByRole('tabpanel', { name: /总结/ })).toHaveTextContent('快捷标签历史回答');
@@ -493,7 +493,7 @@ describe('SidebarShell', () => {
     expect(screen.getByLabelText('聊天输入')).toHaveValue('请翻译当前页面');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-1');
 
-    await user.click(screen.getByRole('tab', { name: /Chat/ }));
+    await user.click(screen.getByRole('tab', { name: /聊天/ }));
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留的 chat 草稿');
 
     await user.click(screen.getByRole('tab', { name: /总结/ }));
@@ -670,9 +670,9 @@ describe('SidebarShell', () => {
     });
     expect(screen.getByTestId('sidebar-extraction-panel')).toHaveTextContent('提取内容');
     expect(screen.getByText('已清空当前标签聊天记录')).toBeVisible();
-    expect(screen.getByText('还没有聊天记录。')).toBeVisible();
+    expect(screen.getByText('还没有聊天记录')).toBeVisible();
 
-    await user.click(screen.getByRole('tab', { name: /Chat/ }));
+    await user.click(screen.getByRole('tab', { name: /聊天/ }));
     expect(screen.getByText('Chat 历史回答')).toBeVisible();
     confirmSpy.mockRestore();
   });
@@ -877,7 +877,9 @@ describe('SidebarShell', () => {
       chunk: '分支内容',
     });
 
-    await waitFor(() => expect(screen.getByText('分支 · 分支模型')).toBeVisible());
+    await waitFor(() => expect(screen.getByTestId('branch-branch-1')).toBeVisible());
+    expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支');
+    expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支模型');
     expect(screen.getByText('分支内容')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: '停止分支' }));
@@ -896,7 +898,7 @@ describe('SidebarShell', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
     });
-    await waitFor(() => expect(screen.queryByText('分支 · 分支模型')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('branch-branch-1')).toBeNull());
   });
 
   it('支持编辑用户消息并重发，也支持重试助手消息替换旧结果', async () => {

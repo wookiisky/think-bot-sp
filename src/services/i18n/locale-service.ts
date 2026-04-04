@@ -2,7 +2,7 @@ import { createLocaleRepository } from '../../repositories/locale-repository';
 
 type LocaleCode = 'zh-CN' | 'en';
 
-type LocaleResources = Awaited<ReturnType<ReturnType<typeof createLocaleRepository>['loadResources']>>;
+type LocaleResources = ReturnType<ReturnType<typeof createLocaleRepository>['loadResources']>;
 
 /** 语言服务，负责缓存静态语言资源，供设置页即时预览。 */
 export const createLocaleService = (
@@ -12,9 +12,9 @@ export const createLocaleService = (
 
   return {
     /** 预加载并缓存语言资源。 */
-    async loadResources() {
+    loadResources() {
       if (!resources) {
-        resources = await localeRepository.loadResources();
+        resources = localeRepository.loadResources();
       }
 
       return resources;

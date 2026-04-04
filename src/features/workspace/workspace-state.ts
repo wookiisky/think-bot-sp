@@ -61,6 +61,9 @@ export type PromptTabDefinition = {
   promptTabState: SidebarPageRecord['promptTabStates'][number] | null;
 };
 
+/** 标签运行态摘要。 */
+export type PromptTabStatusKind = 'idle' | 'loading' | 'auto-running' | 'auto-error' | 'auto-done' | 'ready';
+
 /** 输入区运行态。 */
 export type ComposerState = {
   /** 当前草稿文本。 */
@@ -80,9 +83,9 @@ export type EditingState = {
 };
 
 /** 生成默认 chat 标签。 */
-export const createChatPromptTab = (preferredModelId: string): PromptTabDefinition => ({
+export const createChatPromptTab = (preferredModelId: string, name = 'Chat'): PromptTabDefinition => ({
   id: CHAT_PROMPT_TAB_ID,
-  name: 'Chat',
+  name,
   defaultText: '',
   preferredModelId,
   autoTrigger: false,
@@ -182,6 +185,7 @@ export const buildPromptTabs = ({
   quickInputs,
   models,
   fallbackModelId,
+  chatLabel,
 }: {
   /** 页面记录。 */
   page: SidebarPageRecord | null;
@@ -199,6 +203,8 @@ export const buildPromptTabs = ({
   models: ModelOption[];
   /** 默认回退模型。 */
   fallbackModelId: string;
+  /** 默认聊天标签名称。 */
+  chatLabel: string;
 }) => {
   const promptTabStateMap = new Map(page?.promptTabStates.map((item) => [item.promptTabId, item]) ?? []);
   const visibleQuickInputs = [...quickInputs]
@@ -207,7 +213,7 @@ export const buildPromptTabs = ({
 
   return [
     {
-      ...createChatPromptTab(fallbackModelId),
+      ...createChatPromptTab(fallbackModelId, chatLabel),
       promptTabState: promptTabStateMap.get(CHAT_PROMPT_TAB_ID) ?? null,
     },
     ...visibleQuickInputs.map((item) => ({
@@ -285,27 +291,27 @@ export const pickInitialPromptTabId = (promptTabs: PromptTabDefinition[], loadin
   return loadingPromptTab?.id ?? CHAT_PROMPT_TAB_ID;
 };
 
-/** 取标签状态文案。 */
-export const getPromptTabStatus = (promptTab: PromptTabDefinition, activeSessionId: string | null): string => {
+/** 取标签状态摘要。 */
+export const getPromptTabStatusKind = (promptTab: PromptTabDefinition, activeSessionId: string | null): PromptTabStatusKind => {
   if (activeSessionId) {
-    return '生成中';
+    return 'loading';
   }
 
   const promptTabState = promptTab.promptTabState;
   if (!promptTabState) {
-    return '';
+    return 'idle';
   }
   if (promptTabState.autoTriggerStatus === 'running') {
-    return '自动触发中';
+    return 'auto-running';
   }
   if (promptTabState.autoTriggerStatus === 'error') {
-    return '自动触发失败';
+    return 'auto-error';
   }
   if (promptTabState.autoTriggerStatus === 'done') {
-    return '自动触发完成';
+    return 'auto-done';
   }
   if (promptTabState.initializedAt !== null) {
-    return '已初始化';
+    return 'ready';
   }
-  return '';
+  return 'idle';
 };

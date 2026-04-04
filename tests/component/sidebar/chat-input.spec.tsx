@@ -4,6 +4,25 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatInput } from '../../../src/features/sidebar/chat-input';
 
+const translations: Record<string, string> = {
+  'workspace.send': '发送',
+  'workspace.selectModel': '选择模型',
+  'workspace.chatInput': '聊天输入',
+  'workspace.includePageContent': '包含页面内容',
+  'workspace.clearCurrentTab': '清空当前标签',
+  'workspace.addImage': '添加图片',
+  'workspace.removeImage': '移除图片',
+  'workspace.selectedImage': '已选图片',
+  'workspace.resizeComposer': '调整输入区高度',
+  'workspace.exportConversation': '导出',
+  'workspace.stop': '停止',
+  'workspace.model': '模型',
+  'workspace.noModels': '暂无可用模型',
+  'workspace.currentModelNoImage': '当前模型不支持图片输入',
+};
+
+const t = (key: string) => translations[key] ?? key;
+
 afterEach(() => {
   cleanup();
 });
@@ -28,6 +47,7 @@ describe('ChatInput', () => {
             supportsImages: true,
           },
         ]}
+        t={t}
         onSelectModel={vi.fn()}
         onTextChange={vi.fn()}
         onImagesChange={vi.fn()}
@@ -70,6 +90,7 @@ describe('ChatInput', () => {
             supportsImages: false,
           },
         ]}
+        t={t}
         onSelectModel={onSelectModel}
         onTextChange={onTextChange}
         onImagesChange={vi.fn()}
@@ -110,6 +131,7 @@ describe('ChatInput', () => {
             supportsImages: true,
           },
         ]}
+        t={t}
         onSelectModel={vi.fn()}
         onTextChange={vi.fn()}
         onImagesChange={vi.fn()}
@@ -145,6 +167,7 @@ describe('ChatInput', () => {
             supportsImages: true,
           },
         ]}
+        t={t}
         onSelectModel={vi.fn()}
         onTextChange={vi.fn()}
         onImagesChange={onImagesChange}
@@ -180,6 +203,7 @@ describe('ChatInput', () => {
             supportsImages: true,
           },
         ]}
+        t={t}
         onSelectModel={vi.fn()}
         onTextChange={vi.fn()}
         onImagesChange={vi.fn()}

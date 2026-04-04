@@ -68,3 +68,107 @@ settings.quickInputBranchModels: Dedicated Branch Models
 settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global branch models.
 settings.quickInputBranchModelsMissing: Some dedicated branch model references are unavailable and will be removed on save.
 settings.blacklistPlaceholderDescription: Blacklist editing is out of scope for this round. The section remains reserved.
+workspace.chatTab: Chat
+workspace.model: Model
+workspace.selectModel: Select Model
+workspace.noModels: No Model Available
+workspace.includePageContent: Include Page Content
+workspace.chatInput: Chat Input
+workspace.resizeComposer: Resize Composer
+workspace.addImage: Add Image
+workspace.removeImage: Remove Image
+workspace.selectedImage: Selected Image
+workspace.send: Send
+workspace.stop: Stop
+workspace.clearCurrentTab: Clear Current Tab
+workspace.exportConversation: Export
+workspace.currentModelNoImage: The current model does not support image input
+workspace.emptyMessages: No chat messages yet
+workspace.editMessage: Edit
+workspace.editMessageInput: Edit Message Input
+workspace.saveAndResend: Save And Resend
+workspace.cancelEdit: Cancel
+workspace.retryMessage: Retry
+workspace.expandBranches: Expand Branches
+workspace.stopBranch: Stop Branch
+workspace.deleteBranch: Delete Branch
+workspace.role.user: You
+workspace.role.assistant: Assistant
+workspace.role.system: System
+workspace.status.loading: Loading
+workspace.status.done: Done
+workspace.status.error: Failed
+workspace.status.cancelled: Stopped
+workspace.status.restore: Restoring Stream
+workspace.status.branch: Branch
+workspace.promptStatus.loading: Loading
+workspace.promptStatus.autoRunning: Auto Trigger Running
+workspace.promptStatus.autoError: Auto Trigger Failed
+workspace.promptStatus.autoDone: Auto Trigger Done
+workspace.promptStatus.ready: Initialized
+workspace.notice.sendFailed: Failed to send. Please retry.
+workspace.notice.editFailed: Failed to edit. Please retry.
+workspace.notice.retryFailed: Failed to retry. Please retry.
+workspace.notice.expandBranchFailed: Failed to add a branch. Please retry.
+workspace.notice.stopBranchFailed: Failed to stop the branch. Please retry.
+workspace.notice.deleteBranchFailed: Failed to delete the branch. Please retry.
+workspace.notice.clearTabConfirm: Clear the current tab conversation? This only removes the current tab conversation and in-flight generations, and does not affect extraction content or other tabs.
+workspace.notice.clearTabSuccess: Current tab conversation cleared
+workspace.notice.clearTabFailed: Failed to clear the current tab conversation. Please retry.
+workspace.notice.emptyExport: The current conversation is empty and cannot be exported
+workspace.notice.exportFailed: Failed to export. Please retry.
+sidebar.action.copyExtraction: Copy Extracted Content
+sidebar.action.reExtract: Re-Extract
+sidebar.action.clearPage: Clear Current Page Data
+sidebar.action.openHistory: Open History
+sidebar.action.openSettings: Open Settings
+sidebar.action.openGithub: Open GitHub
+sidebar.action.continueExtraction: Continue Extraction
+sidebar.method.readability: Readability
+sidebar.method.jina: Jina
+sidebar.tablistLabel: Sidebar Workspace
+sidebar.browserTabLabel: Browser Tab
+sidebar.resizeExtraction: Resize Extraction Panel
+sidebar.notice.emptyExtraction: No extracted content to copy
+sidebar.notice.copySuccess: Extracted content copied
+sidebar.notice.copyFailed: Failed to copy extracted content. Please retry.
+sidebar.notice.reExtractFailed: Failed to re-extract. Please retry.
+sidebar.notice.clearPageConfirm: Clear the current page data? This removes the extracted content cache and all conversations for the current page.
+sidebar.notice.clearPageSuccess: Current page data cleared
+sidebar.notice.clearPageFailed: Failed to clear the current page data. Please retry.
+sidebar.notice.openHistoryFailed: Failed to open the history page. Please retry.
+sidebar.notice.openSettingsFailed: Failed to open the settings page. Please retry.
+sidebar.notice.openGithubFailed: Failed to open GitHub. Please retry.
+sidebar.notice.switchMethodReadability: Switched to Readability and refreshed
+sidebar.notice.switchMethodJina: Switched to Jina and refreshed
+sidebar.notice.switchMethodFailed: Failed to switch extraction method. Please retry.
+sidebar.state.bootstrapping: Restoring page context
+sidebar.state.blockedTitle: This page is blocked by the blacklist
+sidebar.state.blockedDescription: Waiting for confirmation
+sidebar.state.extracting: Extracting page content
+sidebar.state.error: Extraction failed. Please retry.
+conversations.title: History Workspace
+conversations.subtitle: Restore extracted content and chats by page, then continue working in context.
+conversations.searchLabel: Search History Pages
+conversations.searchPlaceholder: Search title or URL
+conversations.empty: No history pages yet.
+conversations.emptySearch: No history pages match the query.
+conversations.action.openSource: Open Source Page
+conversations.action.deletePage: Delete Page
+conversations.action.copyExtraction: Copy Extracted Content
+conversations.action.openSettings: Open Settings
+conversations.tablistLabel: History Workspace Tabs
+conversations.resizeSidebar: Resize History Sidebar
+conversations.editTitle: Edit Page Title
+conversations.notice.emptyExtraction: No extracted content to copy
+conversations.notice.copySuccess: Extracted content copied
+conversations.notice.copyFailed: Failed to copy extracted content. Please retry.
+conversations.notice.openSourceFailed: Failed to open the source page. Please retry.
+conversations.notice.titleSaveFailed: Failed to save the title. Please retry.
+conversations.notice.pageDeleteFailed: Failed to delete the page. Please retry.
+conversations.notice.pageDeletedSoft: Page soft-deleted and tombstone recorded
+conversations.notice.pageDeletedHard: Page deleted
+conversations.state.loadFailed: Failed to restore the page. Please reselect it.
+conversations.state.selectPage: Select a history page from the left.
+conversations.state.bootstrapping: Restoring page context
+conversations.state.noContent: No extracted content is available for this page.
