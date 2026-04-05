@@ -78,19 +78,19 @@ test('settings models panel can add copy delete and persist through save', async
   await page.getByRole('tab', { name: '语言模型' }).click();
 
   await page.getByRole('button', { name: '新增模型' }).click();
-  await expect(page.locator('button', { hasText: '新模型' }).first()).toBeVisible();
-  await page.locator('button', { hasText: '新模型' }).first().click();
+  await expect(page.getByTestId(/language-model-item-model-/).filter({ hasText: '新模型' }).first()).toBeVisible();
   await page.getByLabel('模型名称').fill('新模型');
   await page.getByLabel('Model').fill('gpt-4.1-mini');
   await page.getByLabel('Base URL').fill('https://api.new-model.example.com');
   await page.getByLabel('API Key').fill('new-secret');
 
-  await page.locator('button', { hasText: '主模型' }).first().click();
+  await page.getByTestId('language-model-summary-model-1').click();
   await page.getByRole('button', { name: '复制模型' }).click();
-  await expect(page.locator('button', { hasText: '主模型 副本' }).first()).toBeVisible();
+  await expect(page.getByTestId(/language-model-summary-model-/).filter({ hasText: '主模型 副本' }).first()).toBeVisible();
 
-  await page.getByRole('button', { name: '删除模型' }).click();
-  await page.locator('button', { hasText: '备用模型' }).first().click();
+  await page.getByTestId('language-model-summary-model-1').click();
+  await page.getByTestId('language-model-item-model-1').getByRole('button', { name: '删除模型' }).click();
+  await page.getByTestId('language-model-summary-model-2').click();
   await page.getByRole('button', { name: /^保存$/ }).click();
 
   await expect

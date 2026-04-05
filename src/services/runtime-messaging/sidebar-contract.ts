@@ -83,6 +83,8 @@ export const sidebarSendChatCommandSchema = sidebarCommandBaseSchema.extend({
   modelId: z.string().min(1),
   /** 用户输入文本。 */
   text: z.string(),
+  /** 用户消息展示文本。 */
+  displayText: z.string().min(1).optional(),
   /** 用户附带图片。 */
   images: z.array(z.string()),
   /** 是否附带页面正文。 */

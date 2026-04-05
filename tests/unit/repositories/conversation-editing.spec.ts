@@ -166,6 +166,49 @@ describe('conversation-repository editing', () => {
     });
   });
 
+  it('支持为自动触发用户消息保存展示名，并在编辑后回退为真实文本展示', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.appendUserMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      messageId: 'user-auto-1',
+      content: '请总结当前页面',
+      displayContent: '总结',
+      images: [],
+      now: 30,
+    });
+    await repo.editUserMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      messageId: 'user-auto-1',
+      content: '请总结当前页面，并列出风险',
+      newAssistantMessageId: 'assistant-auto-1',
+      modelId: 'model-1',
+      now: 31,
+    });
+
+    await expect(repo.getConversation('https://example.com/article', 'quick-summary')).resolves.toMatchObject({
+      messages: [
+        {
+          id: 'user-auto-1',
+          role: 'user',
+          content: '请总结当前页面，并列出风险',
+          editedAt: 31,
+        },
+        {
+          id: 'assistant-auto-1',
+          role: 'assistant',
+          status: 'loading',
+        },
+      ],
+    });
+
+    const conversation = await repo.getConversation('https://example.com/article', 'quick-summary');
+    expect(conversation?.messages[0]).not.toHaveProperty('displayContent');
+  });
+
   it('不允许给已完成的 assistant 继续追加 chunk', async () => {
     const storage = createFakeStorageArea();
     const repo = createConversationRepository(createChromeLocalAdapter(storage));

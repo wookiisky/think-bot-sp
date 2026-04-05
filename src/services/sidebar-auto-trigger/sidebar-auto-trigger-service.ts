@@ -79,6 +79,7 @@ type SidebarAutoTriggerDeps = {
       promptTabId: string;
       modelId: string;
       content: string;
+      displayText?: string;
       images: string[];
       pageContent: string;
     }) => Promise<AutoTriggerSession>;
@@ -133,7 +134,6 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
         .sort((left, right) => left.order - right.order);
 
       for (const quickInput of candidates) {
-        const promptTabState = page?.promptTabStates.find((item) => item.promptTabId === quickInput.id) ?? null;
         const [conversation, loadingState] = await Promise.all([
           deps.conversationRepository.getConversation(input.normalizedUrl, quickInput.id),
           deps.conversationRepository.getLoadingState(input.normalizedUrl, quickInput.id),
@@ -157,16 +157,6 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
           });
           continue;
         }
-        if (promptTabState && promptTabState.initializedAt !== null) {
-          deps.logger.info('auto_trigger.skipped', {
-            browserTabId: input.browserTabId,
-            normalizedUrl: input.normalizedUrl,
-            promptTab: quickInput.id,
-            reason: 'already_initialized',
-          });
-          continue;
-        }
-
         const modelId = resolveAutoTriggerModelId(config, quickInput.modelId);
         if (!modelId) {
           deps.logger.warn('auto_trigger.skipped', {
@@ -194,6 +184,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             promptTabId: quickInput.id,
             modelId,
             content: quickInput.prompt,
+            displayText: quickInput.name,
             images: [],
             pageContent: input.pageContent,
           });

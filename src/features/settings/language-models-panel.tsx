@@ -1,9 +1,10 @@
+import { useEffect, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import { ModelForm } from './model-form';
@@ -16,37 +17,55 @@ type LanguageModelsPanelProps = {
   /** 是否禁用交互。 */
   disabled: boolean;
   /** 更新选中模型。 */
-  onSelectModel(modelId: string): void;
+  onSelectModel(modelId: string | null): void;
   /** 更新完整配置。 */
   onChange(nextConfig: ExtensionConfig): void;
   /** 文案翻译函数。 */
   t(key: string): string;
 };
 
-type SortableModelSummaryItemProps = {
+type SortableModelCardProps = {
   /** 当前模型。 */
   model: ModelConfig;
-  /** 是否选中。 */
-  selected: boolean;
+  /** 是否展开。 */
+  expanded: boolean;
   /** 是否禁用。 */
   disabled: boolean;
   /** 摘要文本。 */
   summary: string;
-  /** 选中当前模型。 */
+  /** 切换当前模型。 */
   onSelect(): void;
+  /** 上移当前模型。 */
+  onMoveUp(): void;
+  /** 下移当前模型。 */
+  onMoveDown(): void;
+  /** 删除当前模型。 */
+  onDelete(): void;
+  /** 切换启用态。 */
+  onToggleEnabled(enabled: boolean): void;
+  /** 展开区内容。 */
+  children?: ReactNode;
   /** 文案翻译函数。 */
   t(key: string): string;
 };
 
-/** 可拖拽模型摘要行。 */
-const SortableModelSummaryItem = ({
+/** 生成模型标题栏摘要。 */
+const buildModelSummary = (model: ModelConfig) => `${model.provider} / ${model.model || model.deployment || '-'}`;
+
+/** 可拖拽模型卡片。 */
+const SortableModelCard = ({
   model,
-  selected,
+  expanded,
   disabled,
   summary,
   onSelect,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  onToggleEnabled,
+  children,
   t,
-}: SortableModelSummaryItemProps) => {
+}: SortableModelCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: model.id,
     disabled,
@@ -60,28 +79,61 @@ const SortableModelSummaryItem = ({
         transition,
       }}
       className={isDragging ? 'opacity-80' : undefined}
+      data-testid={`language-model-item-${model.id}`}
     >
-      <div
+      <section
         className={[
-          'flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors',
-          selected ? 'border-primary bg-primary/8' : 'border-border/70 bg-muted/30 hover:bg-muted/60',
+          'grid gap-4 rounded-2xl border px-4 py-4 transition-colors',
+          expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
-        <button
-          type="button"
-          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={`${t('settings.dragModel')}:${model.name}`}
-          disabled={disabled}
-          {...attributes}
-          {...listeners}
-        >
-          ::
-        </button>
-        <button type="button" className="grid flex-1 gap-1 text-left" onClick={onSelect}>
-          <span className="text-sm font-semibold">{model.name}</span>
-          <span className="text-xs text-muted-foreground">{summary}</span>
-        </button>
-      </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={`${t('settings.dragModel')}:${model.name}`}
+            disabled={disabled}
+            {...attributes}
+            {...listeners}
+          >
+            ::
+          </button>
+
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-left"
+            data-testid={`language-model-summary-${model.id}`}
+            onClick={onSelect}
+          >
+            <span className="truncate text-sm font-semibold">{model.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{summary}</span>
+          </button>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onMoveUp} disabled={disabled}>
+              {t('settings.moveUp')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onMoveDown} disabled={disabled}>
+              {t('settings.moveDown')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onDelete} disabled={disabled}>
+              {t('settings.deleteModel')}
+            </Button>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                aria-label={`${t('settings.enableModel')}:${model.name}`}
+                type="checkbox"
+                checked={model.enabled}
+                disabled={disabled}
+                onChange={(event) => onToggleEnabled(event.target.checked)}
+              />
+              <span className="font-medium">{t('settings.enableModel')}</span>
+            </label>
+          </div>
+        </div>
+
+        {expanded ? <div className="grid gap-4 border-t border-border/70 pt-4">{children}</div> : null}
+      </section>
     </li>
   );
 };
@@ -108,10 +160,20 @@ export const LanguageModelsPanel = ({
   const visibleModels = [...config.models]
     .filter((model) => model.deletedAt === null)
     .sort((left, right) => left.order - right.order);
-  const activeModel =
-    visibleModels.find((model) => model.id === (selectedModelId ?? config.basic.defaultModelId)) ??
-    visibleModels[0] ??
-    null;
+  const activeModel = visibleModels.find((model) => model.id === selectedModelId) ?? null;
+
+  useEffect(() => {
+    if (visibleModels.length === 0) {
+      if (selectedModelId !== null) {
+        onSelectModel(null);
+      }
+      return;
+    }
+
+    if (!selectedModelId || !visibleModels.some((model) => model.id === selectedModelId)) {
+      onSelectModel(visibleModels[0].id);
+    }
+  }, [onSelectModel, selectedModelId, visibleModels]);
 
   const nextModelId = () => `model-${config.models.length + 1}-${Date.now()}`;
 
@@ -157,8 +219,9 @@ export const LanguageModelsPanel = ({
   };
 
   const handleAddModel = () => {
-    const nextModels = [...config.models, createModel(config.models.length)];
-    updateModels(nextModels);
+    const nextModel = createModel(config.models.length);
+    updateModels([...config.models, nextModel]);
+    onSelectModel(nextModel.id);
   };
 
   const handleCopyModel = () => {
@@ -166,28 +229,27 @@ export const LanguageModelsPanel = ({
       return;
     }
 
-    const nextModels = [
-      ...config.models,
-      {
-        ...activeModel,
-        id: nextModelId(),
-        name: `${activeModel.name} 副本`,
-        enabled: false,
-        order: config.models.length,
-        deletedAt: null,
-      },
-    ];
-    updateModels(nextModels);
+    const copiedModel = {
+      ...activeModel,
+      id: nextModelId(),
+      name: `${activeModel.name} 副本`,
+      enabled: false,
+      order: config.models.length,
+      deletedAt: null,
+    };
+    updateModels([...config.models, copiedModel]);
+    onSelectModel(copiedModel.id);
   };
 
-  const handleDeleteModel = () => {
-    if (!activeModel) {
+  const handleDeleteModel = (modelId: string) => {
+    const targetModel = config.models.find((model) => model.id === modelId);
+    if (!targetModel) {
       return;
     }
 
     const deletedAt = Date.now();
     const nextModels = config.models.map((model) =>
-      model.id === activeModel.id
+      model.id === modelId
         ? {
             ...model,
             enabled: false,
@@ -195,29 +257,50 @@ export const LanguageModelsPanel = ({
           }
         : model,
     );
-    const nextVisibleModels = nextModels.filter((model) => model.deletedAt === null);
-    const nextDefaultModelId =
-      config.basic.defaultModelId === activeModel.id ? null : config.basic.defaultModelId;
+    const nextVisibleModels = nextModels
+      .filter((model) => model.deletedAt === null)
+      .sort((left, right) => left.order - right.order);
+    const nextDefaultModelId = config.basic.defaultModelId === modelId ? null : config.basic.defaultModelId;
 
-    onSelectModel(nextVisibleModels[0]?.id ?? '');
     updateModels(nextModels, nextDefaultModelId);
+    onSelectModel(nextVisibleModels[0]?.id ?? null);
   };
 
-  const moveActiveModel = (direction: -1 | 1) => {
-    if (!activeModel) {
-      return;
-    }
-
-    const currentIndex = visibleModels.findIndex((model) => model.id === activeModel.id);
+  const moveModel = (modelId: string, direction: -1 | 1) => {
+    const currentIndex = visibleModels.findIndex((model) => model.id === modelId);
     const targetIndex = currentIndex + direction;
     if (currentIndex < 0 || targetIndex < 0 || targetIndex >= visibleModels.length) {
       return;
     }
 
-    const reorderedVisible = [...visibleModels];
-    const [moved] = reorderedVisible.splice(currentIndex, 1);
-    reorderedVisible.splice(targetIndex, 0, moved);
-    reorderVisibleModels(reorderedVisible);
+    const reorderedVisibleModels = [...visibleModels];
+    const [movedModel] = reorderedVisibleModels.splice(currentIndex, 1);
+    reorderedVisibleModels.splice(targetIndex, 0, movedModel);
+    reorderVisibleModels(reorderedVisibleModels);
+    onSelectModel(modelId);
+  };
+
+  /** 切换单个模型启用态。 */
+  const toggleModelEnabled = (modelId: string, enabled: boolean) => {
+    onChange({
+      ...config,
+      models: config.models.map((model) =>
+        model.id === modelId
+          ? {
+              ...model,
+              enabled,
+            }
+          : model,
+      ),
+    });
+  };
+
+  /** 更新单个模型。 */
+  const updateModel = (nextModel: ModelConfig) => {
+    onChange({
+      ...config,
+      models: config.models.map((model) => (model.id === nextModel.id ? nextModel : model)),
+    });
   };
 
   /** 处理模型拖拽排序结束。 */
@@ -234,6 +317,7 @@ export const LanguageModelsPanel = ({
     }
 
     reorderVisibleModels(arrayMove(visibleModels, currentIndex, targetIndex));
+    onSelectModel(String(active.id));
   };
 
   return (
@@ -256,15 +340,6 @@ export const LanguageModelsPanel = ({
             <Button type="button" variant="outline" onClick={handleCopyModel} disabled={disabled || !activeModel}>
               {t('settings.copyModel')}
             </Button>
-            <Button type="button" variant="outline" onClick={() => moveActiveModel(-1)} disabled={disabled || !activeModel}>
-              {t('settings.moveUp')}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => moveActiveModel(1)} disabled={disabled || !activeModel}>
-              {t('settings.moveDown')}
-            </Button>
-            <Button type="button" variant="outline" onClick={handleDeleteModel} disabled={disabled || !activeModel}>
-              {t('settings.deleteModel')}
-            </Button>
           </div>
 
           {visibleModels.length > 0 ? (
@@ -272,15 +347,28 @@ export const LanguageModelsPanel = ({
               <SortableContext items={visibleModels.map((model) => model.id)} strategy={verticalListSortingStrategy}>
                 <ul className="grid gap-3">
                   {visibleModels.map((model) => (
-                    <SortableModelSummaryItem
+                    <SortableModelCard
                       key={model.id}
                       model={model}
-                      selected={model.id === activeModel?.id}
+                      expanded={model.id === activeModel?.id}
                       disabled={disabled}
-                      summary={`${model.provider} / ${model.model || model.deployment || '-'} / ${model.enabled ? t('settings.enabled') : t('settings.disabled')}`}
+                      summary={buildModelSummary(model)}
                       onSelect={() => onSelectModel(model.id)}
+                      onMoveUp={() => moveModel(model.id, -1)}
+                      onMoveDown={() => moveModel(model.id, 1)}
+                      onDelete={() => handleDeleteModel(model.id)}
+                      onToggleEnabled={(enabled) => toggleModelEnabled(model.id, enabled)}
                       t={t}
-                    />
+                    >
+                      <ModelForm
+                        key={model.id}
+                        model={model}
+                        disabled={disabled}
+                        showHeader={false}
+                        showEnabledField={false}
+                        onChange={updateModel}
+                      />
+                    </SortableModelCard>
                   ))}
                 </ul>
               </SortableContext>
@@ -288,20 +376,6 @@ export const LanguageModelsPanel = ({
           ) : (
             <p className="m-0 text-sm text-muted-foreground">{t('settings.noModels')}</p>
           )}
-
-          {activeModel ? (
-            <ModelForm
-              key={activeModel.id}
-              model={activeModel}
-              disabled={disabled}
-              onChange={(nextModel) =>
-                onChange({
-                  ...config,
-                  models: config.models.map((model) => (model.id === nextModel.id ? nextModel : model)),
-                })
-              }
-            />
-          ) : null}
         </CardContent>
       </Card>
     </section>

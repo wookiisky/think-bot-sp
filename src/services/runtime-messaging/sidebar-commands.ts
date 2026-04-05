@@ -120,6 +120,8 @@ type ChatDispatchService = {
     modelId: string;
     /** 用户文本。 */
     content: string;
+    /** 用户消息展示文本。 */
+    displayText?: string;
     /** 用户图片。 */
     images: string[];
     /** 当前请求要带给模型的页面正文。 */
@@ -335,6 +337,7 @@ export const createSidebarCommandHandler = ({
           promptTabId: command.promptTabId,
           modelId: command.modelId,
           content: command.text,
+          displayText: command.displayText,
           images: command.images,
           pageContent: command.includePageContent ? page?.content ?? '' : '',
         });

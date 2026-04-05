@@ -82,6 +82,7 @@ settings.addModel: Add Model
 settings.copyModel: Copy Model
 settings.deleteModel: Delete Model
 settings.dragModel: Drag Model
+settings.enableModel: Enable
 settings.moveUp: Move Up
 settings.moveDown: Move Down
 settings.quickInputsDescription: Manage quick input templates.

@@ -1,9 +1,24 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { LanguageModelsPanel } from '../../../src/features/settings/language-models-panel';
+
+const t = (key: string) =>
+  ({
+    'settings.languageModels': '语言模型',
+    'settings.modelsDescription': '说明',
+    'settings.noModels': '暂无模型配置',
+    'settings.addModel': '新增模型',
+    'settings.copyModel': '复制模型',
+    'settings.deleteModel': '删除模型',
+    'settings.dragModel': '拖拽模型',
+    'settings.enableModel': '启用',
+    'settings.moveUp': '上移',
+    'settings.moveDown': '下移',
+  })[key] ?? key;
 
 const createConfig = () =>
   createDefaultConfig({
@@ -49,10 +64,27 @@ const createConfig = () =>
     ],
   });
 
+/** 用受控壳层模拟设置页草稿配置。 */
+const ControlledLanguageModelsPanel = ({ config: initialConfig = createConfig() }: { config?: ReturnType<typeof createConfig> }) => {
+  const [config, setConfig] = useState(initialConfig);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>('model-1');
+
+  return (
+    <LanguageModelsPanel
+      config={config}
+      selectedModelId={selectedModelId}
+      disabled={false}
+      onSelectModel={setSelectedModelId}
+      onChange={setConfig}
+      t={t}
+    />
+  );
+};
+
 describe('LanguageModelsPanel', () => {
   afterEach(() => cleanup());
 
-  it('展示模型摘要并支持新增与复制', async () => {
+  it('展示模型标题摘要并支持新增与复制', async () => {
     const onChange = vi.fn();
     const onSelectModel = vi.fn();
     render(
@@ -62,26 +94,17 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={onSelectModel}
         onChange={onChange}
-        t={(key) =>
-          ({
-            'settings.languageModels': '语言模型',
-            'settings.modelsDescription': '说明',
-            'settings.enabled': '已启用',
-            'settings.disabled': '已停用',
-            'settings.noModels': '暂无模型配置',
-            'settings.addModel': '新增模型',
-            'settings.copyModel': '复制模型',
-            'settings.deleteModel': '删除模型',
-            'settings.dragModel': '拖拽模型',
-            'settings.moveUp': '上移',
-            'settings.moveDown': '下移',
-          })[key] ?? key
-        }
+        t={t}
       />,
     );
 
-    expect(screen.getAllByText('主模型').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('备用模型').length).toBeGreaterThan(0);
+    const primaryItem = screen.getByTestId('language-model-item-model-1');
+    const secondaryItem = screen.getByTestId('language-model-item-model-2');
+
+    expect(primaryItem).toHaveTextContent('主模型');
+    expect(primaryItem).toHaveTextContent('openai-compatible / gpt-4o-mini');
+    expect(secondaryItem).toHaveTextContent('备用模型');
+    expect(secondaryItem).toHaveTextContent('gemini / gemini-2.5-flash');
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: '新增模型' }));
@@ -90,6 +113,7 @@ describe('LanguageModelsPanel', () => {
         models: expect.arrayContaining([expect.objectContaining({ name: '新模型' })]),
       }),
     );
+    expect(onSelectModel).toHaveBeenLastCalledWith(expect.stringMatching(/^model-/));
 
     await user.click(screen.getByRole('button', { name: '复制模型' }));
     expect(onChange).toHaveBeenLastCalledWith(
@@ -110,26 +134,12 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={vi.fn()}
         onChange={onChange}
-        t={(key) =>
-          ({
-            'settings.languageModels': '语言模型',
-            'settings.modelsDescription': '说明',
-            'settings.enabled': '已启用',
-            'settings.disabled': '已停用',
-            'settings.noModels': '暂无模型配置',
-            'settings.addModel': '新增模型',
-            'settings.copyModel': '复制模型',
-            'settings.deleteModel': '删除模型',
-            'settings.dragModel': '拖拽模型',
-            'settings.moveUp': '上移',
-            'settings.moveDown': '下移',
-          })[key] ?? key
-        }
+        t={t}
       />,
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '删除模型' }));
+    await user.click(within(screen.getByTestId('language-model-item-model-1')).getByRole('button', { name: '删除模型' }));
 
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -155,26 +165,12 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={vi.fn()}
         onChange={onChange}
-        t={(key) =>
-          ({
-            'settings.languageModels': '语言模型',
-            'settings.modelsDescription': '说明',
-            'settings.enabled': '已启用',
-            'settings.disabled': '已停用',
-            'settings.noModels': '暂无模型配置',
-            'settings.addModel': '新增模型',
-            'settings.copyModel': '复制模型',
-            'settings.deleteModel': '删除模型',
-            'settings.dragModel': '拖拽模型',
-            'settings.moveUp': '上移',
-            'settings.moveDown': '下移',
-          })[key] ?? key
-        }
+        t={t}
       />,
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '下移' }));
+    await user.click(within(screen.getByTestId('language-model-item-model-1')).getByRole('button', { name: '下移' }));
 
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -184,5 +180,26 @@ describe('LanguageModelsPanel', () => {
         ],
       }),
     );
+  });
+
+  it('支持单项展开并在标题栏切换启用状态', async () => {
+    render(<ControlledLanguageModelsPanel />);
+
+    const primaryItem = screen.getByTestId('language-model-item-model-1');
+    const secondaryItem = screen.getByTestId('language-model-item-model-2');
+    expect(within(primaryItem).getByLabelText('模型名称')).toHaveValue('主模型');
+    expect(within(primaryItem).queryByRole('checkbox', { name: '启用模型' })).not.toBeInTheDocument();
+    expect(within(secondaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(within(secondaryItem).getByTestId('language-model-summary-model-2'));
+
+    expect(within(primaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
+    expect(within(secondaryItem).getByLabelText('模型名称')).toHaveValue('备用模型');
+
+    const enabledToggle = within(secondaryItem).getByRole('checkbox', { name: '启用:备用模型' });
+    expect(enabledToggle).toBeChecked();
+    await user.click(enabledToggle);
+    expect(within(secondaryItem).getByRole('checkbox', { name: '启用:备用模型' })).not.toBeChecked();
   });
 });

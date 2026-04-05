@@ -619,19 +619,24 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   };
 
   /** 发送消息。 */
-  const handleSend = async (promptTabId: string, input: { text: string; images: string[]; modelId: string; includePageContent: boolean }) => {
+  const handleSend = async (
+    promptTabId: string,
+    input: { text: string; displayText?: string; images: string[]; modelId: string; includePageContent: boolean },
+  ) => {
     if (!selectedPage) {
       return;
     }
 
     setPromptTabNotice(promptTabId, '');
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
+    const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
     setPromptTabMessages(promptTabId, (current) => [
       ...current,
       {
         id: optimisticUserMessageId,
         role: 'user',
-        content: toOptimisticUserContent(input.text, input.images),
+        content: input.text,
+        ...(optimisticDisplayContent !== input.text ? { displayContent: optimisticDisplayContent } : {}),
         status: 'done',
         errorMessage: null,
         branches: [],
@@ -671,6 +676,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         }));
       });
     } catch {
+      setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
       setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
     }
   };
@@ -703,7 +709,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           return current;
         }
         return [
-          ...current.slice(0, targetIndex + 1).map((message) => (message.id === messageId ? { ...message, content: text } : message)),
+          ...current.slice(0, targetIndex + 1).map((message) =>
+            message.id === messageId
+              ? {
+                  ...message,
+                  content: text,
+                  displayContent: undefined,
+                }
+              : message,
+          ),
           {
             id: response.payload.messageId,
             role: 'assistant',

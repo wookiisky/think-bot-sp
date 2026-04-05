@@ -78,7 +78,15 @@ type ConversationsApi = {
   /** 读取配置。 */
   getConfig: () => Promise<GetConfigResponse>;
   /** 发送消息。 */
-  sendChat: (input: { pageUrl: string; promptTabId: string; modelId: string; text: string; images: string[]; includePageContent: boolean }) => Promise<{
+  sendChat: (input: {
+    pageUrl: string;
+    promptTabId: string;
+    modelId: string;
+    text: string;
+    displayText?: string;
+    images: string[];
+    includePageContent: boolean;
+  }) => Promise<{
     type: 'SEND_CHAT_SUCCESS';
     payload: {
       sessionId: string;

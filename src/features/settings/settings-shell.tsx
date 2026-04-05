@@ -371,7 +371,6 @@ export const SettingsShell = () => {
                 <Icon name="settings" size={18} />
               </span>
               <div>
-                <p className="m-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">Stage 2 settings</p>
                 <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t('settings.title')}</h1>
               </div>
             </div>

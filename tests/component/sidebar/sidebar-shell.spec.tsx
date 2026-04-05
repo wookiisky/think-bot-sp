@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -329,7 +329,7 @@ describe('SidebarShell', () => {
     expect(await screen.findByLabelText('包含页面内容')).not.toBeChecked();
   });
 
-  it('根据 quickInputs 渲染多 promptTab，并隔离草稿、历史和模型选择', async () => {
+  it('根据 quickInputs 渲染多 promptTab，并在切换标签时按需直接触发快捷输入', async () => {
     const user = userEvent.setup();
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
@@ -505,15 +505,25 @@ describe('SidebarShell', () => {
     await user.type(screen.getByLabelText('聊天输入'), '保留的 chat 草稿');
     await user.click(screen.getByRole('tab', { name: /总结/ }));
     expect(screen.getByRole('tab', { name: /总结/ })).toHaveAttribute('title', expect.stringContaining('自动触发完成'));
-    expect(screen.getByLabelText('聊天输入')).toHaveValue('请总结当前页面');
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-2');
     expect(screen.getByRole('tabpanel', { name: /总结/ })).toHaveTextContent('快捷标签历史回答');
 
-    await user.clear(screen.getByLabelText('聊天输入'));
     await user.type(screen.getByLabelText('聊天输入'), '总结标签草稿');
 
     await user.click(screen.getByRole('tab', { name: /翻译/ }));
-    expect(screen.getByLabelText('聊天输入')).toHaveValue('请翻译当前页面');
+    expect(api.sendChat).toHaveBeenCalledWith({
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      promptTabId: 'quick-translate',
+      modelId: 'model-1',
+      text: '请翻译当前页面',
+      displayText: '翻译',
+      images: [],
+      includePageContent: true,
+    });
+    expect(within(screen.getByRole('tabpanel', { name: /翻译/ })).getByText('翻译')).toBeVisible();
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-1');
 
     await user.click(screen.getByRole('tab', { name: /聊天/ }));
@@ -521,6 +531,92 @@ describe('SidebarShell', () => {
 
     await user.click(screen.getByRole('tab', { name: /总结/ }));
     expect(screen.getByLabelText('聊天输入')).toHaveValue('总结标签草稿');
+  });
+
+  it('页面已有缓存正文时，打开侧边栏会自动触发已配置 autoTrigger 的快捷输入', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结当前页面',
+              autoTrigger: true,
+              modelId: 'model-1',
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await waitFor(() =>
+      expect(api.sendChat).toHaveBeenCalledWith({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        modelId: 'model-1',
+        text: '请总结当前页面',
+        displayText: '总结',
+        images: [],
+        includePageContent: true,
+      }),
+    );
+
+    await user.click(screen.getByRole('tab', { name: /总结/ }));
+    expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
   });
 
   it('清空当前标签只影响当前 promptTab，会保留提取内容和其他标签历史', async () => {
@@ -1038,5 +1134,139 @@ describe('SidebarShell', () => {
       promptTabId: 'chat',
       messageId: 'assistant-edit',
     });
+  });
+
+  it('快捷输入消息默认显示名称，编辑时展示真实提示词，编辑后展示编辑后的文本', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article:quick-summary',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'quick-summary',
+            messages: [
+              {
+                id: 'user-quick-1',
+                role: 'user',
+                content: '请总结当前页面',
+                displayContent: '总结',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: null,
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+              {
+                id: 'assistant-quick-1',
+                role: 'assistant',
+                content: '旧回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 2,
+                updatedAt: 2,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-quick-1',
+              status: 'done',
+              summary: '旧回答',
+            },
+            updatedAt: 2,
+          },
+        ],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结当前页面',
+              autoTrigger: true,
+              modelId: 'model-1',
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.click(await screen.findByRole('tab', { name: /总结/ }));
+    const summaryPanel = screen.getByRole('tabpanel', { name: /总结/ });
+    expect(within(summaryPanel).getByText('总结')).toBeVisible();
+    expect(within(summaryPanel).queryByText('请总结当前页面')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '编辑' }));
+    expect(screen.getByLabelText('编辑消息输入')).toHaveValue('请总结当前页面');
+
+    await user.clear(screen.getByLabelText('编辑消息输入'));
+    await user.type(screen.getByLabelText('编辑消息输入'), '请总结当前页面并列出风险');
+    await user.click(screen.getByRole('button', { name: '保存并重发' }));
+
+    expect(api.editUserMessage).toHaveBeenCalledWith({
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      messageId: 'user-quick-1',
+      text: '请总结当前页面并列出风险',
+    });
+    expect(within(summaryPanel).getByText('请总结当前页面并列出风险')).toBeVisible();
   });
 });

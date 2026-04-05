@@ -82,13 +82,14 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
   await page.getByRole('button', { name: '新增快捷输入' }).click();
   await page.getByLabel('快捷输入名称').fill('问题拆解');
   await page.getByLabel('快捷输入提示词').fill('请先拆解问题再回答');
-  await page.getByRole('checkbox', { name: '自动触发' }).click();
+  const newQuickInputItem = page.getByTestId(/quick-input-item-quick-/).filter({ hasText: '问题拆解' }).first();
+  await newQuickInputItem.getByRole('checkbox', { name: '自动触发:问题拆解' }).click();
   await page.getByRole('combobox', { name: '专属模型' }).click();
   await page.getByRole('option', { name: '主模型' }).click();
-  await page.getByRole('button', { name: '上移' }).click();
+  await newQuickInputItem.getByRole('button', { name: '上移' }).click();
 
-  await page.locator('button', { hasText: '总结' }).first().click();
-  await page.getByRole('button', { name: '删除快捷输入' }).click();
+  await page.getByTestId('quick-input-summary-quick-1').click();
+  await page.getByTestId('quick-input-item-quick-1').getByRole('button', { name: '删除快捷输入' }).click();
   await page.getByRole('button', { name: /^保存$/ }).click();
 
   await expect

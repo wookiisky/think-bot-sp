@@ -12,6 +12,8 @@ type ChatDispatchInput = {
   modelId: string;
   /** 用户文本。 */
   content: string;
+  /** 用户消息展示文本。 */
+  displayText?: string;
   /** 用户附带图片。 */
   images: string[];
   /** 当前请求真正附带的页面正文。 */
@@ -232,6 +234,8 @@ type ChatDispatchServiceDeps = {
       messageId: string;
       /** 用户文本。 */
       content: string;
+      /** 用户消息展示文本。 */
+      displayContent?: string;
       /** 用户附带图片。 */
       images: string[];
       /** 当前时间。 */
@@ -568,6 +572,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           promptTabId: input.promptTabId,
           messageId: userMessageId,
           content: input.content,
+          displayContent: input.displayText,
           images: input.images,
           now: now(),
         });

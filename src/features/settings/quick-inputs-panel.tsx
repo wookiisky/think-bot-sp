@@ -35,10 +35,16 @@ type SortableQuickInputCardProps = {
   disabled: boolean;
   /** 快捷输入摘要预览。 */
   preview: string;
-  /** 快捷输入状态文案。 */
-  statusLabel: string;
   /** 切换展开态。 */
   onToggle(): void;
+  /** 上移当前项。 */
+  onMoveUp(): void;
+  /** 下移当前项。 */
+  onMoveDown(): void;
+  /** 删除当前项。 */
+  onDelete(): void;
+  /** 切换自动触发。 */
+  onToggleAutoTrigger(autoTrigger: boolean): void;
   /** 展开区内容。 */
   children?: ReactNode;
   /** 文案翻译函数。 */
@@ -61,8 +67,11 @@ const SortableQuickInputCard = ({
   expanded,
   disabled,
   preview,
-  statusLabel,
   onToggle,
+  onMoveUp,
+  onMoveDown,
+  onDelete,
+  onToggleAutoTrigger,
   children,
   t,
 }: SortableQuickInputCardProps) => {
@@ -79,6 +88,7 @@ const SortableQuickInputCard = ({
         transition,
       }}
       className={isDragging ? 'opacity-80' : undefined}
+      data-testid={`quick-input-item-${item.id}`}
     >
       <section
         className={[
@@ -86,7 +96,7 @@ const SortableQuickInputCard = ({
           expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-3">
           <button
             type="button"
             className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
@@ -97,11 +107,38 @@ const SortableQuickInputCard = ({
           >
             ::
           </button>
-          <button type="button" className="grid flex-1 gap-1 text-left" onClick={onToggle}>
-            <span className="text-sm font-semibold">{item.name}</span>
-            <span className="text-xs text-muted-foreground">{preview}</span>
+
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-left"
+            data-testid={`quick-input-summary-${item.id}`}
+            onClick={onToggle}
+          >
+            <span className="truncate text-sm font-semibold">{item.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{preview}</span>
           </button>
-          <span className="rounded-full border border-border/70 px-2 py-1 text-xs text-muted-foreground">{statusLabel}</span>
+
+          <div className="flex shrink-0 items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onMoveUp} disabled={disabled}>
+              {t('settings.moveUp')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onMoveDown} disabled={disabled}>
+              {t('settings.moveDown')}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onDelete} disabled={disabled}>
+              {t('settings.deleteQuickInput')}
+            </Button>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                aria-label={`${t('settings.quickInputAutoTrigger')}:${item.name}`}
+                type="checkbox"
+                checked={item.autoTrigger}
+                disabled={disabled}
+                onChange={(event) => onToggleAutoTrigger(event.target.checked)}
+              />
+              <span className="font-medium">{t('settings.quickInputAutoTrigger')}</span>
+            </label>
+          </div>
         </div>
 
         {expanded ? <div className="grid gap-4 border-t border-border/70 pt-4">{children}</div> : null}
@@ -291,22 +328,13 @@ export const QuickInputsPanel = ({
                       expanded={expanded}
                       disabled={disabled}
                       preview={buildQuickInputPreview(item.prompt, t('settings.quickInputPromptEmpty'))}
-                      statusLabel={item.autoTrigger ? t('settings.enabled') : t('settings.disabled')}
                       onToggle={() => setExpandedQuickInputId(expanded ? null : item.id)}
+                      onMoveUp={() => moveQuickInput(item.id, -1)}
+                      onMoveDown={() => moveQuickInput(item.id, 1)}
+                      onDelete={() => handleDeleteQuickInput(item.id)}
+                      onToggleAutoTrigger={(autoTrigger) => updateQuickInput(item.id, { autoTrigger })}
                       t={t}
                     >
-                      <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" onClick={() => moveQuickInput(item.id, -1)} disabled={disabled}>
-                          {t('settings.moveUp')}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => moveQuickInput(item.id, 1)} disabled={disabled}>
-                          {t('settings.moveDown')}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => handleDeleteQuickInput(item.id)} disabled={disabled}>
-                          {t('settings.deleteQuickInput')}
-                        </Button>
-                      </div>
-
                       <label className="grid gap-2">
                         <span className="text-sm font-medium">{t('settings.quickInputName')}</span>
                         <Input
@@ -325,17 +353,6 @@ export const QuickInputsPanel = ({
                           disabled={disabled}
                           onChange={(event) => updateQuickInput(item.id, { prompt: event.target.value })}
                         />
-                      </label>
-
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          aria-label={t('settings.quickInputAutoTrigger')}
-                          type="checkbox"
-                          checked={item.autoTrigger}
-                          disabled={disabled}
-                          onChange={(event) => updateQuickInput(item.id, { autoTrigger: event.target.checked })}
-                        />
-                        <span className="font-medium">{t('settings.quickInputAutoTrigger')}</span>
                       </label>
 
                       <label className="grid gap-2">

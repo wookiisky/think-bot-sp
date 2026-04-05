@@ -20,6 +20,8 @@ type ChatThreadProps = {
     role: 'user' | 'assistant' | 'system';
     /** 内容。 */
     content: string;
+    /** 展示内容。 */
+    displayContent?: string;
     /** 状态。 */
     status: 'loading' | 'done' | 'error' | 'cancelled';
     /** 错误消息。 */
@@ -142,6 +144,7 @@ export const ChatThread = ({
         {messages.map((message) => {
           const statusLabel = resolveStatusLabel(message.status, t);
           const isEditing = message.role === 'user' && editingMessageId === message.id;
+          const visibleContent = message.displayContent ?? message.content;
           const branchReadingLayout =
             message.branches.length > 1 && !isNarrowBranchViewport ? 'horizontal' : 'vertical';
 
@@ -227,7 +230,7 @@ export const ChatThread = ({
                       </div>
                     </div>
                   ) : (
-                    <ChatMarkdown content={message.content} />
+                    <ChatMarkdown content={visibleContent} />
                   )}
 
                   {restoreMessageId === message.id ? (

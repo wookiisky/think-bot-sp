@@ -16,6 +16,10 @@ type AssistantMessageRecord = Extract<ConversationRecord['messages'][number], { 
 type UserMessageRecord = Extract<ConversationRecord['messages'][number], { role: 'user' }>;
 type BranchRecord = AssistantMessageRecord['branches'][number];
 
+/** 规范化用户消息展示文本，避免把与真实内容相同的值重复落库。 */
+const toDisplayContentPatch = (content: string, displayContent?: string) =>
+  displayContent && displayContent !== content ? { displayContent } : {};
+
 /** 生成 conversation 存储 key。 */
 const getConversationKey = (normalizedUrl: string, promptTabId: string) =>
   buildConversationStorageKey(normalizedUrl, promptTabId);
@@ -245,12 +249,15 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
         const targetIndex = conversation.messages.findIndex((message) => message.id === messageId);
         const preservedMessages = conversation.messages.slice(0, targetIndex + 1).map((message) =>
           message.id === messageId
-            ? {
-                ...message,
-                content,
-                editedAt: now,
-                updatedAt: now,
-              }
+            ? (() => {
+                const { displayContent: _displayContent, ...nextMessage } = message;
+                return {
+                  ...nextMessage,
+                  content,
+                  editedAt: now,
+                  updatedAt: now,
+                };
+              })()
             : message,
         );
         const nextMessages = [
@@ -345,6 +352,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId,
       messageId,
       content,
+      displayContent,
       images,
       now,
     }: {
@@ -356,6 +364,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId: string;
       /** 用户文本。 */
       content: string;
+      /** 用户消息展示文本。 */
+      displayContent?: string;
       /** 用户附带图片。 */
       images: string[];
       /** 当前时间。 */
@@ -371,6 +381,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
               id: messageId,
               role: 'user',
               content,
+              ...toDisplayContentPatch(content, displayContent),
               images,
               status: 'done',
               modelId: null,

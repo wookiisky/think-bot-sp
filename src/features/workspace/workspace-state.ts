@@ -27,6 +27,8 @@ export type ChatMessageState = {
   role: 'user' | 'assistant' | 'system';
   /** 内容。 */
   content: string;
+  /** 展示内容。 */
+  displayContent?: string;
   /** 状态。 */
   status: 'loading' | 'done' | 'error' | 'cancelled';
   /** 错误消息。 */
@@ -53,6 +55,8 @@ export type PromptTabDefinition = {
   name: string;
   /** 默认草稿文本。 */
   defaultText: string;
+  /** 标签触发时真正发送的提示词。 */
+  triggerPrompt: string | null;
   /** 当前标签默认模型。 */
   preferredModelId: string;
   /** 是否为自动触发标签。 */
@@ -87,6 +91,7 @@ export const createChatPromptTab = (preferredModelId: string, name = 'Chat'): Pr
   id: CHAT_PROMPT_TAB_ID,
   name,
   defaultText: '',
+  triggerPrompt: null,
   preferredModelId,
   autoTrigger: false,
   promptTabState: null,
@@ -167,6 +172,7 @@ export const toChatMessageStates = (messages: SidebarConversationRecord['message
     id: message.id,
     role: message.role,
     content: message.content,
+    displayContent: message.displayContent,
     status: message.status,
     errorMessage: message.errorMessage,
     branches: message.branches.map((branch) => ({
@@ -219,7 +225,8 @@ export const buildPromptTabs = ({
     ...visibleQuickInputs.map((item) => ({
       id: item.id,
       name: item.name,
-      defaultText: item.prompt,
+      defaultText: '',
+      triggerPrompt: item.prompt,
       preferredModelId: resolveModelId(item.modelId, models, fallbackModelId),
       autoTrigger: item.autoTrigger,
       promptTabState: promptTabStateMap.get(item.id) ?? null,

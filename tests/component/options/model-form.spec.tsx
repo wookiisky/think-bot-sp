@@ -36,15 +36,32 @@ describe('ModelForm', () => {
     await user.click(within(listbox).getByText(optionText));
   };
 
+  it('默认展示表单头部，并可按需隐藏头部和启用控件', () => {
+    const { rerender } = render(<ModelForm model={createModel()} onChange={vi.fn()} />);
+
+    expect(screen.getByRole('heading', { name: '主模型' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '启用模型' })).toBeInTheDocument();
+
+    rerender(<ModelForm model={createModel()} onChange={vi.fn()} showHeader={false} showEnabledField={false} />);
+
+    expect(screen.queryByRole('heading', { name: '主模型' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: '启用模型' })).not.toBeInTheDocument();
+  });
+
   it('切换 Provider 后展示差异字段', async () => {
     const onChange = vi.fn();
 
     const Harness = () => {
       const [model, setModel] = useState(createModel());
-      return <ModelForm model={model} onChange={(nextModel) => {
-        onChange(nextModel);
-        setModel(nextModel);
-      }} />;
+      return (
+        <ModelForm
+          model={model}
+          onChange={(nextModel) => {
+            onChange(nextModel);
+            setModel(nextModel);
+          }}
+        />
+      );
     };
 
     render(<Harness />);
@@ -70,18 +87,6 @@ describe('ModelForm', () => {
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
 
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
-  });
-
-  it('根据模型完整性显示状态提示', () => {
-    render(<ModelForm model={createModel({ enabled: false })} onChange={vi.fn()} />);
-
-    expect(screen.getByText('配置不完整')).toBeInTheDocument();
-  });
-
-  it('完整模型显示配置完整', () => {
-    render(<ModelForm model={createModel()} onChange={vi.fn()} />);
-
-    expect(screen.getByText('配置完整')).toBeInTheDocument();
   });
 
   it('可显式切换图片输入能力并回写到界面', async () => {

@@ -576,6 +576,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           fallbackModelId,
           chatLabel: resources.t('workspace.chatTab', nextLocaleCode),
         });
+        const nextMessageMap = buildMessageStateMap(nextPromptTabs, bootstrap.conversations);
+        const nextActiveSessionIds = buildActiveSessionIdMap(nextPromptTabs, bootstrap.loadingStates);
 
         setLocaleResources(resources);
         setLocaleCode(nextLocaleCode);
@@ -584,7 +586,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setModels(nextModels);
         setPromptTabs(nextPromptTabs);
         setComposerMap(buildComposerStateMap(nextPromptTabs));
-        setMessageMap(buildMessageStateMap(nextPromptTabs, bootstrap.conversations));
+        setMessageMap(nextMessageMap);
         setRestoreMessageIds(
           buildRestoreMessageIdMap({
             promptTabs: nextPromptTabs,
@@ -592,7 +594,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             loadingStates: bootstrap.loadingStates,
           }),
         );
-        setActiveSessionIds(buildActiveSessionIdMap(nextPromptTabs, bootstrap.loadingStates));
+        setActiveSessionIds(nextActiveSessionIds);
         setChatNotices({});
         setEditingMap(Object.fromEntries(nextPromptTabs.map((promptTab) => [promptTab.id, null])));
         setActivePromptTabId(pickInitialPromptTabId(nextPromptTabs, bootstrap.loadingStates));
@@ -606,6 +608,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
         if (!bootstrap.shouldExtract) {
           setState('ready');
+          if ((bootstrap.page?.content ?? '').trim()) {
+            void (async () => {
+              for (const promptTab of nextPromptTabs) {
+                if (!promptTab.autoTrigger) {
+                  continue;
+                }
+                if (!shouldTriggerPromptTab(promptTab, nextMessageMap[promptTab.id] ?? [], nextActiveSessionIds[promptTab.id] ?? null)) {
+                  continue;
+                }
+                await handleTriggerPromptTab(promptTab);
+              }
+            })();
+          }
           return;
         }
 
@@ -673,20 +688,25 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   /** 发送用户消息，并在本地先补一条乐观消息。 */
-  const handleSend = async (promptTabId: string, input: { text: string; images: string[]; modelId: string; includePageContent: boolean }) => {
+  const handleSend = async (
+    promptTabId: string,
+    input: { text: string; displayText?: string; images: string[]; modelId: string; includePageContent: boolean },
+  ) => {
     setPromptTabNotice(promptTabId, '');
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
+    const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
     setPromptTabMessages(promptTabId, (current) => [
       ...current,
-        {
-          id: optimisticUserMessageId,
-          role: 'user',
-          content: toOptimisticUserContent(input.text, input.images),
-          status: 'done',
-          errorMessage: null,
-          branches: [],
-        },
-      ]);
+      {
+        id: optimisticUserMessageId,
+        role: 'user',
+        content: input.text,
+        ...(optimisticDisplayContent !== input.text ? { displayContent: optimisticDisplayContent } : {}),
+        status: 'done',
+        errorMessage: null,
+        branches: [],
+      },
+    ]);
 
     try {
       const response = await api.sendChat({
@@ -695,6 +715,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         promptTabId,
         modelId: input.modelId,
         text: input.text,
+        displayText: input.displayText,
         images: input.images,
         includePageContent: input.includePageContent,
       });
@@ -729,8 +750,28 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }));
       });
     } catch {
+      setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
       setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
     }
+  };
+
+  /** 判断当前 promptTab 是否应直接触发快捷输入请求。 */
+  const shouldTriggerPromptTab = (promptTab: PromptTabDefinition, messages: ChatMessageState[], sessionId: string | null) =>
+    promptTab.id !== CHAT_PROMPT_TAB_ID && Boolean(promptTab.triggerPrompt) && messages.length === 0 && !sessionId;
+
+  /** 直接发送快捷输入提示词，并把消息展示为快捷输入名称。 */
+  const handleTriggerPromptTab = (promptTab: PromptTabDefinition) => {
+    if (!promptTab.triggerPrompt) {
+      return Promise.resolve();
+    }
+
+    return handleSend(promptTab.id, {
+      text: promptTab.triggerPrompt,
+      displayText: promptTab.name,
+      images: [],
+      modelId: promptTab.preferredModelId,
+      includePageContent: true,
+    });
   };
 
   /** 编辑用户消息后，裁剪其后的结果并立刻重发。 */
@@ -764,6 +805,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               ? {
                   ...message,
                   content: text,
+                  displayContent: undefined,
                 }
               : message,
           ),
@@ -1158,7 +1200,16 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   'flex min-w-[84px] items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs shadow-sm transition-colors',
                   isActive ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/90 hover:bg-muted',
                 )}
-                onClick={() => setActivePromptTabId(promptTab.id)}
+                onClick={() => {
+                  setActivePromptTabId(promptTab.id);
+                  if (state !== 'ready' || !content.trim()) {
+                    return;
+                  }
+                  if (!shouldTriggerPromptTab(promptTab, messageMap[promptTab.id] ?? [], activeSessionIds[promptTab.id] ?? null)) {
+                    return;
+                  }
+                  void handleTriggerPromptTab(promptTab);
+                }}
               >
                 <span className="truncate">{promptTab.name}</span>
                 <span className="flex items-center gap-1">

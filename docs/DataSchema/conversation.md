@@ -39,6 +39,7 @@
 - `id`
 - `role`
 - `content`
+- `displayContent`
 - `images`
 - `status`
 - `errorMessage`
@@ -97,6 +98,7 @@
 - 阶段 4 主聊天流要求每个 chunk 先落 `ConversationRecord`，再通知 UI，避免侧边栏看到比持久化更“新”的状态。
 - 若 setup 在助手占位消息创建后失败，允许保留用户消息，但助手消息必须立刻收敛为 `error`，不能永久停在 `loading`。
 - 编辑用户消息时，目标消息写入 `editedAt`，并且该消息之后的助手结果和分支结果必须整体裁剪后再重新发起请求。
+- 自动触发的快捷输入用户消息允许额外保存 `displayContent`，用于 UI 展示快捷输入名称；编辑后必须回退为真实文本展示。
 - 重试助手消息时，目标助手消息及其后续结果必须被整体替换，新助手消息记录 `retryFromMessageId`。
 - 页面删除或硬删除时一并删除。
 - 风险：

@@ -54,11 +54,14 @@
   - 顶部当前交付“保存 / 保存并同步 / 恢复默认 / 导入配置 / 导出配置”。
   - 页面整体使用完整 tab 布局，顶部信息区和内容区直接铺在页面中，内部功能块仍使用卡片承载。
 - 语言模型采用“列表摘要 + 单项展开编辑”的交互：
-  - 列表行展示显示名称、Provider、模型标识和启用状态。
+  - 模型项标题栏单行展示显示名称，小字展示 `Provider / 模型标识`。
+  - 标题栏右侧统一提供 `上移 / 下移 / 删除 / 启用`，不再单独展示“已启用 / 已停用”状态文案。
   - 当前已交付新增、复制、软删除、拖拽排序和顺序调整按钮；拖拽与上下移动回退方案同时保留。
-  - 展开后按 Provider 展示差异字段，覆盖 Name、Provider、Enabled、Base URL、API Key、Model、Deployment、Temperature、Thinking Budget、最大输出 token、Tools、`supportsImages`。
+  - 展开后按 Provider 展示差异字段，覆盖 Name、Provider、Base URL、API Key、Model、Deployment、Temperature、Thinking Budget、最大输出 token、Tools、`supportsImages`。
   - API Key 默认掩码显示，允许用户临时查看明文。
 - 快捷输入区域当前交付列表编辑、内联折叠展开、消息预览、拖拽排序、软删除和顺序调整。
+  - 快捷输入项标题栏单行展示名称，小字展示提示词预览。
+  - 标题栏右侧统一提供 `上移 / 下移 / 删除 / 自动触发`，不再单独展示状态 pill。
 - 首次安装时默认写入 7 个内置快捷输入：`概括 / 缩写 / 重构 / 反直觉 / 审计 / 第一性原理 / 意图分析`。
 - 旧配置读取与导入时采用“补缺不覆盖”：只补齐缺失的内置快捷输入，不覆盖已有同 id 项。
 - 快捷输入当前可编辑 `name / prompt / autoTrigger / modelId / branchModelIds / order / deletedAt`。

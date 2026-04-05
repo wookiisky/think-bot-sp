@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -29,8 +29,6 @@ const t = (key: string) =>
     'settings.quickInputBranchModelsDescription': '当前快捷输入会在全局分支模型基础上叠加这些模型。',
     'settings.quickInputBranchModelsMissing': '部分专属分支模型引用已失效，保存时会自动清理。',
     'settings.noBranchModels': '暂无可用分支模型',
-    'settings.enabled': '已启用',
-    'settings.disabled': '已停用',
   })[key] ?? key;
 
 /** 用受控壳层模拟设置页草稿配置。 */
@@ -129,18 +127,27 @@ describe('QuickInputsPanel', () => {
     await user.clear(screen.getByLabelText('快捷输入名称'));
     await user.type(screen.getByLabelText('快捷输入名称'), '问题拆解');
     await user.type(screen.getByLabelText('快捷输入提示词'), '请先拆解问题再回答');
-    await user.click(screen.getByRole('checkbox', { name: '自动触发' }));
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '主模型' }));
     await user.click(screen.getByRole('checkbox', { name: '专属分支模型:主模型' }));
 
-    await user.click(screen.getByRole('button', { name: '上移' }));
+    const newQuickInputItem = screen
+      .getAllByTestId(/quick-input-item-quick-/)
+      .find((element) => element.textContent?.includes('问题拆解'));
+
+    expect(newQuickInputItem).toBeTruthy();
+    if (!newQuickInputItem) {
+      throw new Error('未找到新快捷输入卡片');
+    }
+
+    await user.click(within(newQuickInputItem).getByRole('checkbox', { name: '自动触发:问题拆解' }));
+    await user.click(within(newQuickInputItem).getByRole('button', { name: '上移' }));
 
     const items = screen.getAllByRole('listitem');
     expect(items[1]).toHaveTextContent('问题拆解');
 
-    await user.click(screen.getByRole('button', { name: '删除快捷输入' }));
+    await user.click(within(newQuickInputItem).getByRole('button', { name: '删除快捷输入' }));
 
     expect(screen.queryByDisplayValue('问题拆解')).not.toBeInTheDocument();
     expect(screen.getByText('总结')).toBeInTheDocument();
@@ -227,10 +234,59 @@ describe('QuickInputsPanel', () => {
     expect(screen.getByLabelText('快捷输入提示词')).toHaveValue('请总结当前页面内容，保留重点结论。');
     expect(screen.getByLabelText('快捷输入名称')).toBeInTheDocument();
 
-    await user.click(screen.getByText('总结'));
+    await user.click(screen.getByTestId('quick-input-summary-quick-1'));
     expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '导入远端模板' }));
     expect(onImportTemplates).toHaveBeenCalledTimes(1);
+  });
+
+  it('标题栏单行展示名称与提示词预览，并在右侧切换自动触发', async () => {
+    render(
+      <ControlledQuickInputsPanel
+        config={createDefaultConfig({
+          quickInputs: [
+            {
+              id: 'quick-1',
+              name: '总结',
+              prompt: '请总结当前页面内容，保留重点结论。',
+              autoTrigger: false,
+              modelId: null,
+              branchModelIds: [],
+              order: 0,
+              deletedAt: null,
+            },
+            {
+              id: 'quick-2',
+              name: '翻译',
+              prompt: '请翻译当前页面内容。',
+              autoTrigger: true,
+              modelId: null,
+              branchModelIds: [],
+              order: 1,
+              deletedAt: null,
+            },
+          ],
+        })}
+      />,
+    );
+
+    const firstItem = screen.getByTestId('quick-input-item-quick-1');
+    const secondItem = screen.getByTestId('quick-input-item-quick-2');
+
+    expect(firstItem).toHaveTextContent('总结');
+    expect(firstItem).toHaveTextContent('请总结当前页面内容，保留重点结论。');
+    expect(within(firstItem).queryByRole('checkbox', { name: '自动触发' })).not.toBeInTheDocument();
+    expect(within(secondItem).queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    const autoTriggerToggle = within(secondItem).getByRole('checkbox', { name: '自动触发:翻译' });
+    expect(autoTriggerToggle).toBeChecked();
+    await user.click(autoTriggerToggle);
+    expect(within(secondItem).getByRole('checkbox', { name: '自动触发:翻译' })).not.toBeChecked();
+
+    await user.click(within(secondItem).getByTestId('quick-input-summary-quick-2'));
+    expect(within(firstItem).queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
+    expect(within(secondItem).getByLabelText('快捷输入名称')).toHaveValue('翻译');
   });
 });

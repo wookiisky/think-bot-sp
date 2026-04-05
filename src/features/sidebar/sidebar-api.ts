@@ -239,7 +239,16 @@ type SidebarApi = {
   clearTabConversation: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string }]) => Promise<ClearTabConversationResponse>;
   /** 发送主聊天请求。 */
   sendChat: (
-    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; modelId: string; text: string; images: string[]; includePageContent: boolean }]
+    ..._input: [{
+      tabId: number;
+      pageUrl: string;
+      promptTabId: string;
+      modelId: string;
+      text: string;
+      displayText?: string;
+      images: string[];
+      includePageContent: boolean;
+    }]
   ) => Promise<SendChatResponse>;
   /** 编辑目标用户消息并重发。 */
   editUserMessage: (

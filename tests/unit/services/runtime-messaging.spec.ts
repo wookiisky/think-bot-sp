@@ -105,6 +105,7 @@ describe('runtime-messaging', () => {
         promptTabId: 'chat',
         modelId: 'model-1',
         text: '你好',
+        displayText: '概括',
         images: [],
         includePageContent: true,
       }),
@@ -113,6 +114,7 @@ describe('runtime-messaging', () => {
         type: 'SEND_CHAT',
         promptTabId: 'chat',
         modelId: 'model-1',
+        displayText: '概括',
       }),
     );
     expect(
@@ -565,6 +567,7 @@ describe('runtime-messaging', () => {
           promptTabId: 'chat',
           modelId: 'model-1',
           text: '你好',
+          displayText: '概括',
           images: [],
           includePageContent: true,
         },
@@ -593,6 +596,7 @@ describe('runtime-messaging', () => {
       promptTabId: 'chat',
       modelId: 'model-1',
       content: '你好',
+      displayText: '概括',
       images: [],
       pageContent: '页面缓存正文',
     });

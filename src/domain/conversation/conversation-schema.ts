@@ -26,6 +26,7 @@ const messageRecordSchema = z
     id: z.string().min(1),
     role: z.enum(['user', 'assistant', 'system']),
     content: z.string(),
+    displayContent: z.string().min(1).optional(),
     images: z.array(z.string()),
     status: z.enum(['loading', 'done', 'error', 'cancelled']),
     errorMessage: z.string().nullable().default(null),

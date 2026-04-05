@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import type { ModelConfig } from '../../domain/config/config-schema';
-import { isModelConfigComplete } from '../../domain/config/config-schema';
 
 type ModelFormProps = {
   /** 当前编辑的模型配置。 */
@@ -14,13 +12,22 @@ type ModelFormProps = {
   onChange(nextModel: ModelConfig): void;
   /** 是否禁用表单交互。 */
   disabled?: boolean;
+  /** 是否展示表单头部。 */
+  showHeader?: boolean;
+  /** 是否展示启用模型控件。 */
+  showEnabledField?: boolean;
 };
 
 /** 模型配置表单，负责 Provider 差异字段、API Key 显示切换和完整性提示。 */
-export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps) => {
+export const ModelForm = ({
+  model,
+  onChange,
+  disabled = false,
+  showHeader = true,
+  showEnabledField = true,
+}: ModelFormProps) => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [toolsInput, setToolsInput] = useState(model.tools.join(', '));
-  const complete = isModelConfigComplete(model);
   const showBaseUrl = model.provider === 'openai-compatible' || model.provider === 'azure-openai';
   const showDeployment = model.provider === 'azure-openai';
 
@@ -37,10 +44,7 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
 
   return (
     <section className="grid gap-4" aria-label="模型表单">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-base font-semibold">{model.name}</h3>
-        <Badge variant={complete ? 'secondary' : 'destructive'}>{complete ? '配置完整' : '配置不完整'}</Badge>
-      </div>
+      {showHeader ? <h3 className="text-base font-semibold">{model.name}</h3> : null}
 
       <label className="grid gap-2">
         <span className="text-sm font-medium">模型名称</span>
@@ -71,16 +75,18 @@ export const ModelForm = ({ model, onChange, disabled = false }: ModelFormProps)
         </Select>
       </label>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          aria-label="启用模型"
-          type="checkbox"
-          checked={model.enabled}
-          disabled={disabled}
-          onChange={(event) => updateModel({ enabled: event.target.checked })}
-        />
-        <span className="font-medium">启用模型</span>
-      </label>
+      {showEnabledField ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            aria-label="启用模型"
+            type="checkbox"
+            checked={model.enabled}
+            disabled={disabled}
+            onChange={(event) => updateModel({ enabled: event.target.checked })}
+          />
+          <span className="font-medium">启用模型</span>
+        </label>
+      ) : null}
 
       <label className="grid gap-2">
         <span className="text-sm font-medium">Model</span>

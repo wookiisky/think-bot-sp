@@ -82,6 +82,7 @@ settings.addModel: 新增模型
 settings.copyModel: 复制模型
 settings.deleteModel: 删除模型
 settings.dragModel: 拖拽模型
+settings.enableModel: 启用
 settings.moveUp: 上移
 settings.moveDown: 下移
 settings.quickInputsDescription: 管理快捷输入模板。
