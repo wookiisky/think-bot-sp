@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -8,6 +8,7 @@ import { BlacklistSettingsPanel } from '../../../src/features/settings/blacklist
 
 const t = (key: string) =>
   ({
+    'common.cancel': '取消',
     'settings.blacklistSettings': '黑名单设置',
     'settings.blacklistDescription': '管理搜索页等默认阻断规则，并验证单条规则是否命中。',
     'settings.blacklistBuiltIn': '内置',
@@ -66,6 +67,7 @@ describe('BlacklistSettingsPanel', () => {
     expect(screen.getByText('当前规则命中该 URL')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '删除规则' }));
+    await user.click(within(screen.getByTestId('blacklist-delete-confirm')).getByRole('button', { name: '删除规则' }));
     expect(screen.getByText('暂无黑名单规则')).toBeInTheDocument();
   });
 

@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
+import { Trash2Icon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Tooltip } from '../../components/ui/tooltip';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import { isBuiltInBlacklistRuleId } from '../../domain/config/config-schema';
 import { createBlacklistService } from '../../services/blacklist/blacklist-service';
@@ -208,9 +211,19 @@ export const BlacklistSettingsPanel = ({
           {activeRule ? (
             <section className="grid gap-4 rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={handleDeleteRule} disabled={disabled}>
-                  {t('settings.deleteBlacklistRule')}
-                </Button>
+                <MiniConfirm
+                  message={t('settings.deleteBlacklistRule')}
+                  cancelLabel={t('common.cancel')}
+                  confirmLabel={t('settings.deleteBlacklistRule')}
+                  contentTestId="blacklist-delete-confirm"
+                  onConfirm={handleDeleteRule}
+                >
+                  <Tooltip content={t('settings.deleteBlacklistRule')}>
+                    <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.deleteBlacklistRule')} disabled={disabled}>
+                      <Trash2Icon />
+                    </Button>
+                  </Tooltip>
+                </MiniConfirm>
               </div>
 
               <label className="grid gap-2">

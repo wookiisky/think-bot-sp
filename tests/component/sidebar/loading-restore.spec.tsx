@@ -118,7 +118,8 @@ describe('SidebarShell loading restore', () => {
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
     expect(await screen.findByText('部分回答')).toBeVisible();
-    expect(screen.getByText('恢复生成中')).toBeVisible();
+    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 
   it('存在快捷输入 loading 时优先打开对应 promptTab', async () => {
@@ -263,6 +264,7 @@ describe('SidebarShell loading restore', () => {
 
     expect(await screen.findByText('快捷标签恢复内容')).toBeVisible();
     expect(screen.getByRole('tab', { name: /问题拆解/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText('恢复生成中')).toBeVisible();
+    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 });

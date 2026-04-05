@@ -63,18 +63,18 @@ describe('SettingsShell', () => {
   it('加载配置并展示缓存统计', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 3, entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
 
     expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
-    expect(screen.getByText('3 项')).toBeInTheDocument();
-    expect(screen.getByText('128 B')).toBeInTheDocument();
+    expect(screen.getByTestId('cache-page-count')).toHaveTextContent('3 个页面');
+    expect(screen.getByTestId('cache-bytes')).toHaveTextContent('128 B');
     expect(mocks.getConfig).toHaveBeenCalledTimes(1);
     expect(mocks.getLocalCacheStats).toHaveBeenCalledTimes(1);
   });
 
-  it('会展示最近一次错误摘要', async () => {
+  it('读取最近一次错误但不在主内容区展示最近一次错误卡片', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce({
       source: 'sync',
@@ -82,19 +82,19 @@ describe('SettingsShell', () => {
       message: '同步失败',
       capturedAt: new Date('2026-04-05T00:00:00.000Z').getTime(),
     });
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
-    expect(await screen.findByText('最近一次错误')).toBeInTheDocument();
-    expect(screen.getByText('同步失败')).toBeInTheDocument();
-    expect(screen.getByText(/同步 \/ SYNC_NOW/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
+    expect(screen.queryByText('最近一次错误')).not.toBeInTheDocument();
+    expect(screen.queryByText('同步失败')).not.toBeInTheDocument();
   });
 
   it('加载配置后渲染设置页顶部动作区与导航 chips', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 3, entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
 
@@ -110,7 +110,7 @@ describe('SettingsShell', () => {
   it('设置页使用完整 tab 页面布局而不是弹窗式卡片壳层', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 3, entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
 
@@ -122,7 +122,7 @@ describe('SettingsShell', () => {
   it('切换语言后即时预览标题变化', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
@@ -135,7 +135,7 @@ describe('SettingsShell', () => {
   it('切换主题后立即更新设置页预览并保留当前选择', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
@@ -150,7 +150,7 @@ describe('SettingsShell', () => {
   it('主题切换后保留 data-theme 并更新根节点主题 class', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
@@ -166,7 +166,7 @@ describe('SettingsShell', () => {
     const config = createDefaultConfig();
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 1, entryCount: 1, bytes: 16 });
     mocks.saveConfig.mockResolvedValueOnce(config);
 
     render(<SettingsShell />);
@@ -220,7 +220,7 @@ describe('SettingsShell', () => {
     });
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getRecentError.mockResolvedValueOnce(null);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 1, entryCount: 1, bytes: 16 });
     mocks.saveConfig.mockResolvedValueOnce(
       createDefaultConfig({
         ...config,
@@ -336,6 +336,7 @@ describe('SettingsShell', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');
     expect(screen.getByRole('heading', { name: '设置' })).toBeInTheDocument();
+    expect(screen.queryByText('最近一次错误')).not.toBeInTheDocument();
   });
 
   it('快捷输入预览会过滤软删除项并按顺序展示', async () => {
@@ -376,7 +377,7 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
-    fireEvent.click(screen.getByRole('tab', { name: '标签页' }));
+    fireEvent.click(screen.getByRole('tab', { name: '快捷输入' }));
 
     expect(screen.queryByText('删除项')).not.toBeInTheDocument();
     expect(screen.getByText('翻译')).toBeInTheDocument();
@@ -592,7 +593,9 @@ describe('SettingsShell', () => {
   it('清理缓存后会刷新缓存统计', async () => {
     const config = createDefaultConfig();
     mocks.getConfig.mockResolvedValueOnce(config);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 }).mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats
+      .mockResolvedValueOnce({ pageCount: 3, entryCount: 3, bytes: 128 })
+      .mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
     mocks.clearLocalCache.mockResolvedValueOnce({ removedKeys: 3 });
 
     render(<SettingsShell />);
@@ -603,14 +606,14 @@ describe('SettingsShell', () => {
     await waitFor(() => {
       expect(mocks.clearLocalCache).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByText('0 项')).toBeInTheDocument();
-    expect(screen.getByText('0 B')).toBeInTheDocument();
+    expect(await screen.findByTestId('cache-page-count')).toHaveTextContent('0 个页面');
+    expect(screen.getByTestId('cache-bytes')).toHaveTextContent('0 B');
   });
 
   it('清理缓存失败后显示错误并保留当前缓存统计', async () => {
     const config = createDefaultConfig();
     mocks.getConfig.mockResolvedValueOnce(config);
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 3, entryCount: 3, bytes: 128 });
     mocks.clearLocalCache.mockRejectedValueOnce(new Error('缓存清理失败'));
 
     render(<SettingsShell />);
@@ -619,8 +622,8 @@ describe('SettingsShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '清理本地缓存' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('缓存清理失败');
-    expect(screen.getByText('3 项')).toBeInTheDocument();
-    expect(screen.getByText('128 B')).toBeInTheDocument();
+    expect(screen.getByTestId('cache-page-count')).toHaveTextContent('3 个页面');
+    expect(screen.getByTestId('cache-bytes')).toHaveTextContent('128 B');
   });
 
   it('快速重复点击保存时只触发一次保存请求', async () => {

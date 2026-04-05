@@ -1,3 +1,4 @@
+common.cancel: 取消
 settings.title: 设置
 settings.nav: 设置导航
 settings.basic: 基础设置
@@ -9,7 +10,7 @@ settings.reset: 恢复默认
 settings.import: 导入配置
 settings.export: 导出配置
 settings.models: 模型
-settings.promptTabs: 标签页
+settings.promptTabs: 快捷输入
 settings.blacklist: 黑名单
 settings.sync: 同步
 settings.cache: 本地缓存
@@ -57,13 +58,15 @@ settings.recentErrorSource.sidebar: 侧边栏
 settings.recentErrorSource.conversations: 历史页
 settings.recentErrorSource.sync: 同步
 settings.recentErrorSource.settings: 设置页
-settings.basicDescription: 管理主题、语言、默认模型、全局分支模型和提取默认行为。
+settings.basicDescription: 管理主题、语言、默认模型、分支模型和提取默认行为。
 settings.defaultModel: 默认模型
 settings.noDefaultModel: 不设置默认模型
-settings.branchModels: 全局分支模型
+settings.branchModels: 分支模型
 settings.branchModelsDescription: 为 Chat 和未单独覆盖的快捷输入配置默认分支模型。
 settings.noBranchModels: 暂无可用分支模型
 settings.branchModelsMissing: 部分分支模型引用已失效，保存时会自动清理。
+settings.multiSelectPlaceholder: 请选择
+settings.multiSelectSummary: "已选 {count} 项"
 settings.extractionMethod: 默认提取方式
 settings.extractionPanelHeight: 默认提取区高度
 settings.jinaApiKey: Jina API Key
@@ -73,8 +76,10 @@ settings.includePageContentByDefault: 默认附带页面正文
 settings.previewHint: 即时预览
 settings.previewDescription: 切换语言和主题后立即预览。
 settings.cacheDescription: 查看页面缓存占用并执行安全清理。
+settings.savedPages: 总保存页面数
+settings.cacheSize: 总大小
 settings.clearCache: 清理本地缓存
-settings.modelsDescription: 先提供列表摘要与单项编辑，后续再补齐更多管理动作。
+settings.modelsDescription: 大模型供应商配置
 settings.enabled: 已启用
 settings.disabled: 已停用
 settings.noModels: 暂无模型配置
@@ -99,7 +104,7 @@ settings.quickInputAutoTrigger: 自动触发
 settings.quickInputModel: 专属模型
 settings.quickInputNoModel: 不指定模型
 settings.quickInputModelMissing: 引用的模型已失效，建议重新选择。
-settings.quickInputBranchModels: 专属分支模型
+settings.quickInputBranchModels: 分支模型
 settings.quickInputBranchModelsDescription: 当前快捷输入会在全局分支模型基础上叠加这些模型。
 settings.quickInputBranchModelsMissing: 部分专属分支模型引用已失效，保存时会自动清理。
 workspace.chatTab: 聊天

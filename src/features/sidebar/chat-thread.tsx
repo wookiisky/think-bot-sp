@@ -1,11 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import { CopyIcon, Edit3Icon, GitBranchPlusIcon, RotateCcwIcon, SaveIcon, Trash2Icon, XIcon } from 'lucide-react';
+import {
+  ChevronsDownIcon,
+  ChevronsUpIcon,
+  CopyIcon,
+  Edit3Icon,
+  FileCode2Icon,
+  GitBranchPlusIcon,
+  RotateCcwIcon,
+  SaveIcon,
+  SquareIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react';
 import removeMarkdown from 'remove-markdown';
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader } from '../../components/ui/card';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Textarea } from '../../components/ui/textarea';
+import { Tooltip } from '../../components/ui/tooltip';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from '../workspace/chat-markdown';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
@@ -64,6 +77,8 @@ type ChatThreadProps = {
   onRetryAssistantMessage: (...input: [messageId: string]) => Promise<void>;
   /** 继续新增分支。 */
   onExpandBranches: (...input: [messageId: string]) => Promise<void>;
+  /** 停止当前消息所属会话。 */
+  onStop: () => Promise<void>;
   /** 停止单个分支。 */
   onStopBranch: (...input: [messageId: string, branchId: string]) => Promise<void>;
   /** 删除单个分支。 */
@@ -86,12 +101,14 @@ export const ChatThread = ({
   onRetryUserMessage,
   onRetryAssistantMessage,
   onExpandBranches,
+  onStop,
   onStopBranch,
   onDeleteBranch,
   onNotice,
 }: ChatThreadProps) => {
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [isNarrowBranchViewport, setIsNarrowBranchViewport] = useState(false);
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -110,6 +127,7 @@ export const ChatThread = ({
       mediaQuery.removeEventListener?.('change', syncViewportState);
     };
   }, []);
+
   /** 复制指定格式的消息内容。 */
   const handleCopyMessage = async (input: { content: string; mode: 'plain' | 'markdown' }) => {
     const nextContent =
@@ -129,6 +147,7 @@ export const ChatThread = ({
       onNotice(input.mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'));
     }
   };
+
   /** 滚动到目标消息顶部或底部。 */
   const scrollToMessage = (messageId: string, block: 'start' | 'end') => {
     messageRefs.current[messageId]?.scrollIntoView({
@@ -139,12 +158,12 @@ export const ChatThread = ({
 
   return (
     <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-4 py-3">
-      <div className="flex flex-col gap-3">
+      <div className="divide-y divide-border/80">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
-          const statusLabel = resolveStatusLabel(message.status, t);
           const isEditing = message.role === 'user' && editingMessageId === message.id;
           const visibleContent = message.displayContent ?? message.content;
+          const isAssistantLoading = message.role === 'assistant' && message.status === 'loading';
           const branchReadingLayout =
             message.branches.length > 1 && !isNarrowBranchViewport ? 'horizontal' : 'vertical';
 
@@ -154,240 +173,285 @@ export const ChatThread = ({
               ref={(element) => {
                 messageRefs.current[message.id] = element;
               }}
+              data-testid={`chat-message-${message.id}`}
+              data-message-role={message.role}
+              className="group/message relative py-3"
+              onMouseEnter={() => setHoveredMessageId(message.id)}
+              onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
+              onFocus={() => setHoveredMessageId(message.id)}
+              onBlur={(event) => {
+                if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  return;
+                }
+                setHoveredMessageId((current) => (current === message.id ? null : current));
+              }}
             >
-              <Card
-                data-testid={`chat-message-${message.id}`}
-                size="sm"
-                className={cn(
-                  'border border-border/80 bg-card/80 py-3 shadow-sm ring-1 ring-foreground/5',
-                  message.role === 'assistant' && 'border-primary/25',
-                  message.role === 'user' && 'border-border',
-                  message.status === 'error' && 'border-destructive/30',
-                )}
-              >
-                <CardHeader className="flex flex-row items-start justify-between gap-3 border-b border-border/70 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={message.role === 'assistant' ? 'default' : 'outline'}>
-                      {t(`workspace.role.${message.role}`)}
-                    </Badge>
-                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <WorkspaceStatusGlyph label={statusLabel} status={toVisualStatus(message.status)} className="size-3.5" />
-                      <span>{statusLabel}</span>
-                    </span>
+              <article className={resolveMessageBubbleClass(message.role, message.status)}>
+                {isAssistantLoading ? (
+                  <div className="absolute right-0 top-0">
+                    <Tooltip content={t('workspace.stop')}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t('workspace.stop')}
+                        onClick={() => void onStop()}
+                      >
+                        <SquareIcon />
+                      </Button>
+                    </Tooltip>
                   </div>
+                ) : null}
 
-                  {message.role === 'assistant' && message.status !== 'loading' ? (
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={t('workspace.retryAssistantMessage')}
-                        title={t('workspace.retryAssistantMessage')}
-                        onClick={() => void onRetryAssistantMessage(message.id)}
-                      >
-                        <RotateCcwIcon data-icon="inline-start" />
-                        {t('workspace.retryAssistantMessage')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={t('workspace.expandBranches')}
-                        title={t('workspace.expandBranches')}
-                        onClick={() => void onExpandBranches(message.id)}
-                      >
-                        <GitBranchPlusIcon data-icon="inline-start" />
-                        {t('workspace.expandBranches')}
-                      </Button>
-                    </div>
-                  ) : null}
-                </CardHeader>
-
-                <CardContent className="grid gap-3">
-                  {isEditing ? (
-                    <div className="grid gap-2">
-                      <Textarea
-                        aria-label={t('workspace.editMessageInput')}
-                        value={editingText}
-                        onChange={(event) => onEditingTextChange(event.target.value)}
-                      />
-                      <div className="flex gap-2">
+                {isEditing ? (
+                  <div className="grid gap-2">
+                    <Textarea
+                      aria-label={t('workspace.editMessageInput')}
+                      value={editingText}
+                      onChange={(event) => onEditingTextChange(event.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Tooltip content={t('workspace.saveAndResend')}>
                         <Button
                           type="button"
-                          size="sm"
+                          size="icon-sm"
                           aria-label={t('workspace.saveAndResend')}
                           disabled={editingText.trim().length === 0}
                           onClick={() => void onSubmitEdit(message.id)}
                         >
-                          <SaveIcon data-icon="inline-start" />
-                          {t('workspace.saveAndResend')}
+                          <SaveIcon />
                         </Button>
-                        <Button type="button" variant="outline" size="sm" aria-label={t('workspace.cancelEdit')} onClick={onCancelEdit}>
-                          <XIcon data-icon="inline-start" />
-                          {t('workspace.cancelEdit')}
+                      </Tooltip>
+                      <Tooltip content={t('workspace.cancelEdit')}>
+                        <Button type="button" variant="outline" size="icon-sm" aria-label={t('workspace.cancelEdit')} onClick={onCancelEdit}>
+                          <XIcon />
                         </Button>
+                      </Tooltip>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {isAssistantLoading ? (
+                      <div className="mb-2 flex items-center">
+                        <WorkspaceStatusGlyph label={t('workspace.status.loading')} status="loading" className="size-4" />
                       </div>
-                    </div>
-                  ) : (
+                    ) : null}
+
                     <ChatMarkdown content={visibleContent} />
-                  )}
+                  </>
+                )}
 
-                  {restoreMessageId === message.id ? (
-                    <div className="flex items-center gap-2 text-xs text-primary">
-                      <WorkspaceStatusGlyph label={t('workspace.status.restore')} status="loading" className="size-3.5" />
-                      <span>{t('workspace.status.restore')}</span>
-                    </div>
-                  ) : null}
+                {message.status === 'error' ? <p className="mt-2 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p> : null}
+                {message.status === 'cancelled' ? (
+                  <p className="mt-2 text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
+                ) : null}
 
-                  {message.status === 'error' ? <p className="text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p> : null}
-                  {message.status === 'cancelled' ? (
-                    <p className="text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
-                  ) : null}
-
-                  {!isEditing ? (
-                    <div className="flex flex-wrap justify-end gap-1">
-                      {message.role === 'user' ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={t('workspace.editMessage')}
-                            title={t('workspace.editMessage')}
-                            onClick={() => onStartEdit(message.id, message.content)}
-                          >
-                            <Edit3Icon data-icon="inline-start" />
-                            {t('workspace.editMessage')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={t('workspace.retryUserMessage')}
-                            title={t('workspace.retryUserMessage')}
-                            onClick={() => void onRetryUserMessage(message.id)}
-                          >
-                            <RotateCcwIcon data-icon="inline-start" />
-                            {t('workspace.retryUserMessage')}
-                          </Button>
-                        </>
-                      ) : null}
-                      {message.role === 'assistant' ? (
-                        <>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={t('workspace.scrollToMessageTop')}
-                            title={t('workspace.scrollToMessageTop')}
-                            onClick={() => scrollToMessage(message.id, 'start')}
-                          >
-                            {t('workspace.scrollToMessageTop')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            aria-label={t('workspace.scrollToMessageBottom')}
-                            title={t('workspace.scrollToMessageBottom')}
-                            onClick={() => scrollToMessage(message.id, 'end')}
-                          >
-                            {t('workspace.scrollToMessageBottom')}
-                          </Button>
-                        </>
-                      ) : null}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={t('workspace.copyPlainText')}
-                        title={t('workspace.copyPlainText')}
-                        onClick={() => void handleCopyMessage({ content: message.content, mode: 'plain' })}
+                {message.branches.length > 0 ? (
+                  <div
+                    data-testid={`branch-rail-${message.id}`}
+                    data-reading-layout={branchReadingLayout}
+                    className={cn(
+                      'mt-3 border-t border-border/70 pt-3',
+                      branchReadingLayout === 'horizontal'
+                        ? 'flex gap-3 overflow-x-auto pb-2 pr-1 snap-x snap-mandatory'
+                        : 'grid gap-2',
+                    )}
+                  >
+                    {message.branches.map((branch) => (
+                      <section
+                        key={branch.id}
+                        data-testid={`branch-${branch.id}`}
+                        className={cn(
+                          'rounded-md border border-border/80 bg-background/70 px-3 py-2',
+                          branchReadingLayout === 'horizontal' && 'min-w-[19rem] max-w-[24rem] shrink-0 snap-start',
+                        )}
                       >
-                        <CopyIcon data-icon="inline-start" />
-                        {t('workspace.copyPlainText')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        aria-label={t('workspace.copyMarkdown')}
-                        title={t('workspace.copyMarkdown')}
-                        onClick={() => void handleCopyMessage({ content: message.content, mode: 'markdown' })}
-                      >
-                        <CopyIcon data-icon="inline-start" />
-                        {t('workspace.copyMarkdown')}
-                      </Button>
-                    </div>
-                  ) : null}
-
-                  {message.branches.length > 0 ? (
-                    <div
-                      data-testid={`branch-rail-${message.id}`}
-                      data-reading-layout={branchReadingLayout}
-                      className={cn(
-                        'border-t border-border/70 pt-3',
-                        branchReadingLayout === 'horizontal'
-                          ? 'flex gap-3 overflow-x-auto pb-2 pr-1 snap-x snap-mandatory'
-                          : 'grid gap-2',
-                      )}
-                    >
-                      {message.branches.map((branch) => (
-                        <section
-                          key={branch.id}
-                          data-testid={`branch-${branch.id}`}
-                          className={cn(
-                            'rounded-md border border-border/80 bg-background/70 px-3 py-2',
-                            branchReadingLayout === 'horizontal' && 'min-w-[19rem] max-w-[24rem] shrink-0 snap-start',
-                          )}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Badge variant="outline">{t('workspace.status.branch')}</Badge>
-                                <span>{branch.modelLabel}</span>
-                                <WorkspaceStatusGlyph label={resolveStatusLabel(branch.status, t)} status={toVisualStatus(branch.status)} className="size-3.5" />
-                              </div>
-                              <div className="mt-2">
-                                <ChatMarkdown content={branch.content} />
-                              </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">{t('workspace.status.branch')}</Badge>
+                              <span>{branch.modelLabel}</span>
+                              <WorkspaceStatusGlyph
+                                label={resolveStatusLabel(branch.status, t)}
+                                status={toVisualStatus(branch.status)}
+                                className="size-3.5"
+                              />
                             </div>
-                            <div className="flex shrink-0 items-center gap-1">
-                              {branch.status === 'loading' ? (
+                            <div className="mt-2">
+                              <ChatMarkdown content={branch.content} />
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {branch.status === 'loading' ? (
+                              <Tooltip content={t('workspace.stopBranch')}>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon-xs"
                                   aria-label={t('workspace.stopBranch')}
-                                  title={t('workspace.stopBranch')}
                                   onClick={() => void onStopBranch(message.id, branch.id)}
                                 >
                                   <XIcon />
                                 </Button>
-                              ) : null}
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon-xs"
-                                aria-label={t('workspace.deleteBranch')}
-                                title={t('workspace.deleteBranch')}
-                                onClick={() => void onDeleteBranch(message.id, branch.id)}
-                              >
-                                <Trash2Icon />
-                              </Button>
-                            </div>
+                              </Tooltip>
+                            ) : null}
+                            <MiniConfirm
+                              message={t('workspace.deleteBranch')}
+                              cancelLabel={t('common.cancel')}
+                              confirmLabel={t('workspace.deleteBranch')}
+                              contentTestId={`delete-branch-confirm-${branch.id}`}
+                              onConfirm={() => onDeleteBranch(message.id, branch.id)}
+                            >
+                              <Tooltip content={t('workspace.deleteBranch')}>
+                                <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.deleteBranch')}>
+                                  <Trash2Icon />
+                                </Button>
+                              </Tooltip>
+                            </MiniConfirm>
                           </div>
-                          {branch.status === 'error' ? <p className="mt-2 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
-                          {branch.status === 'cancelled' ? (
-                            <p className="mt-2 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
-                          ) : null}
-                        </section>
-                      ))}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
+                        </div>
+                        {branch.status === 'error' ? <p className="mt-2 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
+                        {branch.status === 'cancelled' ? (
+                          <p className="mt-2 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
+                        ) : null}
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
+
+                {!isEditing && message.status !== 'loading' ? (
+                  <div
+                    data-testid={`chat-message-actions-${message.id}`}
+                    className={cn(
+                      'absolute right-0 top-0 transition-opacity',
+                      hoveredMessageId === message.id ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+                      message.role === 'assistant'
+                        ? 'flex flex-col rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm'
+                        : 'flex flex-row rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm',
+                    )}
+                  >
+                    {message.role === 'user' ? (
+                      <>
+                        <Tooltip content={t('workspace.editMessage')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.editMessage')}
+                            onClick={() => onStartEdit(message.id, message.content)}
+                          >
+                            <Edit3Icon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.retryUserMessage')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.retryUserMessage')}
+                            onClick={() => void onRetryUserMessage(message.id)}
+                          >
+                            <RotateCcwIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.copyPlainText')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.copyPlainText')}
+                            onClick={() => void handleCopyMessage({ content: message.content, mode: 'plain' })}
+                          >
+                            <CopyIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.copyMarkdown')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.copyMarkdown')}
+                            onClick={() => void handleCopyMessage({ content: message.content, mode: 'markdown' })}
+                          >
+                            <FileCode2Icon />
+                          </Button>
+                        </Tooltip>
+                      </>
+                    ) : null}
+
+                    {message.role === 'assistant' ? (
+                      <>
+                        <Tooltip content={t('workspace.retryAssistantMessage')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.retryAssistantMessage')}
+                            onClick={() => void onRetryAssistantMessage(message.id)}
+                          >
+                            <RotateCcwIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.expandBranches')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.expandBranches')}
+                            onClick={() => void onExpandBranches(message.id)}
+                          >
+                            <GitBranchPlusIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.scrollToMessageTop')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.scrollToMessageTop')}
+                            onClick={() => scrollToMessage(message.id, 'start')}
+                          >
+                            <ChevronsUpIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.scrollToMessageBottom')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.scrollToMessageBottom')}
+                            onClick={() => scrollToMessage(message.id, 'end')}
+                          >
+                            <ChevronsDownIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.copyPlainText')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.copyPlainText')}
+                            onClick={() => void handleCopyMessage({ content: message.content, mode: 'plain' })}
+                          >
+                            <CopyIcon />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content={t('workspace.copyMarkdown')}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={t('workspace.copyMarkdown')}
+                            onClick={() => void handleCopyMessage({ content: message.content, mode: 'markdown' })}
+                          >
+                            <FileCode2Icon />
+                          </Button>
+                        </Tooltip>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </article>
             </div>
           );
         })}
@@ -427,3 +491,14 @@ const resolveStatusLabel = (status: 'loading' | 'done' | 'error' | 'cancelled', 
       return '';
   }
 };
+
+/** 统一根据角色和运行态生成消息气泡样式。 */
+const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
+  cn(
+    'relative rounded-lg px-1 py-1 pr-12 transition-colors',
+    role === 'assistant' && 'text-foreground',
+    role === 'user' && 'text-foreground',
+    role === 'system' && 'text-amber-900',
+    status === 'error' && 'text-destructive',
+    status === 'cancelled' && 'text-muted-foreground',
+  );

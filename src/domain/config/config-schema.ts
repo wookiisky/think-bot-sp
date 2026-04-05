@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { CONFIG_SCHEMA_VERSION } from '../../shared/schema-version';
 
 /** 提取区最小默认高度。 */
-export const MIN_EXTRACTION_PANEL_HEIGHT = 160;
+export const MIN_EXTRACTION_PANEL_HEIGHT = 1;
 /** 提取区默认高度。 */
 export const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
 /** 提取区最大默认高度。 */

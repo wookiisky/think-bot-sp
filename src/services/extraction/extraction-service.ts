@@ -13,6 +13,10 @@ type PageSource = {
   text: string;
   /** 页面 favicon。 */
   faviconUrl: string;
+  /** content script 内预提取的 Readability Markdown。 */
+  readabilityContent?: string;
+  /** content script 内预提取的 Readability 标题。 */
+  readabilityTitle?: string;
 };
 
 type ExtractionLogger = {
@@ -103,6 +107,17 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
       });
 
       if (input.method === 'readability') {
+        if (pageSource.readabilityContent?.trim()) {
+          return pageRepository.saveExtractionResult({
+            normalizedUrl,
+            url: pageSource.url,
+            title: pageSource.readabilityTitle?.trim() || pageSource.title,
+            faviconUrl: pageSource.faviconUrl,
+            content: pageSource.readabilityContent,
+            extractionMethod: 'readability',
+          });
+        }
+
         const parsed = readabilityExtractor.extract(pageSource.html, pageSource.url);
         if (parsed?.content.trim()) {
           return pageRepository.saveExtractionResult({

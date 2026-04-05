@@ -1,3 +1,4 @@
+common.cancel: Cancel
 settings.title: Settings
 settings.nav: Settings Navigation
 settings.basic: Basic Settings
@@ -9,7 +10,7 @@ settings.reset: Reset
 settings.import: Import Config
 settings.export: Export Config
 settings.models: Models
-settings.promptTabs: Tabs
+settings.promptTabs: Quick Inputs
 settings.blacklist: Blacklist
 settings.sync: Sync
 settings.cache: Local Cache
@@ -57,13 +58,15 @@ settings.recentErrorSource.sidebar: Sidebar
 settings.recentErrorSource.conversations: History
 settings.recentErrorSource.sync: Sync
 settings.recentErrorSource.settings: Settings
-settings.basicDescription: Manage theme, language, default model, global branch models, and extraction defaults.
+settings.basicDescription: Manage theme, language, default model, branch models, and extraction defaults.
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
-settings.branchModels: Global Branch Models
+settings.branchModels: Branch Models
 settings.branchModelsDescription: Configure default branch models for Chat and quick inputs without their own overrides.
 settings.noBranchModels: No branch model available
 settings.branchModelsMissing: Some branch model references are unavailable and will be removed on save.
+settings.multiSelectPlaceholder: Please Select
+settings.multiSelectSummary: "{count} selected"
 settings.extractionMethod: Default Extraction Method
 settings.extractionPanelHeight: Default Extraction Panel Height
 settings.jinaApiKey: Jina API Key
@@ -73,6 +76,8 @@ settings.includePageContentByDefault: Include Page Content By Default
 settings.previewHint: Instant Preview
 settings.previewDescription: Language and theme changes apply immediately.
 settings.cacheDescription: Review local cache usage and clear reclaimable data.
+settings.savedPages: Saved Pages
+settings.cacheSize: Total Size
 settings.clearCache: Clear Local Cache
 settings.modelsDescription: This stage keeps list summary and single-item editing only.
 settings.enabled: Enabled
@@ -99,7 +104,7 @@ settings.quickInputAutoTrigger: Auto Trigger
 settings.quickInputModel: Dedicated Model
 settings.quickInputNoModel: No Dedicated Model
 settings.quickInputModelMissing: The referenced model is unavailable. Please choose another one.
-settings.quickInputBranchModels: Dedicated Branch Models
+settings.quickInputBranchModels: Branch Models
 settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global branch models.
 settings.quickInputBranchModelsMissing: Some dedicated branch model references are unavailable and will be removed on save.
 workspace.chatTab: Chat

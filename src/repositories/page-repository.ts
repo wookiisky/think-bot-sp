@@ -221,7 +221,9 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
         key.startsWith(CONVERSATION_STORAGE_PREFIX) ||
         key.startsWith(LOADING_STORAGE_PREFIX),
       );
+      const pageCount = entries.filter(([key]) => key.startsWith(PAGE_STORAGE_PREFIX)).length;
       return {
+        pageCount,
         entryCount: entries.length,
         bytes: new TextEncoder().encode(JSON.stringify(Object.fromEntries(entries))).byteLength,
       };

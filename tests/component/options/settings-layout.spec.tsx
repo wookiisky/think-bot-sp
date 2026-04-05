@@ -54,14 +54,14 @@ describe('SettingsLayout', () => {
 
   it('左侧导航固定为五个栏目并展示顶部动作区', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
     expect(await screen.findByRole('tab', { name: '基础设置' })).toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(5);
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '标签页' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '快捷输入' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '语言模型' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '云同步' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '黑名单设置' })).toBeInTheDocument();
@@ -97,7 +97,7 @@ describe('SettingsLayout', () => {
         ],
       }),
     );
-    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 

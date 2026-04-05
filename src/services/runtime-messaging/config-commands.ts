@@ -77,7 +77,7 @@ type ConfigRepositories = {
 
 type PageRepositories = {
   /** 获取本地缓存统计。 */
-  getCacheStats: () => Promise<{ entryCount: number; bytes: number }>;
+  getCacheStats: () => Promise<{ pageCount: number; entryCount: number; bytes: number }>;
   /** 清理本地缓存。 */
   clearCache: () => Promise<{ removedKeys: number }>;
 };

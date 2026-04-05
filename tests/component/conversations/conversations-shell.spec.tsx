@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -206,6 +206,7 @@ describe('ConversationsShell', () => {
     );
 
     await user.click(screen.getByLabelText('删除页面 页面 A 新标题'));
+    await user.click(within(screen.getByTestId('delete-page-confirm-https://example.com/article-a')).getByRole('button', { name: '删除页面' }));
     await waitFor(() => expect(api.deletePage).toHaveBeenCalledWith('https://example.com/article-a'));
   });
 });

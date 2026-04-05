@@ -2,6 +2,8 @@ import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { RecentErrorSummary } from '../../domain/error/recent-error-schema';
 
 type CacheStats = {
+  /** 本地缓存页面数。 */
+  pageCount: number;
   /** 本地缓存条目数。 */
   entryCount: number;
   /** 本地缓存字节数。 */

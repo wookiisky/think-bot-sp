@@ -2,12 +2,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { MultiSelectPopover } from '../../components/ui/multi-select-popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
+import { Tooltip } from '../../components/ui/tooltip';
 import { getEnabledCompleteModels, sanitizeBranchModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 
@@ -92,20 +96,20 @@ const SortableQuickInputCard = ({
     >
       <section
         className={[
-          'grid gap-4 rounded-2xl border px-4 py-4 transition-colors',
+          'grid gap-3 rounded-2xl border px-4 py-3 transition-colors',
           expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`${t('settings.dragQuickInput')}:${item.name}`}
             disabled={disabled}
             {...attributes}
             {...listeners}
           >
-            ::
+            <GripVerticalIcon className="size-4" />
           </button>
 
           <button
@@ -119,15 +123,27 @@ const SortableQuickInputCard = ({
           </button>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onMoveUp} disabled={disabled}>
-              {t('settings.moveUp')}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onMoveDown} disabled={disabled}>
-              {t('settings.moveDown')}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onDelete} disabled={disabled}>
-              {t('settings.deleteQuickInput')}
-            </Button>
+            <Tooltip content={t('settings.moveUp')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveUp')} onClick={onMoveUp} disabled={disabled}>
+                <ArrowUpIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('settings.moveDown')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveDown')} onClick={onMoveDown} disabled={disabled}>
+                <ArrowDownIcon />
+              </Button>
+            </Tooltip>
+            <MiniConfirm
+              message={t('settings.deleteQuickInput')}
+              cancelLabel={t('common.cancel')}
+              confirmLabel={t('settings.deleteQuickInput')}
+              contentTestId={`quick-input-delete-confirm-${item.id}`}
+              onConfirm={onDelete}
+            >
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.deleteQuickInput')} disabled={disabled}>
+                <Trash2Icon />
+              </Button>
+            </MiniConfirm>
             <label className="flex items-center gap-2 text-sm">
               <input
                 aria-label={`${t('settings.quickInputAutoTrigger')}:${item.name}`}
@@ -390,37 +406,25 @@ export const QuickInputsPanel = ({
                         <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputModelMissing')}</p>
                       ) : null}
 
-                      <fieldset className="grid gap-3 rounded-2xl border border-border/70 px-4 py-3">
-                        <legend className="px-1 text-sm font-medium">{t('settings.quickInputBranchModels')}</legend>
-                        <p className="m-0 text-sm text-muted-foreground">{t('settings.quickInputBranchModelsDescription')}</p>
-                        {availableModels.length > 0 ? (
-                          <div className="grid gap-2">
-                            {availableModels.map((model) => (
-                              <label key={model.id} className="flex items-center gap-2 text-sm">
-                                <input
-                                  aria-label={`${t('settings.quickInputBranchModels')}:${model.name}`}
-                                  type="checkbox"
-                                  checked={branchModelIds.includes(model.id)}
-                                  disabled={disabled}
-                                  onChange={(event) =>
-                                    updateQuickInput(item.id, {
-                                      branchModelIds: event.target.checked
-                                        ? [...branchModelIds, model.id]
-                                        : branchModelIds.filter((id) => id !== model.id),
-                                    })
-                                  }
-                                />
-                                <span>{model.name}</span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="m-0 text-sm text-muted-foreground">{t('settings.noBranchModels')}</p>
-                        )}
+                      <label className="grid gap-2">
+                        <span className="text-sm font-medium">{t('settings.quickInputBranchModels')}</span>
+                        <MultiSelectPopover
+                          label={t('settings.quickInputBranchModels')}
+                          placeholder={t('settings.multiSelectPlaceholder')}
+                          summaryTemplate={t('settings.multiSelectSummary')}
+                          options={availableModels.map((model) => ({
+                            value: model.id,
+                            label: model.name,
+                          }))}
+                          values={branchModelIds}
+                          emptyText={t('settings.noBranchModels')}
+                          disabled={disabled}
+                          onChange={(nextValues) => updateQuickInput(item.id, { branchModelIds: nextValues })}
+                        />
                         {hasMissingBranchModels ? (
                           <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputBranchModelsMissing')}</p>
                         ) : null}
-                      </fieldset>
+                      </label>
                     </SortableQuickInputCard>
                   );
                 })}

@@ -12,6 +12,10 @@ type PageSource = {
   text: string;
   /** 页面 favicon。 */
   faviconUrl: string;
+  /** content script 内预提取的 Readability Markdown。 */
+  readabilityContent?: string;
+  /** content script 内预提取的 Readability 标题。 */
+  readabilityTitle?: string;
 };
 
 type TabsApi = {

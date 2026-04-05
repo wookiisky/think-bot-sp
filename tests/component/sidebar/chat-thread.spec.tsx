@@ -5,10 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatThread } from '../../../src/features/sidebar/chat-thread';
 
 const translations: Record<string, string> = {
+  'common.cancel': '取消',
   'workspace.emptyMessages': '还没有聊天记录',
-  'workspace.role.user': '你',
-  'workspace.role.assistant': '助手',
-  'workspace.role.system': '系统',
   'workspace.status.loading': '生成中',
   'workspace.status.done': '已完成',
   'workspace.status.error': '失败',
@@ -22,6 +20,7 @@ const translations: Record<string, string> = {
   'workspace.retryUserMessage': '重试问题',
   'workspace.retryAssistantMessage': '重试回答',
   'workspace.expandBranches': '继续新增分支',
+  'workspace.stop': '停止',
   'workspace.stopBranch': '停止分支',
   'workspace.deleteBranch': '删除分支',
   'workspace.scrollToMessageTop': '定位到消息顶部',
@@ -106,6 +105,7 @@ describe('ChatThread', () => {
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
         onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
         onStopBranch={vi.fn()}
         onDeleteBranch={vi.fn()}
         onNotice={vi.fn()}
@@ -117,7 +117,9 @@ describe('ChatThread', () => {
     expect(screen.getByText('分支结果')).toBeVisible();
   });
 
-  it('会展示复制纯文本和 Markdown 操作按钮', () => {
+  it('消息卡片不再显示角色行，hover 后才显示操作按钮', async () => {
+    const user = userEvent.setup();
+
     render(
       <ChatThread
         messages={[
@@ -141,6 +143,7 @@ describe('ChatThread', () => {
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
         onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
         onStopBranch={vi.fn()}
         onDeleteBranch={vi.fn()}
         onNotice={vi.fn()}
@@ -148,7 +151,14 @@ describe('ChatThread', () => {
     );
 
     const messageCard = screen.getByTestId('chat-message-user-1');
-    expect(within(messageCard).getByRole('button', { name: '复制纯文本' })).toBeVisible();
+    expect(messageCard).toHaveAttribute('data-message-role', 'user');
+    expect(within(messageCard).queryByText('你')).toBeNull();
+    expect(within(screen.getByTestId('chat-message-actions-user-1')).getByRole('button', { name: '复制纯文本' })).toBeVisible();
+    expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('opacity-0');
+
+    await user.hover(messageCard);
+
+    expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('opacity-100');
     expect(within(messageCard).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
   });
 
@@ -187,17 +197,59 @@ describe('ChatThread', () => {
         onRetryUserMessage={onRetryUserMessage}
         onRetryAssistantMessage={vi.fn()}
         onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
         onStopBranch={vi.fn()}
         onDeleteBranch={vi.fn()}
         onNotice={vi.fn()}
       />,
     );
 
+    await user.hover(screen.getByTestId('chat-message-user-1'));
     await user.click(within(screen.getByTestId('chat-message-user-1')).getByRole('button', { name: '重试问题' }));
     expect(onRetryUserMessage).toHaveBeenCalledWith('user-1');
 
+    await user.hover(screen.getByTestId('chat-message-assistant-1'));
     await user.click(within(screen.getByTestId('chat-message-assistant-1')).getByRole('button', { name: '定位到消息顶部' }));
     expect(scrollIntoViewSpy).toHaveBeenCalled();
+  });
+
+  it('助手生成中时在消息内显示 loading 和停止按钮，不展示恢复文案', () => {
+    const onStop = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-loading',
+            role: 'assistant',
+            content: '流式内容',
+            status: 'loading',
+            errorMessage: null,
+            branches: [],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStop={onStop}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('生成中')).toBeVisible();
+    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.queryByText('恢复生成中')).toBeNull();
+    expect(screen.queryByTestId('chat-message-actions-assistant-loading')).toBeNull();
   });
 
   it('分支较多时会切换到横向阅读列', () => {
@@ -241,6 +293,7 @@ describe('ChatThread', () => {
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
         onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
         onStopBranch={vi.fn()}
         onDeleteBranch={vi.fn()}
         onNotice={vi.fn()}
@@ -295,6 +348,7 @@ describe('ChatThread', () => {
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
         onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
         onStopBranch={vi.fn()}
         onDeleteBranch={vi.fn()}
         onNotice={vi.fn()}

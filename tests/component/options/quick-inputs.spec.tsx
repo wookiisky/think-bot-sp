@@ -8,7 +8,8 @@ import { QuickInputsPanel } from '../../../src/features/settings/quick-inputs-pa
 
 const t = (key: string) =>
   ({
-    'settings.promptTabs': '标签页',
+    'common.cancel': '取消',
+    'settings.promptTabs': '快捷输入',
     'settings.quickInputsDescription': '管理快捷输入模板。',
     'settings.noQuickInputs': '暂无快捷输入',
     'settings.addQuickInput': '新增快捷输入',
@@ -25,8 +26,9 @@ const t = (key: string) =>
     'settings.quickInputModel': '专属模型',
     'settings.quickInputNoModel': '不指定模型',
     'settings.quickInputModelMissing': '引用的模型已失效，建议重新选择。',
-    'settings.quickInputBranchModels': '专属分支模型',
-    'settings.quickInputBranchModelsDescription': '当前快捷输入会在全局分支模型基础上叠加这些模型。',
+    'settings.quickInputBranchModels': '分支模型',
+    'settings.multiSelectPlaceholder': '请选择',
+    'settings.multiSelectSummary': '{count} 个已选',
     'settings.quickInputBranchModelsMissing': '部分专属分支模型引用已失效，保存时会自动清理。',
     'settings.noBranchModels': '暂无可用分支模型',
   })[key] ?? key;
@@ -130,7 +132,8 @@ describe('QuickInputsPanel', () => {
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '主模型' }));
-    await user.click(screen.getByRole('checkbox', { name: '专属分支模型:主模型' }));
+    await user.click(screen.getByRole('button', { name: '分支模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '分支模型:主模型' }));
 
     const newQuickInputItem = screen
       .getAllByTestId(/quick-input-item-quick-/)
@@ -148,6 +151,8 @@ describe('QuickInputsPanel', () => {
     expect(items[1]).toHaveTextContent('问题拆解');
 
     await user.click(within(newQuickInputItem).getByRole('button', { name: '删除快捷输入' }));
+    expect(screen.queryByDisplayValue('问题拆解')).toBeInTheDocument();
+    await user.click(within(screen.getByTestId(/quick-input-delete-confirm-/)).getByRole('button', { name: '删除快捷输入' }));
 
     expect(screen.queryByDisplayValue('问题拆解')).not.toBeInTheDocument();
     expect(screen.getByText('总结')).toBeInTheDocument();
@@ -233,6 +238,7 @@ describe('QuickInputsPanel', () => {
     const user = userEvent.setup();
     expect(screen.getByLabelText('快捷输入提示词')).toHaveValue('请总结当前页面内容，保留重点结论。');
     expect(screen.getByLabelText('快捷输入名称')).toBeInTheDocument();
+    expect(screen.queryByText('当前快捷输入会在全局分支模型基础上叠加这些模型。')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('quick-input-summary-quick-1'));
     expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();

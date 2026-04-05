@@ -90,6 +90,7 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
 
   await page.getByTestId('quick-input-summary-quick-1').click();
   await page.getByTestId('quick-input-item-quick-1').getByRole('button', { name: '删除快捷输入' }).click();
+  await page.getByTestId('quick-input-delete-confirm-quick-1').getByRole('button', { name: '删除快捷输入' }).click();
   await page.getByRole('button', { name: /^保存$/ }).click();
 
   await expect

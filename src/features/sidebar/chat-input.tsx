@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpIcon, DownloadIcon, EraserIcon, ImagePlusIcon, LoaderCircleIcon, SquareIcon, Trash2Icon } from 'lucide-react';
+import { ArrowUpIcon, DownloadIcon, EraserIcon, ImagePlusIcon, LoaderCircleIcon, Trash2Icon } from 'lucide-react';
 
-import { cn } from '../../lib/utils';
 import { Button, buttonVariants } from '../../components/ui/button';
-import { Textarea } from '../../components/ui/textarea';
+import { Input } from '../../components/ui/input';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { Tooltip } from '../../components/ui/tooltip';
+import { cn } from '../../lib/utils';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 
 /** 输入区最小高度。 */
-const MIN_COMPOSER_HEIGHT = 120;
+const MIN_COMPOSER_HEIGHT = 92;
 /** 输入区默认高度。 */
-const DEFAULT_COMPOSER_HEIGHT = 144;
+const DEFAULT_COMPOSER_HEIGHT = 108;
 /** 输入区最大高度。 */
-const MAX_COMPOSER_HEIGHT = 360;
+const MAX_COMPOSER_HEIGHT = 240;
 
 /** 限制输入区高度范围。 */
 const clampComposerHeight = (height: number) => Math.min(MAX_COMPOSER_HEIGHT, Math.max(MIN_COMPOSER_HEIGHT, height));
@@ -50,8 +52,6 @@ type ChatInputProps = {
   onIncludePageContentChange(includePageContent: boolean): void;
   /** 发送输入。 */
   onSend(input: { text: string; images: string[]; modelId: string; includePageContent: boolean }): Promise<void>;
-  /** 停止当前会话。 */
-  onStop: () => Promise<void>;
   /** 导出当前会话。 */
   onExport: () => Promise<void>;
   /** 清空当前 promptTab。 */
@@ -73,7 +73,6 @@ export const ChatInput = ({
   onImagesChange,
   onIncludePageContentChange,
   onSend,
-  onStop,
   onExport,
   onClear,
 }: ChatInputProps) => {
@@ -88,6 +87,7 @@ export const ChatInput = ({
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
   const supportsImages = selectedModel?.supportsImages ?? false;
   const isSendDisabled = disabled || sending || !selectedModelId;
+
   /** 尝试提交当前输入。 */
   const submitCurrentInput = () => {
     if (text.trim().length === 0 && images.length === 0) {
@@ -126,14 +126,14 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section className="border-t border-border bg-card/70 px-4 py-3 backdrop-blur-sm">
-      <div className="mb-3 flex justify-center">
+    <section className="border-t border-border bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+      <div className="mb-1 flex justify-center">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label={t('workspace.resizeComposer')}
           data-testid="chat-input-resize-handle"
-          className="h-2 w-16 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="h-1.5 w-10 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setResizeSession({
               startY: event.clientY,
@@ -143,88 +143,30 @@ export const ChatInput = ({
         />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{t('workspace.model')}</span>
-            <select
-              aria-label={t('workspace.selectModel')}
-              className="h-7 rounded-md border border-input bg-input/20 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-              disabled={disabled || models.length === 0}
-              value={selectedModelId}
-              onChange={(event) => onSelectModel(event.target.value)}
-            >
-              {models.length === 0 ? <option value="">{t('workspace.noModels')}</option> : null}
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.name}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div data-testid="chat-input-panel" className="flex flex-col gap-1.5" style={{ minHeight: `${composerHeight}px` }}>
+        <div className="flex items-center gap-2">
+          <Input
+            aria-label={t('workspace.chatInput')}
+            className="h-9 bg-background/90 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+            value={text}
+            disabled={disabled}
+            onChange={(event) => onTextChange(event.target.value)}
+            onCompositionStart={() => setIsComposing(true)}
+            onCompositionEnd={() => setIsComposing(false)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+                return;
+              }
+              if (isComposing || event.nativeEvent.isComposing) {
+                return;
+              }
 
-          <label className="flex h-7 items-center gap-2 rounded-md border border-input bg-input/20 px-2 text-xs text-muted-foreground">
-            <input
-              aria-label={t('workspace.includePageContent')}
-              type="checkbox"
-              checked={includePageContent}
-              onChange={(event) => onIncludePageContentChange(event.target.checked)}
-            />
-            <span>{t('workspace.includePageContent')}</span>
-          </label>
-        </div>
+              event.preventDefault();
+              submitCurrentInput();
+            }}
+          />
 
-        <Textarea
-          aria-label={t('workspace.chatInput')}
-          className="bg-background/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
-          value={text}
-          disabled={disabled}
-          style={{ height: `${composerHeight}px` }}
-          onChange={(event) => onTextChange(event.target.value)}
-          onCompositionStart={() => setIsComposing(true)}
-          onCompositionEnd={() => setIsComposing(false)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
-              return;
-            }
-            if (isComposing || event.nativeEvent.isComposing) {
-              return;
-            }
-
-            event.preventDefault();
-            submitCurrentInput();
-          }}
-        />
-
-        {images.length > 0 ? (
-          <div className="flex flex-wrap gap-3">
-            {images.map((image, index) => (
-              <figure
-                key={`${image.slice(0, 32)}:${index}`}
-                className="group relative overflow-hidden rounded-md border border-border bg-background shadow-sm"
-              >
-                <img
-                  src={image}
-                  alt={`${t('workspace.selectedImage')} ${index + 1}`}
-                  className="size-20 object-cover"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="icon-xs"
-                  aria-label={`${t('workspace.removeImage')} ${index + 1}`}
-                  className="absolute right-1 top-1 opacity-90 shadow-sm"
-                  onClick={() => onImagesChange(images.filter((_, imageIndex) => imageIndex !== index))}
-                >
-                  <Trash2Icon />
-                </Button>
-              </figure>
-            ))}
-          </div>
-        ) : null}
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <Tooltip content={t('workspace.addImage')}>
             <label
               aria-disabled={disabled || !supportsImages}
               className={cn(
@@ -232,7 +174,6 @@ export const ChatInput = ({
                 'relative cursor-pointer',
                 (disabled || !supportsImages) && 'pointer-events-none opacity-50',
               )}
-              title={t('workspace.addImage')}
             >
               <ImagePlusIcon />
               <span className="sr-only">{t('workspace.addImage')}</span>
@@ -258,56 +199,102 @@ export const ChatInput = ({
                 }}
               />
             </label>
+          </Tooltip>
 
-            <Button
-              type="button"
-              size="icon-sm"
-              aria-label={t('workspace.send')}
-              title={t('workspace.send')}
-              disabled={isSendDisabled}
-              onClick={submitCurrentInput}
-            >
+          <Tooltip content={t('workspace.send')}>
+            <Button type="button" size="icon-sm" aria-label={t('workspace.send')} disabled={isSendDisabled} onClick={submitCurrentInput}>
               {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
             </Button>
+          </Tooltip>
+        </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              aria-label={t('workspace.stop')}
-              title={t('workspace.stop')}
-              disabled={!sending}
-              onClick={() => void onStop()}
-            >
-              <SquareIcon />
-            </Button>
+        {images.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {images.map((image, index) => (
+              <figure
+                key={`${image.slice(0, 32)}:${index}`}
+                className="group relative overflow-hidden rounded-md border border-border bg-background shadow-sm"
+              >
+                <img src={image} alt={`${t('workspace.selectedImage')} ${index + 1}`} className="size-16 object-cover" />
+                <MiniConfirm
+                  message={`${t('workspace.removeImage')} ${index + 1}`}
+                  cancelLabel={t('common.cancel')}
+                  confirmLabel={t('workspace.removeImage')}
+                  contentTestId={`remove-image-confirm-${index + 1}`}
+                  onConfirm={() => onImagesChange(images.filter((_, imageIndex) => imageIndex !== index))}
+                >
+                  <Tooltip content={`${t('workspace.removeImage')} ${index + 1}`}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon-xs"
+                      aria-label={`${t('workspace.removeImage')} ${index + 1}`}
+                      className="absolute right-1 top-1 opacity-90 shadow-sm"
+                    >
+                      <Trash2Icon />
+                    </Button>
+                  </Tooltip>
+                </MiniConfirm>
+              </figure>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 rounded-md border border-input bg-input/20 px-2.5 py-1 text-xs text-muted-foreground">
+              <span>{t('workspace.model')}</span>
+              <select
+                aria-label={t('workspace.selectModel')}
+                className="h-6 rounded-md border border-input bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                disabled={disabled || models.length === 0}
+                value={selectedModelId}
+                onChange={(event) => onSelectModel(event.target.value)}
+              >
+                {models.length === 0 ? <option value="">{t('workspace.noModels')}</option> : null}
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex h-8 items-center gap-2 rounded-md border border-input bg-input/20 px-2.5 text-xs text-muted-foreground">
+              <input
+                aria-label={t('workspace.includePageContent')}
+                type="checkbox"
+                checked={includePageContent}
+                onChange={(event) => onIncludePageContentChange(event.target.checked)}
+              />
+              <span>{t('workspace.includePageContent')}</span>
+            </label>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('workspace.clearCurrentTab')}
-              title={t('workspace.clearCurrentTab')}
-              onClick={() => void onClear()}
+            <MiniConfirm
+              message={t('workspace.notice.clearTabConfirm')}
+              cancelLabel={t('common.cancel')}
+              confirmLabel={t('workspace.clearCurrentTab')}
+              contentTestId="clear-tab-confirm"
+              onConfirm={onClear}
             >
-              <EraserIcon />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('workspace.exportConversation')}
-              title={t('workspace.exportConversation')}
-              onClick={() => void onExport()}
-            >
-              <DownloadIcon />
-            </Button>
+              <Tooltip content={t('workspace.clearCurrentTab')}>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.clearCurrentTab')}>
+                  <EraserIcon />
+                </Button>
+              </Tooltip>
+            </MiniConfirm>
+
+            <Tooltip content={t('workspace.exportConversation')}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.exportConversation')} onClick={() => void onExport()}>
+                <DownloadIcon />
+              </Button>
+            </Tooltip>
           </div>
         </div>
 
-        {!supportsImages && selectedModelId ? <p className="text-xs text-muted-foreground">{t('workspace.currentModelNoImage')}</p> : null}
+        {!supportsImages && selectedModelId ? <p className="m-0 text-xs text-muted-foreground">{t('workspace.currentModelNoImage')}</p> : null}
       </div>
     </section>
   );

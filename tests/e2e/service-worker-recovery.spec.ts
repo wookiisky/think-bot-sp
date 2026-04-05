@@ -56,5 +56,6 @@ test('worker 重启后仍能恢复持久化 loading', async ({ context, extensio
   );
 
   await expect(sidepanel.getByText('恢复中的回答')).toBeVisible();
-  await expect(sidepanel.getByText('恢复生成中…')).toBeVisible();
+  await expect(sidepanel.getByRole('button', { name: '停止' })).toBeVisible();
+  await expect(sidepanel.getByText('恢复生成中…')).toHaveCount(0);
 });

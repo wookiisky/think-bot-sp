@@ -128,7 +128,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
         return;
       }
 
-      const [config, page] = await Promise.all([deps.configRepository.getConfig(), deps.pageRepository.getPage(input.normalizedUrl)]);
+      const config = await deps.configRepository.getConfig();
       const candidates = config.quickInputs
         .filter((item) => item.deletedAt === null && item.autoTrigger)
         .sort((left, right) => left.order - right.order);
@@ -206,7 +206,10 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
               if (!latestPage) {
                 return;
               }
-              if (latestPromptTabState?.lastClearedAt !== null && latestPromptTabState.lastClearedAt >= triggerAt) {
+              if (
+                typeof latestPromptTabState?.lastClearedAt === 'number'
+                && latestPromptTabState.lastClearedAt >= triggerAt
+              ) {
                 return;
               }
 

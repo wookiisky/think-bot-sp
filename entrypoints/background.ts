@@ -170,6 +170,8 @@ export default defineBackground(() => {
               html: string;
               text: string;
               faviconUrl: string;
+              readabilityContent?: string;
+              readabilityTitle?: string;
             });
           });
         }),

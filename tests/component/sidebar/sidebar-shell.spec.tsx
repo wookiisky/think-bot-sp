@@ -137,6 +137,7 @@ describe('SidebarShell', () => {
     expect(screen.getByTestId('sidebar-extraction-panel')).toBeVisible();
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(await screen.findByText('提取内容')).toBeVisible();
+    expect(screen.queryByText('浏览器标签')).toBeNull();
   });
 
   it('支持拖拽调整提取区高度', async () => {
@@ -206,7 +207,6 @@ describe('SidebarShell', () => {
       value: { writeText },
       configurable: true,
     });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -277,7 +277,7 @@ describe('SidebarShell', () => {
     expect(api.openGithubProject).toHaveBeenCalledTimes(1);
 
     await user.click(screen.getByRole('button', { name: '清空当前页面数据' }));
-    expect(confirmSpy).toHaveBeenCalled();
+    await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
     expect(api.clearPageContext).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
@@ -285,7 +285,6 @@ describe('SidebarShell', () => {
     expect(screen.getAllByText('还没有聊天记录').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留这段草稿');
     expect(screen.getByText('已清空当前页面数据')).toBeVisible();
-    confirmSpy.mockRestore();
   });
 
   it('优先恢复页面级 includePageContent，而不是只使用设置默认值', async () => {
@@ -501,6 +500,8 @@ describe('SidebarShell', () => {
     expect(screen.getByRole('tab', { name: /总结/ })).toBeVisible();
     expect(screen.getByRole('tab', { name: /翻译/ })).toBeVisible();
     expect(screen.queryByRole('tab', { name: /隐藏标签/ })).toBeNull();
+    expect(screen.getByTestId('prompt-tab-line-chat')).toBeVisible();
+    expect(screen.getByTestId('prompt-tab-line-quick-summary')).toBeVisible();
 
     await user.type(screen.getByLabelText('聊天输入'), '保留的 chat 草稿');
     await user.click(screen.getByRole('tab', { name: /总结/ }));
@@ -525,6 +526,7 @@ describe('SidebarShell', () => {
     expect(within(screen.getByRole('tabpanel', { name: /翻译/ })).getByText('翻译')).toBeVisible();
     expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-1');
+    expect(screen.getByTestId('prompt-tab-loading-quick-translate')).toBeVisible();
 
     await user.click(screen.getByRole('tab', { name: /聊天/ }));
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留的 chat 草稿');
@@ -621,7 +623,6 @@ describe('SidebarShell', () => {
 
   it('清空当前标签只影响当前 promptTab，会保留提取内容和其他标签历史', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const api = createSidebarApi({
       clearTabConversation: vi.fn().mockResolvedValue({
         type: 'CLEAR_TAB_CONVERSATION_SUCCESS',
@@ -780,8 +781,7 @@ describe('SidebarShell', () => {
     await user.click(await screen.findByRole('tab', { name: /总结/ }));
     expect(screen.getByText('快捷标签历史回答')).toBeVisible();
     await user.click(screen.getByRole('button', { name: '清空当前标签' }));
-
-    expect(confirmSpy).toHaveBeenCalled();
+    await user.click(within(screen.getByTestId('clear-tab-confirm')).getByRole('button', { name: '清空当前标签' }));
     expect(api.clearTabConversation).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
@@ -793,7 +793,6 @@ describe('SidebarShell', () => {
 
     await user.click(screen.getByRole('tab', { name: /聊天/ }));
     expect(screen.getByText('Chat 历史回答')).toBeVisible();
-    confirmSpy.mockRestore();
   });
 
   it('非空会话导出时会下载 Markdown 文件', async () => {
@@ -968,6 +967,7 @@ describe('SidebarShell', () => {
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
+    await user.hover(await screen.findByTestId('chat-message-assistant-1'));
     await user.click(await screen.findByRole('button', { name: '继续新增分支' }));
     expect(api.expandMessageBranches).toHaveBeenCalledWith({
       tabId: 7,
@@ -1010,6 +1010,7 @@ describe('SidebarShell', () => {
     });
 
     await user.click(screen.getByRole('button', { name: '删除分支' }));
+    await user.click(within(screen.getByTestId('delete-branch-confirm-branch-1')).getByRole('button', { name: '删除分支' }));
     expect(api.deleteBranch).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
@@ -1103,6 +1104,7 @@ describe('SidebarShell', () => {
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
+    await user.hover(await screen.findByTestId('chat-message-user-1'));
     await user.click(await screen.findByRole('button', { name: '编辑' }));
     await user.clear(screen.getByLabelText('编辑消息输入'));
     await user.type(screen.getByLabelText('编辑消息输入'), '新问题');
@@ -1125,6 +1127,7 @@ describe('SidebarShell', () => {
       messageId: 'assistant-edit',
     });
 
+    await user.hover(await screen.findByTestId('chat-message-assistant-edit'));
     await waitFor(() => expect(screen.getByRole('button', { name: '重试回答' })).toBeVisible());
 
     await user.click(screen.getByRole('button', { name: '重试回答' }));
@@ -1253,6 +1256,7 @@ describe('SidebarShell', () => {
     expect(within(summaryPanel).getByText('总结')).toBeVisible();
     expect(within(summaryPanel).queryByText('请总结当前页面')).toBeNull();
 
+    await user.hover(screen.getByTestId('chat-message-user-quick-1'));
     await user.click(screen.getByRole('button', { name: '编辑' }));
     expect(screen.getByLabelText('编辑消息输入')).toHaveValue('请总结当前页面');
 
@@ -1268,5 +1272,40 @@ describe('SidebarShell', () => {
       text: '请总结当前页面并列出风险',
     });
     expect(within(summaryPanel).getByText('请总结当前页面并列出风险')).toBeVisible();
+  });
+
+  it('Readability 提取内容会按原始 Markdown 纯文本展示', async () => {
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '## 提取标题\n\n- 提取要点',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    expect(await screen.findByTestId('sidebar-extraction-content')).toHaveTextContent('## 提取标题');
+    expect(screen.getByTestId('sidebar-extraction-content')).toHaveTextContent('- 提取要点');
+    expect(screen.queryByRole('heading', { name: '提取标题' })).toBeNull();
   });
 });

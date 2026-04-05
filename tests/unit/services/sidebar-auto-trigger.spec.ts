@@ -133,6 +133,104 @@ describe('sidebar-auto-trigger-service', () => {
     });
   });
 
+  it('完成收敛时缺少目标 promptTab 状态也会安全写回 done', async () => {
+    const setPromptTabState = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      sessionId: 'session-auto-safe',
+      messageId: 'assistant-auto-safe',
+      cancel: vi.fn(),
+      done: Promise.resolve({
+        sessionId: 'session-auto-safe',
+        messageId: 'assistant-auto-safe',
+        status: 'done' as const,
+        errorMessage: null,
+      }),
+    };
+    const service = createSidebarAutoTriggerService({
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue(
+          createDefaultConfig({
+            basic: {
+              defaultModelId: 'model-1',
+            },
+            models: [
+              {
+                id: 'model-1',
+                name: '主模型',
+                provider: 'openai-compatible',
+                enabled: true,
+                model: 'gpt-4.1-mini',
+                baseUrl: 'https://api.example.com',
+                apiKey: 'token',
+                deployment: '',
+                temperature: 0,
+                tools: [],
+                thinkingBudget: null,
+                maxOutputTokens: null,
+                supportsImages: true,
+                order: 0,
+                deletedAt: null,
+              },
+            ],
+            quickInputs: [
+              {
+                id: 'quick-summary',
+                name: '总结',
+                prompt: '请总结当前页面',
+                autoTrigger: true,
+                modelId: 'model-1',
+                order: 0,
+                deletedAt: null,
+              },
+            ],
+          }),
+        ),
+      },
+      pageRepository: {
+        getPage: vi
+          .fn()
+          .mockResolvedValueOnce({
+            promptTabStates: [],
+          })
+          .mockResolvedValueOnce({
+            promptTabStates: [],
+          }),
+        setPromptTabState,
+      },
+      conversationRepository: {
+        getConversation: vi.fn().mockResolvedValue(null),
+        getLoadingState: vi.fn().mockResolvedValue(null),
+      },
+      chatDispatchService: {
+        dispatchChat: vi.fn().mockResolvedValue(session),
+      },
+      sessionRegistry: {
+        register: vi.fn(),
+      },
+      now: () => 100,
+    });
+
+    await service.handleExtractionCompleted({
+      browserTabId: 7,
+      pageUrl: 'https://example.com/article',
+      normalizedUrl: 'https://example.com/article',
+      pageContent: '页面正文',
+    });
+    await Promise.resolve();
+
+    expect(setPromptTabState).toHaveBeenNthCalledWith(2, {
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      autoTriggerStatus: 'done',
+    });
+  });
+
   it('已有历史或 loading 时不会重复自动触发', async () => {
     const dispatchChat = vi.fn();
     const service = createSidebarAutoTriggerService({

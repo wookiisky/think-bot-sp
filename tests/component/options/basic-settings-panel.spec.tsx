@@ -19,10 +19,13 @@ const t = (key: string) =>
     'settings.theme': '主题',
     'settings.defaultModel': '默认模型',
     'settings.noDefaultModel': '不设置默认模型',
-    'settings.branchModels': '全局分支模型',
-    'settings.branchModelsDescription': '为 Chat 和未单独覆盖的快捷输入配置默认分支模型。',
+    'settings.branchModels': '分支模型',
+    'settings.multiSelectPlaceholder': '请选择',
+    'settings.multiSelectSummary': '{count} 个已选',
     'settings.noBranchModels': '暂无可用分支模型',
     'settings.branchModelsMissing': '部分分支模型引用已失效，保存时会自动清理。',
+    'settings.savedPages': '总保存页面数',
+    'settings.cacheSize': '总大小',
     'settings.extractionMethod': '默认提取方式',
     'settings.extractionPanelHeight': '默认提取区高度',
     'settings.jinaApiKey': 'Jina API Key',
@@ -83,7 +86,7 @@ const ControlledBasicSettingsPanel = ({ config: initialConfig }: { config?: Retu
     <BasicSettingsPanel
       config={config}
       defaultModels={config.models.filter((item) => item.enabled && item.deletedAt === null)}
-      cacheStats={{ entryCount: 1, bytes: 16 }}
+      cacheStats={{ pageCount: 1, entryCount: 1, bytes: 16 }}
       disabled={false}
       onChange={setConfig}
       onClearCache={() => undefined}
@@ -95,15 +98,17 @@ const ControlledBasicSettingsPanel = ({ config: initialConfig }: { config?: Retu
 describe('BasicSettingsPanel', () => {
   afterEach(() => cleanup());
 
-  it('支持选择全局分支模型', async () => {
+  it('支持通过多选下拉选择分支模型', async () => {
     render(<ControlledBasicSettingsPanel />);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('checkbox', { name: '全局分支模型:主模型' }));
-    await user.click(screen.getByRole('checkbox', { name: '全局分支模型:备用模型' }));
+    await user.click(screen.getByRole('button', { name: '分支模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '分支模型:主模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '分支模型:备用模型' }));
 
-    expect(screen.getByRole('checkbox', { name: '全局分支模型:主模型' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '全局分支模型:备用模型' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '分支模型:主模型' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '分支模型:备用模型' })).toBeChecked();
+    expect(screen.queryByText('为 Chat 和未单独覆盖的快捷输入配置默认分支模型。')).not.toBeInTheDocument();
   });
 
   it('存在失效全局分支模型引用时显示降级提示', () => {

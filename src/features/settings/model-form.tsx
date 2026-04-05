@@ -43,8 +43,8 @@ export const ModelForm = ({
   };
 
   return (
-    <section className="grid gap-4" aria-label="模型表单">
-      {showHeader ? <h3 className="text-base font-semibold">{model.name}</h3> : null}
+    <section className="grid gap-4 md:grid-cols-2" aria-label="模型表单">
+      {showHeader ? <h3 className="text-base font-semibold md:col-span-2">{model.name}</h3> : null}
 
       <label className="grid gap-2">
         <span className="text-sm font-medium">模型名称</span>
@@ -76,7 +76,7 @@ export const ModelForm = ({
       </label>
 
       {showEnabledField ? (
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm md:col-span-2">
           <input
             aria-label="启用模型"
             type="checkbox"
@@ -164,7 +164,7 @@ export const ModelForm = ({
         />
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-2 md:col-span-2">
         <span className="text-sm font-medium">Tools</span>
         <Input
           aria-label="Tools"
@@ -194,7 +194,7 @@ export const ModelForm = ({
         <span className="font-medium">支持图片输入</span>
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-2 md:col-span-2">
         <span className="text-sm font-medium">API Key</span>
         <div className="flex items-center gap-2">
           <Input

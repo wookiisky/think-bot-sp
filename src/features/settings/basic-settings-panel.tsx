@@ -1,3 +1,4 @@
+import { MultiSelectPopover } from '../../components/ui/multi-select-popover';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -11,6 +12,8 @@ import {
 } from '../../domain/config/config-schema';
 
 type CacheStats = {
+  /** 本地缓存页面数。 */
+  pageCount: number;
   /** 本地缓存条目数。 */
   entryCount: number;
   /** 本地缓存字节数。 */
@@ -34,6 +37,21 @@ type BasicSettingsPanelProps = {
   t(key: string): string;
 };
 
+/** 将缓存体积格式化成更易读的 B / KB / MB。 */
+const formatCacheBytes = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    const value = bytes / 1024;
+    return `${Number(value.toFixed(value >= 10 ? 0 : 1))} KB`;
+  }
+
+  const value = bytes / (1024 * 1024);
+  return `${Number(value.toFixed(value >= 10 ? 0 : 1))} MB`;
+};
+
 /** 基础设置主面板。 */
 export const BasicSettingsPanel = ({
   config,
@@ -46,6 +64,7 @@ export const BasicSettingsPanel = ({
 }: BasicSettingsPanelProps) => {
   const branchModelIds = sanitizeBranchModelIds(config, config.basic.branchModelIds);
   const hasMissingBranchModels = branchModelIds.length !== config.basic.branchModelIds.length;
+  const pageCount = cacheStats.pageCount ?? cacheStats.entryCount;
 
   const updateBasic = (patch: Partial<ExtensionConfig['basic']>) => {
     onChange({
@@ -54,12 +73,6 @@ export const BasicSettingsPanel = ({
         ...config.basic,
         ...patch,
       },
-    });
-  };
-  /** 切换全局分支模型。 */
-  const toggleBranchModel = (modelId: string, checked: boolean) => {
-    updateBasic({
-      branchModelIds: checked ? [...branchModelIds, modelId] : branchModelIds.filter((id) => id !== modelId),
     });
   };
 
@@ -134,29 +147,23 @@ export const BasicSettingsPanel = ({
             </Select>
           </label>
 
-          <fieldset className="grid gap-3 rounded-2xl border border-border/70 px-4 py-3">
-            <legend className="px-1 text-sm font-medium">{t('settings.branchModels')}</legend>
-            <p className="m-0 text-sm text-muted-foreground">{t('settings.branchModelsDescription')}</p>
-            {defaultModels.length > 0 ? (
-              <div className="grid gap-2">
-                {defaultModels.map((model) => (
-                  <label key={model.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      aria-label={`${t('settings.branchModels')}:${model.name}`}
-                      type="checkbox"
-                      checked={branchModelIds.includes(model.id)}
-                      disabled={disabled}
-                      onChange={(event) => toggleBranchModel(model.id, event.target.checked)}
-                    />
-                    <span>{model.name}</span>
-                  </label>
-                ))}
-              </div>
-            ) : (
-              <p className="m-0 text-sm text-muted-foreground">{t('settings.noBranchModels')}</p>
-            )}
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">{t('settings.branchModels')}</span>
+            <MultiSelectPopover
+              label={t('settings.branchModels')}
+              placeholder={t('settings.multiSelectPlaceholder')}
+              summaryTemplate={t('settings.multiSelectSummary')}
+              options={defaultModels.map((model) => ({
+                value: model.id,
+                label: model.name,
+              }))}
+              values={branchModelIds}
+              emptyText={t('settings.noBranchModels')}
+              disabled={disabled}
+              onChange={(nextValues) => updateBasic({ branchModelIds: nextValues })}
+            />
             {hasMissingBranchModels ? <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.branchModelsMissing')}</p> : null}
-          </fieldset>
+          </label>
 
           <label className="grid gap-2">
             <span className="text-sm font-medium">System Prompt</span>
@@ -271,9 +278,13 @@ export const BasicSettingsPanel = ({
           <CardDescription>{t('settings.cacheDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 px-5 py-5">
-          <div className="flex flex-wrap gap-3 text-sm text-foreground">
-            <span data-testid="cache-entry-count">{cacheStats.entryCount} 项</span>
-            <span data-testid="cache-bytes">{cacheStats.bytes} B</span>
+          <div className="grid gap-2 text-sm text-foreground">
+            <span data-testid="cache-page-count">
+              {t('settings.savedPages')}：{pageCount} 个页面
+            </span>
+            <span data-testid="cache-bytes">
+              {t('settings.cacheSize')}：{formatCacheBytes(cacheStats.bytes)}
+            </span>
           </div>
           <button
             type="button"

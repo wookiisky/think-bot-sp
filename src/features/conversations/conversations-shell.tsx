@@ -11,6 +11,8 @@ import {
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { Tooltip } from '../../components/ui/tooltip';
 import { getEnabledCompleteModels } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import { downloadTextFile } from '../../shared/download-file';
@@ -894,10 +896,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       return;
     }
 
-    if (!window.confirm(t('workspace.notice.clearTabConfirm'))) {
-      return;
-    }
-
     try {
       await api.clearTabConversation({
         pageUrl: selectedPage.url,
@@ -1028,30 +1026,37 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   </div>
                 </button>
                 <div className="flex shrink-0 gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`${t('conversations.action.openSource')} ${page.title || page.url}`}
-                    title={t('conversations.action.openSource')}
-                    onClick={() => {
-                      void api.openSourcePage(page.url);
-                    }}
+                  <Tooltip content={t('conversations.action.openSource')}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`${t('conversations.action.openSource')} ${page.title || page.url}`}
+                      onClick={() => {
+                        void api.openSourcePage(page.url);
+                      }}
+                    >
+                      <ExternalLinkIcon />
+                    </Button>
+                  </Tooltip>
+                  <MiniConfirm
+                    message={t('conversations.action.deletePage')}
+                    cancelLabel={t('common.cancel')}
+                    confirmLabel={t('conversations.action.deletePage')}
+                    contentTestId={`delete-page-confirm-${page.normalizedUrl}`}
+                    onConfirm={() => handleDeletePage(page.normalizedUrl)}
                   >
-                    <ExternalLinkIcon />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label={`${t('conversations.action.deletePage')} ${page.title || page.url}`}
-                    title={t('conversations.action.deletePage')}
-                    onClick={() => {
-                      void handleDeletePage(page.normalizedUrl);
-                    }}
-                  >
-                    <Trash2Icon />
-                  </Button>
+                    <Tooltip content={t('conversations.action.deletePage')}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`${t('conversations.action.deletePage')} ${page.title || page.url}`}
+                      >
+                        <Trash2Icon />
+                      </Button>
+                    </Tooltip>
+                  </MiniConfirm>
                 </div>
               </div>
             );
@@ -1108,15 +1113,21 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   <p className="mt-1 truncate text-sm text-muted-foreground">{detail.page.url}</p>
                 </div>
                 <div className="flex gap-1">
-                  <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.copyExtraction')} title={t('conversations.action.copyExtraction')} onClick={() => void handleCopyExtraction()}>
-                    <CopyIcon />
-                  </Button>
-                  <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.openSource')} title={t('conversations.action.openSource')} onClick={() => void handleOpenSourcePage()}>
-                    <ExternalLinkIcon />
-                  </Button>
-                  <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.openSettings')} title={t('conversations.action.openSettings')} onClick={() => void api.openSettingsPage()}>
-                    <Settings2Icon />
-                  </Button>
+                  <Tooltip content={t('conversations.action.copyExtraction')}>
+                    <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.copyExtraction')} onClick={() => void handleCopyExtraction()}>
+                      <CopyIcon />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip content={t('conversations.action.openSource')}>
+                    <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.openSource')} onClick={() => void handleOpenSourcePage()}>
+                      <ExternalLinkIcon />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip content={t('conversations.action.openSettings')}>
+                    <Button type="button" variant="outline" size="icon-sm" aria-label={t('conversations.action.openSettings')} onClick={() => void api.openSettingsPage()}>
+                      <Settings2Icon />
+                    </Button>
+                  </Tooltip>
                 </div>
               </div>
               {pageNotice ? <Badge variant="outline">{pageNotice}</Badge> : null}

@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatInput } from '../../../src/features/sidebar/chat-input';
 
 const translations: Record<string, string> = {
+  'common.cancel': '取消',
   'workspace.send': '发送',
   'workspace.selectModel': '选择模型',
   'workspace.chatInput': '聊天输入',
@@ -15,10 +16,10 @@ const translations: Record<string, string> = {
   'workspace.selectedImage': '已选图片',
   'workspace.resizeComposer': '调整输入区高度',
   'workspace.exportConversation': '导出',
-  'workspace.stop': '停止',
   'workspace.model': '模型',
   'workspace.noModels': '暂无可用模型',
   'workspace.currentModelNoImage': '当前模型不支持图片输入',
+  'workspace.notice.clearTabConfirm': '确认清空当前标签',
 };
 
 const t = (key: string) => translations[key] ?? key;
@@ -53,7 +54,6 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={onSend}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
@@ -96,7 +96,6 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={onIncludePageContentChange}
         onSend={vi.fn()}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
@@ -112,7 +111,7 @@ describe('ChatInput', () => {
     expect(onSelectModel).toHaveBeenCalledWith('model-2');
   });
 
-  it('清空按钮会回调到当前标签动作', async () => {
+  it('清空按钮会先弹出确认，再回调到当前标签动作', async () => {
     const user = userEvent.setup();
     const onClear = vi.fn().mockResolvedValue(undefined);
 
@@ -137,18 +136,19 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={vi.fn()}
-        onStop={vi.fn()}
         onClear={onClear}
         onExport={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole('button', { name: '清空当前标签' }));
+    expect(onClear).not.toHaveBeenCalled();
+    await user.click(within(screen.getByTestId('clear-tab-confirm')).getByRole('button', { name: '清空当前标签' }));
 
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
-  it('已选图片会渲染预览并支持移除', async () => {
+  it('已选图片会渲染预览并支持确认后移除', async () => {
     const user = userEvent.setup();
     const onImagesChange = vi.fn();
 
@@ -173,7 +173,6 @@ describe('ChatInput', () => {
         onImagesChange={onImagesChange}
         onIncludePageContentChange={vi.fn()}
         onSend={vi.fn()}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
@@ -183,6 +182,8 @@ describe('ChatInput', () => {
     expect(screen.getByAltText('已选图片 2')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: '移除图片 1' }));
+    expect(onImagesChange).not.toHaveBeenCalled();
+    await user.click(within(screen.getByTestId('remove-image-confirm-1')).getByRole('button', { name: '移除图片' }));
 
     expect(onImagesChange).toHaveBeenCalledWith(['data:image/png;base64,bbb']);
   });
@@ -209,14 +210,13 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={vi.fn()}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
     );
 
-    const textarea = screen.getByLabelText('聊天输入');
-    expect(textarea).toHaveStyle({ height: '144px' });
+    const panel = screen.getByTestId('chat-input-panel');
+    expect(panel).toHaveStyle({ minHeight: '108px' });
 
     fireEvent.pointerDown(screen.getByTestId('chat-input-resize-handle'), {
       clientY: 260,
@@ -226,7 +226,7 @@ describe('ChatInput', () => {
     });
     fireEvent.pointerUp(window);
 
-    expect(textarea).toHaveStyle({ height: '184px' });
+    expect(panel).toHaveStyle({ minHeight: '148px' });
   });
 
   it('按 Enter 会直接发送当前输入', () => {
@@ -253,7 +253,6 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={onSend}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
@@ -295,7 +294,6 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={onSend}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
@@ -333,25 +331,60 @@ describe('ChatInput', () => {
         onImagesChange={vi.fn()}
         onIncludePageContentChange={vi.fn()}
         onSend={onSend}
-        onStop={vi.fn()}
         onClear={vi.fn()}
         onExport={vi.fn()}
       />,
     );
 
-    const textarea = screen.getByLabelText('聊天输入');
-    fireEvent.compositionStart(textarea);
-    fireEvent.keyDown(textarea, {
+    const input = screen.getByLabelText('聊天输入');
+    fireEvent.compositionStart(input);
+    fireEvent.keyDown(input, {
       key: 'Enter',
     });
 
     expect(onSend).not.toHaveBeenCalled();
 
-    fireEvent.compositionEnd(textarea);
-    fireEvent.keyDown(textarea, {
+    fireEvent.compositionEnd(input);
+    fireEvent.keyDown(input, {
       key: 'Enter',
     });
 
     expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('输入区重排为两行，首行保留图片和发送按钮，次行保留模型和会话动作', () => {
+    render(
+      <ChatInput
+        disabled={false}
+        sending={false}
+        text="布局检查"
+        images={[]}
+        includePageContent={true}
+        selectedModelId="model-1"
+        models={[
+          {
+            id: 'model-1',
+            name: '主模型',
+            supportsImages: true,
+          },
+        ]}
+        t={t}
+        onSelectModel={vi.fn()}
+        onTextChange={vi.fn()}
+        onImagesChange={vi.fn()}
+        onIncludePageContentChange={vi.fn()}
+        onSend={vi.fn()}
+        onClear={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: '发送' })).toBeVisible();
+    expect(screen.getByLabelText('添加图片')).toBeVisible();
+    expect(screen.getByLabelText('选择模型')).toBeVisible();
+    expect(screen.getByLabelText('包含页面内容')).toBeVisible();
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+    expect(screen.getByRole('button', { name: '清空当前标签' })).toBeVisible();
+    expect(screen.getByRole('button', { name: '导出' })).toBeVisible();
   });
 });

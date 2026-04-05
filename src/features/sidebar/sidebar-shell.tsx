@@ -4,7 +4,6 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
   HistoryIcon,
-  LoaderCircleIcon,
   RefreshCcwIcon,
   Settings2Icon,
   ShieldAlertIcon,
@@ -14,6 +13,9 @@ import {
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { ToastStack } from '../../components/ui/toast-stack';
+import { Tooltip } from '../../components/ui/tooltip';
 import {
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
   MAX_EXTRACTION_PANEL_HEIGHT,
@@ -37,7 +39,6 @@ import {
   type ComposerState,
   type EditingState,
   type ModelOption,
-  type PromptTabStatusKind,
   type PromptTabDefinition,
   upsertAssistantBranch,
   upsertAssistantMessage,
@@ -61,6 +62,14 @@ type ExtractionResizeState = {
   startY: number;
   /** 拖拽开始时的提取区高度。 */
   startHeight: number;
+};
+type SidebarToast = {
+  /** toast 稳定 id。 */
+  id: number;
+  /** 反馈语气。 */
+  tone: 'success' | 'error';
+  /** 反馈正文。 */
+  message: string;
 };
 type SidebarShellProps = {
   /** side panel 消息 API。 */
@@ -108,7 +117,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   });
   const [models, setModels] = useState<ModelOption[]>([]);
   const [includePageContent, setIncludePageContent] = useState(true);
-  const [pageNotice, setPageNotice] = useState('');
+  const [toast, setToast] = useState<SidebarToast | null>(null);
   const [chatNotices, setChatNotices] = useState<Record<string, string>>({});
   const [editingMap, setEditingMap] = useState<Record<string, EditingState | null>>({
     [CHAT_PROMPT_TAB_ID]: null,
@@ -126,6 +135,20 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     };
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (!extractionResizeState) {
@@ -179,6 +202,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }));
   };
 
+  /** 推送页面级 toast。 */
+  const pushToast = (tone: SidebarToast['tone'], message: string) => {
+    setToast({
+      id: Date.now(),
+      tone,
+      message,
+    });
+  };
+
   /** 更新单个标签的编辑态。 */
   const setPromptTabEditing = (promptTabId: string, editing: EditingState | null) => {
     setEditingMap((current) => ({
@@ -203,38 +235,34 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   /** 复制当前提取内容。 */
   const handleCopyExtraction = async () => {
     if (!content.trim()) {
-      setPageNotice(t('sidebar.notice.emptyExtraction'));
+      pushToast('error', t('sidebar.notice.emptyExtraction'));
       return;
     }
 
     try {
       await navigator.clipboard.writeText(content);
-      setPageNotice(t('sidebar.notice.copySuccess'));
+      pushToast('success', t('sidebar.notice.copySuccess'));
     } catch {
-      setPageNotice(t('sidebar.notice.copyFailed'));
+      pushToast('error', t('sidebar.notice.copyFailed'));
     }
   };
 
   /** 按当前方法重新提取。 */
   const handleReExtract = async () => {
-    setPageNotice('');
     try {
       await runExtraction(method);
-      setPageNotice(
+      pushToast(
+        'success',
         method === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
       );
     } catch {
       setState('error');
-      setPageNotice(t('sidebar.notice.reExtractFailed'));
+      pushToast('error', t('sidebar.notice.reExtractFailed'));
     }
   };
 
   /** 清空当前页面缓存与会话，但保留各标签本地草稿。 */
   const handleClearPageContext = async () => {
-    if (!window.confirm(t('sidebar.notice.clearPageConfirm'))) {
-      return;
-    }
-
     try {
       await api.clearPageContext({ tabId, pageUrl });
       setContent('');
@@ -249,12 +277,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           promptTabState: null,
         })),
       );
-      setPageNotice(t('sidebar.notice.clearPageSuccess'));
+      pushToast('success', t('sidebar.notice.clearPageSuccess'));
       if (state !== 'blocked') {
         setState('ready');
       }
     } catch {
-      setPageNotice(t('sidebar.notice.clearPageFailed'));
+      pushToast('error', t('sidebar.notice.clearPageFailed'));
     }
   };
 
@@ -263,7 +291,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     try {
       await api.openHistoryPage();
     } catch {
-      setPageNotice(t('sidebar.notice.openHistoryFailed'));
+      pushToast('error', t('sidebar.notice.openHistoryFailed'));
     }
   };
 
@@ -272,7 +300,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     try {
       await api.openSettingsPage();
     } catch {
-      setPageNotice(t('sidebar.notice.openSettingsFailed'));
+      pushToast('error', t('sidebar.notice.openSettingsFailed'));
     }
   };
 
@@ -281,7 +309,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     try {
       await api.openGithubProject();
     } catch {
-      setPageNotice(t('sidebar.notice.openGithubFailed'));
+      pushToast('error', t('sidebar.notice.openGithubFailed'));
     }
   };
 
@@ -659,7 +687,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 黑名单放行后继续当前页面提取。 */
   const handleConfirmContinue = async () => {
-    setPageNotice('');
     await api.confirmBlacklistContinue({ tabId, pageUrl });
     try {
       await runExtraction(method);
@@ -675,15 +702,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }
 
     try {
-      setPageNotice('');
       await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
       await runExtraction(nextMethod);
-      setPageNotice(
+      pushToast(
+        'success',
         nextMethod === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
       );
     } catch {
       setState('error');
-      setPageNotice(t('sidebar.notice.switchMethodFailed'));
+      pushToast('error', t('sidebar.notice.switchMethodFailed'));
     }
   };
 
@@ -915,10 +942,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 清空当前标签会话，不影响页面提取内容与其他标签。 */
   const handleClearTabConversation = async (promptTabId: string) => {
-    if (!window.confirm(t('workspace.notice.clearTabConfirm'))) {
-      return;
-    }
-
     try {
       await api.clearTabConversation({
         tabId,
@@ -1041,65 +1064,80 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   return (
     <main data-testid="sidebar-shell" className="flex min-h-screen flex-col bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground">
+      <ToastStack toasts={toast ? [toast] : []} />
       <header className="border-b border-border bg-card/90 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('sidebar.method.readability')}
-              title={t('sidebar.method.readability')}
-              className={cn(
-                'rounded-md border border-transparent',
-                method === 'readability' && 'border-primary/30 bg-primary/10 text-primary',
-              )}
-              onClick={() => void handleSwitchMethod('readability')}
-            >
-              <FileTextIcon />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t('sidebar.method.jina')}
-              title={t('sidebar.method.jina')}
-              className={cn('rounded-md border border-transparent', method === 'jina' && 'border-primary/30 bg-primary/10 text-primary')}
-              onClick={() => void handleSwitchMethod('jina')}
-            >
-              <SparklesIcon />
-            </Button>
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.copyExtraction')} title={t('sidebar.action.copyExtraction')} onClick={() => void handleCopyExtraction()}>
-              <CopyIcon />
-            </Button>
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.reExtract')} title={t('sidebar.action.reExtract')} onClick={() => void handleReExtract()}>
-              <RefreshCcwIcon />
-            </Button>
+            <Tooltip content={t('sidebar.method.readability')}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('sidebar.method.readability')}
+                aria-pressed={method === 'readability'}
+                className={cn(
+                  'rounded-md border border-transparent',
+                  method === 'readability' && 'border-primary/30 bg-primary/10 text-primary',
+                )}
+                onClick={() => void handleSwitchMethod('readability')}
+              >
+                <FileTextIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('sidebar.method.jina')}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('sidebar.method.jina')}
+                aria-pressed={method === 'jina'}
+                className={cn('rounded-md border border-transparent', method === 'jina' && 'border-primary/30 bg-primary/10 text-primary')}
+                onClick={() => void handleSwitchMethod('jina')}
+              >
+                <span className="text-[11px] font-semibold leading-none">J</span>
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('sidebar.action.copyExtraction')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.copyExtraction')} onClick={() => void handleCopyExtraction()}>
+                <CopyIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('sidebar.action.reExtract')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.reExtract')} onClick={() => void handleReExtract()}>
+                <RefreshCcwIcon />
+              </Button>
+            </Tooltip>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-1">
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.clearPage')} title={t('sidebar.action.clearPage')} onClick={() => void handleClearPageContext()}>
-              <Trash2Icon />
-            </Button>
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openHistory')} title={t('sidebar.action.openHistory')} onClick={() => void handleOpenHistoryPage()}>
-              <HistoryIcon />
-            </Button>
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openSettings')} title={t('sidebar.action.openSettings')} onClick={() => void handleOpenSettingsPage()}>
-              <Settings2Icon />
-            </Button>
-            <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openGithub')} title={t('sidebar.action.openGithub')} onClick={() => void handleOpenGithubProject()}>
-              <ExternalLinkIcon />
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <div className="flex min-h-5 items-center gap-2">
-            {pageNotice ? <Badge variant="outline">{pageNotice}</Badge> : null}
-          </div>
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            <span>{t('sidebar.browserTabLabel')}</span>
-            <Badge variant="outline">#{tabId}</Badge>
+            <MiniConfirm
+              message={t('sidebar.notice.clearPageConfirm')}
+              cancelLabel={t('common.cancel')}
+              confirmLabel={t('sidebar.action.clearPage')}
+              contentTestId="clear-page-confirm"
+              onConfirm={handleClearPageContext}
+            >
+              <Tooltip content={t('sidebar.action.clearPage')}>
+                <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.clearPage')}>
+                  <Trash2Icon />
+                </Button>
+              </Tooltip>
+            </MiniConfirm>
+            <Tooltip content={t('sidebar.action.openHistory')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openHistory')} onClick={() => void handleOpenHistoryPage()}>
+                <HistoryIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('sidebar.action.openSettings')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openSettings')} onClick={() => void handleOpenSettingsPage()}>
+                <Settings2Icon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('sidebar.action.openGithub')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.openGithub')} onClick={() => void handleOpenGithubProject()}>
+                <ExternalLinkIcon />
+              </Button>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -1109,17 +1147,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         className="overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
         style={{ height: `${extractionPanelHeight}px` }}
       >
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <Badge variant="outline">{method === 'readability' ? t('sidebar.method.readability') : t('sidebar.method.jina')}</Badge>
-          {state === 'extracting' ? (
-            <span className="flex items-center gap-2 text-xs text-primary">
-              <WorkspaceStatusGlyph label={t('sidebar.state.extracting')} status="loading" className="size-3.5" />
-              <span>{t('sidebar.state.extracting')}</span>
-            </span>
-          ) : null}
-        </div>
-
-        {content ? <article className="whitespace-pre-wrap text-sm leading-6">{content}</article> : null}
+        {content ? (
+          <pre
+            data-testid="sidebar-extraction-content"
+            className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground"
+          >
+            {content}
+          </pre>
+        ) : null}
         {!content && state === 'bootstrapping' ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1148,7 +1183,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         {!content && state === 'extracting' ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-primary">
-              <LoaderCircleIcon className="size-4 animate-spin" />
+              <WorkspaceStatusGlyph label={t('sidebar.state.extracting')} status="loading" className="size-4" />
               <span>{t('sidebar.state.extracting')}</span>
             </div>
           </div>
@@ -1163,13 +1198,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ) : null}
       </section>
 
-      <div className="border-b border-border px-4 py-1">
+      <div className="border-b border-border px-4 py-0.5">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label={t('sidebar.resizeExtraction')}
           data-testid="sidebar-extraction-resize-handle"
-          className="mx-auto h-2 w-16 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="mx-auto h-1.5 w-10 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setExtractionResizeState({
               startY: event.clientY,
@@ -1179,13 +1214,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         />
       </div>
 
-      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="border-b border-border bg-muted/20 px-4 py-2">
+      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="border-b border-border bg-muted/20 px-4 py-1.5">
         <div className="flex flex-wrap gap-1.5">
           {promptTabs.map((promptTab) => {
             const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
             const statusKey = getPromptTabStatusLabelKey(status);
             const statusLabel = statusKey ? t(statusKey) : promptTab.name;
             const isActive = promptTab.id === activePromptTabId;
+            const hasPromptTabText = promptTabHasContent(messageMap[promptTab.id] ?? []);
+            const showLoadingRing = status === 'loading' || status === 'auto-running';
 
             return (
               <button
@@ -1197,8 +1234,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 type="button"
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
-                  'flex min-w-[84px] items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs shadow-sm transition-colors',
-                  isActive ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/90 hover:bg-muted',
+                  'relative inline-flex items-center gap-2 overflow-hidden rounded-md border px-3 py-2 text-left text-xs shadow-sm transition-colors',
+                  showLoadingRing && 'tab-loading-border border-transparent',
+                  isActive
+                    ? showLoadingRing
+                      ? 'bg-primary/10 text-foreground'
+                      : 'border-primary/30 bg-primary/10 text-foreground'
+                    : showLoadingRing
+                      ? 'bg-background/90 text-foreground hover:bg-muted'
+                      : 'border-border bg-background/90 hover:bg-muted',
                 )}
                 onClick={() => {
                   setActivePromptTabId(promptTab.id);
@@ -1211,13 +1255,20 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   void handleTriggerPromptTab(promptTab);
                 }}
               >
-                <span className="truncate">{promptTab.name}</span>
-                <span className="flex items-center gap-1">
-                  {promptTab.autoTrigger ? <SparklesIcon className={cn('size-3', isActive ? 'text-primary-foreground/90' : 'text-amber-600')} /> : null}
-                  {status !== 'idle' ? (
-                    <WorkspaceStatusGlyph label={statusLabel} status={toPromptVisualStatus(status)} className="size-3.5" />
-                  ) : null}
-                </span>
+                {showLoadingRing ? (
+                  <span data-testid={`prompt-tab-loading-${promptTab.id}`} className="sr-only">
+                    {statusLabel}
+                  </span>
+                ) : null}
+
+                <span className="relative z-10 truncate">{promptTab.name}</span>
+
+                {hasPromptTabText && !showLoadingRing ? (
+                  <span
+                    data-testid={`prompt-tab-line-${promptTab.id}`}
+                    className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
+                  />
+                ) : null}
               </button>
             );
           })}
@@ -1262,6 +1313,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
               onRetryAssistantMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
               onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
+              onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
               onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
               onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
@@ -1304,12 +1356,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           }
           return handleSend(activePromptTab.id, input);
         }}
-        onStop={() => {
-          if (!activePromptTab) {
-            return Promise.resolve();
-          }
-          return handleStop(activePromptTab.id, activeSessionId);
-        }}
         onExport={() => {
           if (!activePromptTab) {
             return Promise.resolve();
@@ -1327,20 +1373,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   );
 };
 
-/** 把标签状态映射成统一视觉状态。 */
-const toPromptVisualStatus = (status: PromptTabStatusKind) => {
-  switch (status) {
-    case 'loading':
-      return 'loading';
-    case 'auto-running':
-      return 'auto';
-    case 'auto-error':
-      return 'error';
-    case 'auto-done':
-    case 'ready':
-      return 'done';
-    case 'idle':
-    default:
-      return 'idle';
-  }
-};
+/** 判断标签是否已有可见文本内容。 */
+const promptTabHasContent = (messages: ChatMessageState[]) =>
+  messages.some((message) => {
+    if ((message.displayContent ?? message.content).trim()) {
+      return true;
+    }
+
+    return message.branches.some((branch) => branch.content.trim().length > 0);
+  });

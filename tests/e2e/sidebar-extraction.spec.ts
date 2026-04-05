@@ -71,6 +71,7 @@ test('side panel 先恢复 bootstrap，再在放行后进入提取', async ({ co
 
   await sidepanel.getByRole('button', { name: '继续提取' }).click();
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('This domain is for use in documentation examples');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('[Learn more](https://iana.org/domains/example)');
   await expect(sidepanel.getByRole('button', { name: 'Readability' })).toHaveAttribute('aria-pressed', 'true');
 });

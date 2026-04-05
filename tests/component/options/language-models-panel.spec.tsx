@@ -8,6 +8,7 @@ import { LanguageModelsPanel } from '../../../src/features/settings/language-mod
 
 const t = (key: string) =>
   ({
+    'common.cancel': '取消',
     'settings.languageModels': '语言模型',
     'settings.modelsDescription': '说明',
     'settings.noModels': '暂无模型配置',
@@ -115,7 +116,7 @@ describe('LanguageModelsPanel', () => {
     );
     expect(onSelectModel).toHaveBeenLastCalledWith(expect.stringMatching(/^model-/));
 
-    await user.click(screen.getByRole('button', { name: '复制模型' }));
+    await user.click(within(primaryItem).getByRole('button', { name: '复制模型' }));
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         models: expect.arrayContaining([expect.objectContaining({ name: '主模型 副本' })]),
@@ -140,6 +141,7 @@ describe('LanguageModelsPanel', () => {
 
     const user = userEvent.setup();
     await user.click(within(screen.getByTestId('language-model-item-model-1')).getByRole('button', { name: '删除模型' }));
+    await user.click(within(screen.getByTestId('language-model-delete-confirm-model-1')).getByRole('button', { name: '删除模型' }));
 
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -182,7 +184,7 @@ describe('LanguageModelsPanel', () => {
     );
   });
 
-  it('支持单项展开并在标题栏切换启用状态', async () => {
+  it('支持单项展开、全部收起，并在标题栏切换启用状态', async () => {
     render(<ControlledLanguageModelsPanel />);
 
     const primaryItem = screen.getByTestId('language-model-item-model-1');
@@ -192,6 +194,9 @@ describe('LanguageModelsPanel', () => {
     expect(within(secondaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
 
     const user = userEvent.setup();
+    await user.click(within(primaryItem).getByTestId('language-model-summary-model-1'));
+    expect(within(primaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
+
     await user.click(within(secondaryItem).getByTestId('language-model-summary-model-2'));
 
     expect(within(primaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();

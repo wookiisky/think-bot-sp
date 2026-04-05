@@ -90,6 +90,7 @@ test('settings models panel can add copy delete and persist through save', async
 
   await page.getByTestId('language-model-summary-model-1').click();
   await page.getByTestId('language-model-item-model-1').getByRole('button', { name: '删除模型' }).click();
+  await page.getByTestId('language-model-delete-confirm-model-1').getByRole('button', { name: '删除模型' }).click();
   await page.getByTestId('language-model-summary-model-2').click();
   await page.getByRole('button', { name: /^保存$/ }).click();
 

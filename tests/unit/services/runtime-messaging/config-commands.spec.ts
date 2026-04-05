@@ -43,7 +43,7 @@ describe('config-commands', () => {
       updateSyncMetadata: vi.fn().mockResolvedValue(syncedConfig),
     };
     const pageRepository = {
-      getCacheStats: vi.fn().mockResolvedValue({ entryCount: 2, bytes: 128 }),
+      getCacheStats: vi.fn().mockResolvedValue({ pageCount: 1, entryCount: 2, bytes: 128 }),
       clearCache: vi.fn().mockResolvedValue({ removedKeys: 2 }),
     };
     const recentErrorRepository = {
@@ -132,7 +132,7 @@ describe('config-commands', () => {
 
     await expect(handler({ type: 'GET_LOCAL_CACHE_STATS' })).resolves.toEqual({
       type: 'GET_LOCAL_CACHE_STATS_SUCCESS',
-      stats: { entryCount: 2, bytes: 128 },
+      stats: { pageCount: 1, entryCount: 2, bytes: 128 },
     });
     expect(pageRepository.getCacheStats).toHaveBeenCalledTimes(1);
 

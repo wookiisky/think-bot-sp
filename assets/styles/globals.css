@@ -131,3 +131,48 @@
     @apply bg-background text-foreground min-h-screen;
   }
 }
+
+@keyframes tab-border-flow {
+  0% {
+    background-position: 200% 50%;
+  }
+
+  100% {
+    background-position: -200% 50%;
+  }
+}
+
+@layer components {
+  .tab-loading-border {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .tab-loading-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background:
+      linear-gradient(
+        90deg,
+        rgba(56, 189, 248, 0.9),
+        rgba(59, 130, 246, 0.95),
+        rgba(52, 211, 153, 0.9),
+        rgba(56, 189, 248, 0.9)
+      )
+      0 0 / 200% 100%;
+    animation: tab-border-flow 2s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+}

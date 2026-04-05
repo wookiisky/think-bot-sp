@@ -253,4 +253,21 @@ describe('page-repository', () => {
     expect(saved.faviconUrl).toBe('https://example.com/favicon.ico');
     expect(saved.updatedAt).toBeGreaterThan(100);
   });
+
+  it('缓存统计区分页面数与可回收键数', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.savePage(buildPageRecord({ url: 'https://example.com/a', now: 1 }));
+    await storage.set({
+      'conversation:https://example.com/a:chat': { sentinel: true },
+      'loading:https://example.com/a:chat': { sentinel: true },
+    });
+
+    await expect(repo.getCacheStats()).resolves.toEqual({
+      pageCount: 1,
+      entryCount: 3,
+      bytes: expect.any(Number),
+    });
+  });
 });

@@ -5,6 +5,50 @@ import { createExtractionService } from '../../../src/services/extraction/extrac
 import { applyJinaResponseTemplate, createJinaClient } from '../../../src/services/extraction/jina-client';
 
 describe('extraction service', () => {
+  it('优先使用 content script 预提取的 Readability Markdown', async () => {
+    const jinaClient = {
+      extract: vi.fn(),
+    };
+    const pageRepository = {
+      saveExtractionResult: vi.fn(async (value) => value),
+    };
+    const service = createExtractionService({
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      contentSource: {
+        collect: vi.fn().mockResolvedValue({
+          url: 'https://example.com/article',
+          title: 'Example',
+          html: '<article><h1>Title</h1><p>Body</p></article>',
+          text: 'Title Body',
+          faviconUrl: '',
+          readabilityContent: '# Title\n\nBody',
+          readabilityTitle: 'Title',
+        }),
+      },
+      readabilityExtractor: {
+        extract: vi.fn(),
+      },
+      jinaClient,
+      pageRepository,
+    });
+
+    const result = await service.extractPage({
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      method: 'readability',
+      jinaApiKey: '',
+      jinaResponseTemplate: '{{content}}',
+    });
+
+    expect(result).toMatchObject({
+      extractionMethod: 'readability',
+      content: '# Title\n\nBody',
+      title: 'Title',
+    });
+    expect(pageRepository.saveExtractionResult).toHaveBeenCalledTimes(1);
+    expect(jinaClient.extract).not.toHaveBeenCalled();
+  });
+
   it('Readability 成功时不走 Jina 回退', async () => {
     const jinaClient = {
       extract: vi.fn(),

@@ -2,6 +2,8 @@
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
 
+import { extractReadabilityMarkdown } from '../src/services/extraction/readability-markdown';
+
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
@@ -11,6 +13,7 @@ export default defineContentScript({
       }
 
       const faviconUrl = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href ?? '';
+      const readability = extractReadabilityMarkdown(document.cloneNode(true) as Document);
 
       sendResponse({
         url: location.href,
@@ -18,6 +21,8 @@ export default defineContentScript({
         html: document.documentElement.outerHTML,
         text: document.body?.innerText ?? '',
         faviconUrl,
+        readabilityContent: readability?.content ?? '',
+        readabilityTitle: readability?.title ?? '',
       });
       return true;
     });

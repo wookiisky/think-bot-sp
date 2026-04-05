@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { buildRecentErrorSummary, type RecentErrorSummary } from '../../domain/error/recent-error-schema';
 import {
   getEnabledCompleteModels,
   isModelConfigComplete,
@@ -11,6 +10,7 @@ import {
 import { createLocaleService } from '../../services/i18n/locale-service';
 import { createLogger } from '../../services/logger/logger';
 import { downloadTextFile } from '../../shared/download-file';
+import { ToastStack } from '../../components/ui/toast-stack';
 import { Icon } from '../../ui/icon';
 import { BlacklistSettingsPanel } from './blacklist-settings-panel';
 import { BasicSettingsPanel } from './basic-settings-panel';
@@ -24,16 +24,29 @@ import { SettingsNav } from './settings-nav';
 import { hasUnsavedChanges, type SettingsSection, type SettingsViewError } from './settings-shell-state';
 
 type CacheStats = {
+  /** 本地缓存页面数。 */
+  pageCount: number;
   /** 本地缓存条目数。 */
   entryCount: number;
   /** 本地缓存字节数。 */
   bytes: number;
 };
 
-type SyncFeedback = {
+type FeedbackMessage = {
   /** 反馈语气。 */
   tone: 'success' | 'error';
   /** 展示给用户的反馈内容。 */
+  message: string;
+};
+
+type SettingsToast = {
+  /** toast 稳定 id。 */
+  id: number;
+  /** 反馈语气。 */
+  tone: 'success' | 'error';
+  /** toast 标题。 */
+  title: string;
+  /** toast 正文。 */
   message: string;
 };
 
@@ -52,9 +65,23 @@ export const SettingsShell = () => {
   const [importingQuickInputTemplates, setImportingQuickInputTemplates] = useState(false);
   const [testingSync, setTestingSync] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<SettingsViewError | null>(null);
-  const [recentError, setRecentError] = useState<RecentErrorSummary | null>(null);
-  const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null);
+  const [loadError, setLoadError] = useState<SettingsViewError | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<FeedbackMessage | null>(null);
+  const [toast, setToast] = useState<SettingsToast | null>(null);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     let active = true;
@@ -63,11 +90,10 @@ export const SettingsShell = () => {
       logger.info('开始加载设置页');
 
       try {
-        const [nextConfig, nextCacheStats, nextLocaleResources, nextRecentError] = await Promise.all([
+        const [nextConfig, nextCacheStats, nextLocaleResources] = await Promise.all([
           settingsApi.getConfig(),
           settingsApi.getLocalCacheStats(),
           localeService.loadResources(),
-          settingsApi.getRecentError(),
         ]);
 
         if (!active) {
@@ -78,20 +104,20 @@ export const SettingsShell = () => {
         setDraftConfig(nextConfig);
         setCacheStats(nextCacheStats);
         setLocaleResources(nextLocaleResources);
-        setRecentError(nextRecentError);
         setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
         logger.info('设置页加载完成', {
+          pageCount: nextCacheStats.pageCount,
           entryCount: nextCacheStats.entryCount,
           bytes: nextCacheStats.bytes,
         });
-      } catch (loadError) {
+      } catch (error) {
         if (!active) {
           return;
         }
 
-        const message = loadError instanceof Error ? loadError.message : 'unknown error';
+        const message = error instanceof Error ? error.message : 'unknown error';
         logger.error('设置页加载失败', { message });
-        setError({ title: '加载失败', message });
+        setLoadError({ title: '加载失败', message });
       }
     };
 
@@ -105,7 +131,7 @@ export const SettingsShell = () => {
   if (!savedConfig || !draftConfig || !localeResources || !cacheStats) {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)] px-6 py-8">
-        <p className="m-0 text-sm text-foreground">{error ? `${error.title}：${error.message}` : '正在加载设置页…'}</p>
+        <p className="m-0 text-sm text-foreground">{loadError ? `${loadError.title}：${loadError.message}` : '正在加载设置页…'}</p>
       </main>
     );
   }
@@ -119,19 +145,13 @@ export const SettingsShell = () => {
     setDraftConfig(next);
   };
 
-  const setOperationError = (title: string, message: string) => {
-    setError({ title, message });
-  };
-
-  /** 将当前页面可感知的失败同步成最近错误摘要。 */
-  const captureRecentError = (source: RecentErrorSummary['source'], operation: string, message: string) => {
-    setRecentError(
-      buildRecentErrorSummary({
-        source,
-        operation,
-        message,
-      }),
-    );
+  const showToast = (tone: SettingsToast['tone'], title: string, message: string) => {
+    setToast({
+      id: Date.now(),
+      tone,
+      title,
+      message,
+    });
   };
 
   const refreshCacheStats = async () => {
@@ -147,13 +167,13 @@ export const SettingsShell = () => {
       : null;
 
     if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
-      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
       logger.warn('默认模型不存在，阻止保存', { defaultModelId: nextDraftConfig.basic.defaultModelId });
       return null;
     }
 
     if (defaultModel && !isModelConfigComplete(defaultModel)) {
-      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
       logger.warn('默认模型配置不完整，阻止保存', { defaultModelId: defaultModel.id });
       return null;
     }
@@ -173,13 +193,12 @@ export const SettingsShell = () => {
       setSavedConfig(nextConfig);
       setDraftConfig(nextConfig);
       logger.info('保存设置成功', { language: nextConfig.basic.language });
-      setError(null);
+      setToast(null);
       return nextConfig;
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'unknown error';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('保存设置失败', { message });
-      captureRecentError('settings', 'SAVE_CONFIG', message);
-      setOperationError('保存失败', message);
+      showToast('error', '保存失败', message);
       return null;
     } finally {
       setSaving(false);
@@ -196,16 +215,15 @@ export const SettingsShell = () => {
         tone: 'success',
         message: `已同步 ${response.result.snapshotBytes} B`,
       });
-      setError(null);
+      setToast(null);
       return response;
-    } catch (syncError) {
-      const message = syncError instanceof Error ? syncError.message : 'unknown error';
-      captureRecentError('sync', 'SYNC_NOW', message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       setSyncFeedback({
         tone: 'error',
         message,
       });
-      setOperationError('同步失败', message);
+      showToast('error', '同步失败', message);
       return null;
     } finally {
       setSyncing(false);
@@ -225,13 +243,12 @@ export const SettingsShell = () => {
       setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
       await refreshCacheStats();
       logger.info('导入配置成功');
-      setError(null);
+      setToast(null);
       setSyncFeedback(null);
-    } catch (importError) {
-      const message = importError instanceof Error ? importError.message : 'unknown error';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('导入配置失败', { message });
-      captureRecentError('settings', 'IMPORT_CONFIG', message);
-      setOperationError('导入失败', message);
+      showToast('error', '导入失败', message);
     }
   };
 
@@ -244,12 +261,11 @@ export const SettingsShell = () => {
         mimeType: 'application/json;charset=utf-8',
       });
       logger.info('导出配置成功', { filename });
-      setError(null);
-    } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : 'unknown error';
+      setToast(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('导出配置失败', { message });
-      captureRecentError('settings', 'EXPORT_CONFIG', message);
-      setOperationError('导出失败', message);
+      showToast('error', '导出失败', message);
     }
   };
 
@@ -258,12 +274,11 @@ export const SettingsShell = () => {
       await settingsApi.clearLocalCache();
       await refreshCacheStats();
       logger.info('清理本地缓存成功');
-      setError(null);
-    } catch (clearError) {
-      const message = clearError instanceof Error ? clearError.message : 'unknown error';
+      setToast(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('清理本地缓存失败', { message });
-      captureRecentError('settings', 'CLEAR_LOCAL_CACHE', message);
-      setOperationError('清理缓存失败', message);
+      showToast('error', '清理缓存失败', message);
     }
   };
 
@@ -280,12 +295,11 @@ export const SettingsShell = () => {
         templates,
       });
       setDraftConfig(result.config);
-      setError(null);
-    } catch (importError) {
-      const message = importError instanceof Error ? importError.message : 'unknown error';
+      setToast(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('导入远端快捷输入模板失败', { message });
-      captureRecentError('settings', 'IMPORT_QUICK_INPUT_TEMPLATES', message);
-      setOperationError('导入快捷输入模板失败', message);
+      showToast('error', '导入快捷输入模板失败', message);
     } finally {
       setImportingQuickInputTemplates(false);
     }
@@ -315,12 +329,11 @@ export const SettingsShell = () => {
         language: nextConfig.basic.language,
         theme: nextConfig.basic.theme,
       });
-      setError(null);
-    } catch (resetError) {
-      const message = resetError instanceof Error ? resetError.message : 'unknown error';
+      setToast(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       logger.error('恢复默认配置失败', { message });
-      captureRecentError('settings', 'RESET_CONFIG', message);
-      setOperationError('恢复默认失败', message);
+      showToast('error', '恢复默认失败', message);
     } finally {
       setSaving(false);
     }
@@ -334,15 +347,14 @@ export const SettingsShell = () => {
         tone: 'success',
         message: result.message,
       });
-      setError(null);
-    } catch (syncError) {
-      const message = syncError instanceof Error ? syncError.message : 'unknown error';
-      captureRecentError('sync', 'TEST_SYNC_CONNECTION', message);
+      setToast(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
       setSyncFeedback({
         tone: 'error',
         message,
       });
-      setOperationError('同步连接测试失败', message);
+      showToast('error', '同步连接测试失败', message);
     } finally {
       setTestingSync(false);
     }
@@ -363,6 +375,8 @@ export const SettingsShell = () => {
         draftConfig.basic.theme === 'dark' && 'dark',
       )}
     >
+      <ToastStack toasts={toast ? [toast] : []} />
+
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <header className="grid gap-6 border-b border-border/70 pb-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -390,37 +404,6 @@ export const SettingsShell = () => {
 
         <section className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
           <SettingsNav activeSection={activeSection} onSectionChange={setActiveSection} t={t} />
-
-          {error ? (
-            <section className="lg:col-start-2">
-              <section role="alert" className="rounded-2xl border border-destructive/25 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error.title}：{error.message}
-              </section>
-            </section>
-          ) : null}
-
-          <section className="lg:col-start-2">
-            <section className="grid gap-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="m-0 text-sm font-semibold">{t('settings.recentError')}</h2>
-                {recentError ? (
-                  <span className="text-xs text-muted-foreground">
-                    {t(`settings.recentErrorSource.${recentError.source}`)} / {recentError.operation}
-                  </span>
-                ) : null}
-              </div>
-              {recentError ? (
-                <>
-                  <p className="m-0 text-sm text-foreground">{recentError.message}</p>
-                  <p className="m-0 text-xs text-muted-foreground">
-                    {t('settings.recentErrorCapturedAt')}：{new Date(recentError.capturedAt).toLocaleString()}
-                  </p>
-                </>
-              ) : (
-                <p className="m-0 text-sm text-muted-foreground">{t('settings.recentErrorEmpty')}</p>
-              )}
-            </section>
-          </section>
 
           <section className="grid gap-6 lg:col-start-2">
             {activeSection === 'basic' ? (

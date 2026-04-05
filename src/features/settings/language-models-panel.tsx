@@ -2,9 +2,12 @@ import { useEffect, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { ArrowDownIcon, ArrowUpIcon, CopyIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { Tooltip } from '../../components/ui/tooltip';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import { ModelForm } from './model-form';
@@ -35,6 +38,8 @@ type SortableModelCardProps = {
   summary: string;
   /** 切换当前模型。 */
   onSelect(): void;
+  /** 复制当前模型。 */
+  onCopy(): void;
   /** 上移当前模型。 */
   onMoveUp(): void;
   /** 下移当前模型。 */
@@ -59,6 +64,7 @@ const SortableModelCard = ({
   disabled,
   summary,
   onSelect,
+  onCopy,
   onMoveUp,
   onMoveDown,
   onDelete,
@@ -83,20 +89,20 @@ const SortableModelCard = ({
     >
       <section
         className={[
-          'grid gap-4 rounded-2xl border px-4 py-4 transition-colors',
+          'grid gap-3 rounded-2xl border px-4 py-3 transition-colors',
           expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`${t('settings.dragModel')}:${model.name}`}
             disabled={disabled}
             {...attributes}
             {...listeners}
           >
-            ::
+            <GripVerticalIcon className="size-4" />
           </button>
 
           <button
@@ -110,15 +116,32 @@ const SortableModelCard = ({
           </button>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onMoveUp} disabled={disabled}>
-              {t('settings.moveUp')}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onMoveDown} disabled={disabled}>
-              {t('settings.moveDown')}
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onDelete} disabled={disabled}>
-              {t('settings.deleteModel')}
-            </Button>
+            <Tooltip content={t('settings.copyModel')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.copyModel')} onClick={onCopy} disabled={disabled}>
+                <CopyIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('settings.moveUp')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveUp')} onClick={onMoveUp} disabled={disabled}>
+                <ArrowUpIcon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={t('settings.moveDown')}>
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveDown')} onClick={onMoveDown} disabled={disabled}>
+                <ArrowDownIcon />
+              </Button>
+            </Tooltip>
+            <MiniConfirm
+              message={t('settings.deleteModel')}
+              cancelLabel={t('common.cancel')}
+              confirmLabel={t('settings.deleteModel')}
+              contentTestId={`language-model-delete-confirm-${model.id}`}
+              onConfirm={onDelete}
+            >
+              <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.deleteModel')} disabled={disabled}>
+                <Trash2Icon />
+              </Button>
+            </MiniConfirm>
             <label className="flex items-center gap-2 text-sm">
               <input
                 aria-label={`${t('settings.enableModel')}:${model.name}`}
@@ -163,15 +186,13 @@ export const LanguageModelsPanel = ({
   const activeModel = visibleModels.find((model) => model.id === selectedModelId) ?? null;
 
   useEffect(() => {
-    if (visibleModels.length === 0) {
-      if (selectedModelId !== null) {
-        onSelectModel(null);
-      }
+    if (visibleModels.length === 0 && selectedModelId !== null) {
+      onSelectModel(null);
       return;
     }
 
-    if (!selectedModelId || !visibleModels.some((model) => model.id === selectedModelId)) {
-      onSelectModel(visibleModels[0].id);
+    if (selectedModelId && !visibleModels.some((model) => model.id === selectedModelId)) {
+      onSelectModel(visibleModels[0]?.id ?? null);
     }
   }, [onSelectModel, selectedModelId, visibleModels]);
 
@@ -224,15 +245,16 @@ export const LanguageModelsPanel = ({
     onSelectModel(nextModel.id);
   };
 
-  const handleCopyModel = () => {
-    if (!activeModel) {
+  const handleCopyModel = (modelId: string) => {
+    const sourceModel = config.models.find((model) => model.id === modelId);
+    if (!sourceModel) {
       return;
     }
 
     const copiedModel = {
-      ...activeModel,
+      ...sourceModel,
       id: nextModelId(),
-      name: `${activeModel.name} 副本`,
+      name: `${sourceModel.name} 副本`,
       enabled: false,
       order: config.models.length,
       deletedAt: null,
@@ -329,19 +351,18 @@ export const LanguageModelsPanel = ({
     >
       <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
         <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
-          <CardTitle className="text-base">{t('settings.languageModels')}</CardTitle>
-          <CardDescription>{t('settings.modelsDescription')}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 px-5 py-5">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="grid gap-1">
+              <CardTitle className="text-base">{t('settings.languageModels')}</CardTitle>
+              <CardDescription>{t('settings.modelsDescription')}</CardDescription>
+            </div>
+
             <Button type="button" variant="outline" onClick={handleAddModel} disabled={disabled}>
               {t('settings.addModel')}
             </Button>
-            <Button type="button" variant="outline" onClick={handleCopyModel} disabled={disabled || !activeModel}>
-              {t('settings.copyModel')}
-            </Button>
           </div>
-
+        </CardHeader>
+        <CardContent className="grid gap-4 px-5 py-5">
           {visibleModels.length > 0 ? (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={visibleModels.map((model) => model.id)} strategy={verticalListSortingStrategy}>
@@ -353,7 +374,8 @@ export const LanguageModelsPanel = ({
                       expanded={model.id === activeModel?.id}
                       disabled={disabled}
                       summary={buildModelSummary(model)}
-                      onSelect={() => onSelectModel(model.id)}
+                      onSelect={() => onSelectModel(model.id === activeModel?.id ? null : model.id)}
+                      onCopy={() => handleCopyModel(model.id)}
                       onMoveUp={() => moveModel(model.id, -1)}
                       onMoveDown={() => moveModel(model.id, 1)}
                       onDelete={() => handleDeleteModel(model.id)}
