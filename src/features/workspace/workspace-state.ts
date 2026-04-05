@@ -11,6 +11,8 @@ export type BranchMessageState = {
   modelId: string;
   /** 分支模型展示名。 */
   modelLabel: string;
+  /** 是否为当前轮的首个主分支。 */
+  isPrimary: boolean;
   /** 分支正文。 */
   content: string;
   /** 分支状态。 */
@@ -35,6 +37,8 @@ export type ChatMessageState = {
   errorMessage: string | null;
   /** 当前消息下的分支列表。 */
   branches: BranchMessageState[];
+  /** 当前选中的主分支。 */
+  selectedBranchId: string | null;
 };
 
 /** 模型选项。 */
@@ -109,10 +113,10 @@ export const upsertAssistantMessage = (
       return message;
     }
     found = true;
-    return buildNext(message);
+    return syncAssistantMessageState(buildNext(message));
   });
 
-  return found ? next : [...next, buildNext(null)];
+  return found ? next : [...next, syncAssistantMessageState(buildNext(null))];
 };
 
 /** 以分支 id 为键做增量合并。 */
@@ -128,17 +132,17 @@ export const upsertAssistantBranch = (
     }
 
     let found = false;
-    return {
+    const nextBranches = message.branches.map((branch) => {
+      if (branch.id !== branchId) {
+        return branch;
+      }
+      found = true;
+      return buildNext(branch);
+    });
+    return syncAssistantMessageState({
       ...message,
-      branches: message.branches.map((branch) => {
-        if (branch.id !== branchId) {
-          return branch;
-        }
-        found = true;
-        return buildNext(branch);
-      }),
-      ...(found ? {} : { branches: [...message.branches, buildNext(null)] }),
-    };
+      branches: found ? nextBranches : [...nextBranches, buildNext(null)],
+    });
   });
 
 /** 生成本地乐观用户消息内容。 */
@@ -168,22 +172,27 @@ export const resolveModelId = (preferredModelId: string | null, models: ModelOpt
 
 /** 把会话记录转成工作台消息结构。 */
 export const toChatMessageStates = (messages: SidebarConversationRecord['messages']): ChatMessageState[] =>
-  messages.map((message) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-    displayContent: message.displayContent,
-    status: message.status,
-    errorMessage: message.errorMessage,
-    branches: message.branches.map((branch) => ({
-      id: branch.id,
-      modelId: branch.modelId,
-      modelLabel: branch.modelLabel,
-      content: branch.content,
-      status: branch.status,
-      errorMessage: branch.errorMessage,
-    })),
-  }));
+  messages.map((message) => {
+    const branches =
+      message.role === 'assistant'
+        ? normalizeAssistantBranches(message)
+        : [];
+    const selectedBranchId =
+      message.role === 'assistant' ? resolveSelectedBranchId(branches, message.selectedBranchId ?? null) : null;
+    const selectedBranch =
+      message.role === 'assistant' ? branches.find((branch) => branch.id === selectedBranchId) ?? null : null;
+
+    return {
+      id: message.id,
+      role: message.role,
+      content: selectedBranch?.content ?? message.content,
+      displayContent: message.displayContent,
+      status: selectedBranch?.status ?? message.status,
+      errorMessage: selectedBranch?.errorMessage ?? message.errorMessage,
+      branches,
+      selectedBranchId,
+    };
+  });
 
 /** 生成可见 promptTab 列表。 */
 export const buildPromptTabs = ({
@@ -321,4 +330,68 @@ export const getPromptTabStatusKind = (promptTab: PromptTabDefinition, activeSes
     return 'ready';
   }
   return 'idle';
+};
+
+/** 归一化助手分支，兼容旧消息把主回答折叠为首个分支。 */
+const normalizeAssistantBranches = (
+  message: Extract<SidebarConversationRecord['messages'][number], { role: 'assistant' }>,
+): BranchMessageState[] => {
+  if (message.branches.length > 0) {
+    return message.branches.map((branch, index) => ({
+      id: branch.id,
+      modelId: branch.modelId,
+      modelLabel: branch.modelLabel,
+      isPrimary: branch.isPrimary ?? index === 0,
+      content: branch.content,
+      status: branch.status,
+      errorMessage: branch.errorMessage,
+    }));
+  }
+
+  return [
+    {
+      id: `${message.id}:primary`,
+      modelId: message.modelId ?? '',
+      modelLabel: message.modelId ?? '主分支',
+      isPrimary: true,
+      content: message.content,
+      status: message.status,
+      errorMessage: message.errorMessage,
+    },
+  ];
+};
+
+/** 解析当前应使用的主分支 id。 */
+const resolveSelectedBranchId = (branches: BranchMessageState[], selectedBranchId: string | null): string | null => {
+  if (branches.length === 0) {
+    return null;
+  }
+  if (selectedBranchId && branches.some((branch) => branch.id === selectedBranchId)) {
+    return selectedBranchId;
+  }
+  return branches[0]?.id ?? null;
+};
+
+/** 让助手消息的顶层展示始终与当前选中的分支保持一致。 */
+export const syncAssistantMessageState = (message: ChatMessageState): ChatMessageState => {
+  if (message.role !== 'assistant' || message.branches.length === 0) {
+    return message;
+  }
+
+  const selectedBranchId = resolveSelectedBranchId(message.branches, message.selectedBranchId);
+  const selectedBranch = message.branches.find((branch) => branch.id === selectedBranchId) ?? null;
+  if (!selectedBranch) {
+    return {
+      ...message,
+      selectedBranchId,
+    };
+  }
+
+  return {
+    ...message,
+    content: selectedBranch.content,
+    status: selectedBranch.status,
+    errorMessage: selectedBranch.errorMessage,
+    selectedBranchId,
+  };
 };

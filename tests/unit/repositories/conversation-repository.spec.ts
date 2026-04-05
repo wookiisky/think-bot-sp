@@ -220,6 +220,40 @@ describe('conversation-repository', () => {
     });
   });
 
+  it('支持按消息 id 回滚当前轮，且空会话会直接删除', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.appendUserMessage({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'quick-summary',
+      messageId: 'user-1',
+      content: '请总结',
+      displayContent: '总结',
+      images: [],
+      now: 1,
+    });
+    await repo.appendAssistantMessage({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'quick-summary',
+      messageId: 'assistant-1',
+      primaryBranchId: 'branch-1',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+      now: 2,
+    });
+
+    await repo.rollbackTurnMessages({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'quick-summary',
+      userMessageId: 'user-1',
+      assistantMessageId: 'assistant-1',
+      now: 3,
+    });
+
+    await expect(repo.getConversation('https://example.com/a', 'quick-summary')).resolves.toBeNull();
+  });
+
   it('助手分支支持追加、收敛、删除，并维护分支 loading', async () => {
     const storage = createFakeStorageArea();
     const repo = createConversationRepository(createChromeLocalAdapter(storage));
@@ -236,7 +270,9 @@ describe('conversation-repository', () => {
       normalizedUrl: 'https://example.com/a',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      primaryBranchId: 'assistant-1:primary',
       modelId: 'model-main',
+      modelLabel: '主模型',
       now: 2,
     });
     await repo.finishAssistantMessage({
@@ -286,7 +322,7 @@ describe('conversation-repository', () => {
         messages: expect.arrayContaining([
           expect.objectContaining({
             id: 'assistant-1',
-            branches: [
+            branches: expect.arrayContaining([
               expect.objectContaining({
                 id: 'branch-1',
                 modelId: 'model-branch',
@@ -295,7 +331,7 @@ describe('conversation-repository', () => {
                 status: 'done',
                 errorMessage: null,
               }),
-            ],
+            ]),
           }),
         ]),
       }),
@@ -329,7 +365,16 @@ describe('conversation-repository', () => {
         messages: expect.arrayContaining([
           expect.objectContaining({
             id: 'assistant-1',
-            branches: [],
+            selectedBranchId: 'assistant-1:primary',
+            branches: [
+              expect.objectContaining({
+                id: 'assistant-1:primary',
+                isPrimary: true,
+                modelId: 'model-main',
+                modelLabel: '主模型',
+                status: 'done',
+              }),
+            ],
           }),
         ]),
       }),

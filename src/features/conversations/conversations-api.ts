@@ -92,6 +92,9 @@ type ConversationsApi = {
       sessionId: string;
       userMessageId: string | null;
       messageId: string;
+      branchId: string;
+      modelId: string;
+      modelLabel: string;
     };
   }>;
   /** 编辑用户消息。 */
@@ -100,6 +103,9 @@ type ConversationsApi = {
     payload: {
       editedMessageId: string;
       messageId: string;
+      branchId: string;
+      modelId: string;
+      modelLabel: string;
       sessionId: string;
     };
   }>;
@@ -108,7 +114,7 @@ type ConversationsApi = {
     type: 'RETRY_USER_MESSAGE_SUCCESS';
     payload: {
       retriedMessageId: string;
-      assistantMessageId: string;
+      messageId: string;
       branchId: string;
       modelId: string;
       modelLabel: string;
@@ -116,12 +122,20 @@ type ConversationsApi = {
     };
   }>;
   /** 重试助手消息。 */
-  retryMessage: (input: { pageUrl: string; promptTabId: string; messageId: string }) => Promise<{
+  retryMessage: (input: { pageUrl: string; promptTabId: string; messageId: string; branchId: string }) => Promise<{
     type: 'RETRY_MESSAGE_SUCCESS';
     payload: {
-      replacedMessageId: string;
       messageId: string;
+      branchId: string;
       sessionId: string;
+    };
+  }>;
+  /** 切换当前轮主分支。 */
+  selectAssistantBranch: (input: { pageUrl: string; promptTabId: string; messageId: string; branchId: string }) => Promise<{
+    type: 'SELECT_ASSISTANT_BRANCH_SUCCESS';
+    payload: {
+      messageId: string;
+      branchId: string;
     };
   }>;
   /** 新增分支。 */
@@ -251,6 +265,13 @@ export const createConversationsApi = (): ConversationsApi => ({
   retryMessage(input) {
     return chrome.runtime.sendMessage({
       type: 'RETRY_MESSAGE',
+      tabId: CONVERSATIONS_TAB_ID,
+      ...input,
+    });
+  },
+  selectAssistantBranch(input) {
+    return chrome.runtime.sendMessage({
+      type: 'SELECT_ASSISTANT_BRANCH',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });

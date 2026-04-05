@@ -40,6 +40,7 @@ import {
   type EditingState,
   type ModelOption,
   type PromptTabDefinition,
+  syncAssistantMessageState,
   upsertAssistantBranch,
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
@@ -49,6 +50,7 @@ import {
   loadWorkspaceLocaleResources,
   type WorkspaceLocaleCode,
 } from '../workspace/workspace-copy';
+import { normalizeExtractionText } from '../workspace/extraction-text';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 import { downloadTextFile } from '../../shared/download-file';
 import { ChatInput } from './chat-input';
@@ -135,6 +137,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     };
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
+  const normalizedExtractionContent = normalizeExtractionText(content);
 
   useEffect(() => {
     if (!toast) {
@@ -234,13 +237,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 复制当前提取内容。 */
   const handleCopyExtraction = async () => {
-    if (!content.trim()) {
+    if (!normalizedExtractionContent) {
       pushToast('error', t('sidebar.notice.emptyExtraction'));
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(content);
+      await navigator.clipboard.writeText(normalizedExtractionContent);
       pushToast('success', t('sidebar.notice.copySuccess'));
     } catch {
       pushToast('error', t('sidebar.notice.copyFailed'));
@@ -356,7 +359,22 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: message?.content ?? '',
                   status: 'loading',
                   errorMessage: null,
-                  branches: message?.branches ?? [],
+                  branches:
+                    typeof payload.branchId === 'string' && typeof payload.modelId === 'string' && typeof payload.modelLabel === 'string'
+                      ? [
+                          ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
+                          {
+                            id: payload.branchId,
+                            modelId: payload.modelId,
+                            modelLabel: payload.modelLabel,
+                            isPrimary: true,
+                            content: message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? '',
+                            status: 'loading',
+                            errorMessage: null,
+                          },
+                        ]
+                      : message?.branches ?? [],
+                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
                 })),
               );
             }
@@ -377,10 +395,28 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
                   id: payload.messageId as string,
                   role: 'assistant',
-                  content: `${message?.content ?? ''}${payload.chunk as string}`,
+                  content:
+                    typeof payload.branchId === 'string' && (message?.selectedBranchId === payload.branchId || (!message?.selectedBranchId && message?.branches[0]?.id === payload.branchId))
+                      ? `${message?.content ?? ''}${payload.chunk as string}`
+                      : message?.content ?? '',
                   status: 'loading',
                   errorMessage: null,
-                  branches: message?.branches ?? [],
+                  branches:
+                    typeof payload.branchId === 'string'
+                      ? [
+                          ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
+                          {
+                            id: payload.branchId,
+                            modelId: message?.branches.find((branch) => branch.id === payload.branchId)?.modelId ?? '',
+                            modelLabel: message?.branches.find((branch) => branch.id === payload.branchId)?.modelLabel ?? t('workspace.status.primaryBranch'),
+                            isPrimary: message?.branches.find((branch) => branch.id === payload.branchId)?.isPrimary ?? true,
+                            content: `${message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? ''}${payload.chunk as string}`,
+                            status: 'loading',
+                            errorMessage: null,
+                          },
+                        ]
+                      : message?.branches ?? [],
+                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
                 })),
               );
             }
@@ -402,7 +438,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: message?.content ?? '',
                   status: 'done',
                   errorMessage: null,
-                  branches: message?.branches ?? [],
+                  branches:
+                    typeof payload.branchId === 'string'
+                      ? (message?.branches ?? []).map((branch) =>
+                          branch.id === payload.branchId
+                            ? {
+                                ...branch,
+                                status: 'done',
+                                errorMessage: null,
+                              }
+                            : branch,
+                        )
+                      : message?.branches ?? [],
+                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
                 })),
               );
             }
@@ -416,6 +464,17 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               ...current,
               [promptTabId]: null,
             }));
+            if (
+              payload.rollbackOnFailure === true
+              && typeof payload.messageId === 'string'
+              && typeof payload.userMessageId === 'string'
+            ) {
+              setPromptTabMessages(promptTabId, (current) =>
+                current.filter((message) => message.id !== payload.messageId && message.id !== payload.userMessageId),
+              );
+              setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
+              return;
+            }
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -424,7 +483,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: message?.content ?? '',
                   status: 'error',
                   errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
-                  branches: message?.branches ?? [],
+                  branches:
+                    typeof payload.branchId === 'string'
+                      ? (message?.branches ?? []).map((branch) =>
+                          branch.id === payload.branchId
+                            ? {
+                                ...branch,
+                                status: 'error',
+                                errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
+                              }
+                            : branch,
+                        )
+                      : message?.branches ?? [],
+                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
                 })),
               );
             }
@@ -446,7 +517,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: message?.content ?? '',
                   status: 'cancelled',
                   errorMessage: t('workspace.status.cancelled'),
-                  branches: message?.branches ?? [],
+                  branches:
+                    typeof payload.branchId === 'string'
+                      ? (message?.branches ?? []).map((branch) =>
+                          branch.id === payload.branchId
+                            ? {
+                                ...branch,
+                                status: 'cancelled',
+                                errorMessage: t('workspace.status.cancelled'),
+                              }
+                            : branch,
+                        )
+                      : message?.branches ?? [],
+                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
                 })),
               );
             }
@@ -463,6 +546,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   id: payload.branchId as string,
                   modelId: payload.modelId as string,
                   modelLabel: payload.modelLabel as string,
+                  isPrimary: branch?.isPrimary ?? false,
                   content: branch?.content ?? '',
                   status: 'loading',
                   errorMessage: null,
@@ -477,6 +561,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   id: payload.branchId as string,
                   modelId: branch?.modelId ?? '',
                   modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                  isPrimary: branch?.isPrimary ?? false,
                   content: `${branch?.content ?? ''}${payload.chunk as string}`,
                   status: 'loading',
                   errorMessage: null,
@@ -491,6 +576,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   id: payload.branchId as string,
                   modelId: branch?.modelId ?? '',
                   modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                  isPrimary: branch?.isPrimary ?? false,
                   content: branch?.content ?? '',
                   status: 'done',
                   errorMessage: null,
@@ -505,6 +591,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   id: payload.branchId as string,
                   modelId: branch?.modelId ?? '',
                   modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                  isPrimary: branch?.isPrimary ?? false,
                   content: branch?.content ?? '',
                   status: 'error',
                   errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
@@ -519,6 +606,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   id: payload.branchId as string,
                   modelId: branch?.modelId ?? '',
                   modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                  isPrimary: branch?.isPrimary ?? false,
                   content: branch?.content ?? '',
                   status: 'cancelled',
                   errorMessage: t('workspace.status.cancelled'),
@@ -546,6 +634,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   status: 'loading',
                   errorMessage: null,
                   branches: [],
+                  selectedBranchId: null,
                 })),
               );
             }
@@ -717,7 +806,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   /** 发送用户消息，并在本地先补一条乐观消息。 */
   const handleSend = async (
     promptTabId: string,
-    input: { text: string; displayText?: string; images: string[]; modelId: string; includePageContent: boolean },
+    input: {
+      text: string;
+      displayText?: string;
+      images: string[];
+      modelId: string;
+      includePageContent: boolean;
+      rollbackOnFailure?: boolean;
+    },
   ) => {
     setPromptTabNotice(promptTabId, '');
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
@@ -732,6 +828,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         status: 'done',
         errorMessage: null,
         branches: [],
+        selectedBranchId: null,
       },
     ]);
 
@@ -745,6 +842,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         displayText: input.displayText,
         images: input.images,
         includePageContent: input.includePageContent,
+        rollbackOnFailure: input.rollbackOnFailure,
       });
       setActiveSessionIds((current) => ({
         ...current,
@@ -773,7 +871,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           content: message?.content ?? '',
           status: 'loading',
           errorMessage: null,
-          branches: message?.branches ?? [],
+          branches: [
+            ...(message?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
+            {
+              id: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+              isPrimary: true,
+              content: message?.branches.find((branch) => branch.id === response.payload.branchId)?.content ?? '',
+              status: 'loading',
+              errorMessage: null,
+            },
+          ],
+          selectedBranchId: response.payload.branchId,
         }));
       });
     } catch {
@@ -787,17 +897,28 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     promptTab.id !== CHAT_PROMPT_TAB_ID && Boolean(promptTab.triggerPrompt) && messages.length === 0 && !sessionId;
 
   /** 直接发送快捷输入提示词，并把消息展示为快捷输入名称。 */
-  const handleTriggerPromptTab = (promptTab: PromptTabDefinition) => {
+  const handleTriggerPromptTab = async (promptTab: PromptTabDefinition) => {
     if (!promptTab.triggerPrompt) {
-      return Promise.resolve();
+      return;
     }
 
-    return handleSend(promptTab.id, {
+    if (!normalizeExtractionText(content)) {
+      try {
+        await runExtraction(method);
+      } catch {
+        setState('error');
+        setPromptTabNotice(promptTab.id, t('sidebar.notice.reExtractFailed'));
+        return;
+      }
+    }
+
+    await handleSend(promptTab.id, {
       text: promptTab.triggerPrompt,
       displayText: promptTab.name,
       images: [],
       modelId: promptTab.preferredModelId,
       includePageContent: true,
+      rollbackOnFailure: true,
     });
   };
 
@@ -842,7 +963,18 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             content: '',
             status: 'loading',
             errorMessage: null,
-            branches: [],
+            branches: [
+              {
+                id: response.payload.branchId,
+                modelId: response.payload.modelId,
+                modelLabel: response.payload.modelLabel,
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: response.payload.branchId,
           },
         ];
       });
@@ -851,46 +983,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }
   };
 
-  /** 重试用户消息，并把结果追加为原助手消息的新分支。 */
+  /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
   const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
     try {
       setPromptTabNotice(promptTabId, '');
       const response = await api.retryUserMessage({
-        tabId,
-        pageUrl,
-        promptTabId,
-        messageId,
-      });
-      setPromptTabMessages(promptTabId, (current) =>
-        upsertAssistantMessage(current, response.payload.assistantMessageId, (assistantMessage) => ({
-          id: response.payload.assistantMessageId,
-          role: 'assistant',
-          content: assistantMessage?.content ?? '',
-          status: assistantMessage?.status ?? 'done',
-          errorMessage: assistantMessage?.errorMessage ?? null,
-          branches: [
-            ...(assistantMessage?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
-            {
-              id: response.payload.branchId,
-              modelId: response.payload.modelId,
-              modelLabel: response.payload.modelLabel,
-              content: '',
-              status: 'loading',
-              errorMessage: null,
-            },
-          ],
-        })),
-      );
-    } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
-    }
-  };
-
-  /** 重试目标助手消息，并用新的主回答替换旧结果。 */
-  const handleRetryMessage = async (promptTabId: string, messageId: string) => {
-    try {
-      setPromptTabNotice(promptTabId, '');
-      const response = await api.retryMessage({
         tabId,
         pageUrl,
         promptTabId,
@@ -905,24 +1002,110 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         [promptTabId]: response.payload.messageId,
       }));
       setPromptTabMessages(promptTabId, (current) => {
-        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'assistant');
+        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'user');
         if (targetIndex < 0) {
           return current;
         }
         return [
-          ...current.slice(0, targetIndex),
+          ...current.slice(0, targetIndex + 1),
           {
             id: response.payload.messageId,
             role: 'assistant',
             content: '',
             status: 'loading',
             errorMessage: null,
-            branches: [],
+            branches: [
+              {
+                id: response.payload.branchId,
+                modelId: response.payload.modelId,
+                modelLabel: response.payload.modelLabel,
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: response.payload.branchId,
           },
         ];
       });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+    }
+  };
+
+  /** 重试目标助手分支。 */
+  const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
+    try {
+      setPromptTabNotice(promptTabId, '');
+      const response = await api.retryMessage({
+        tabId,
+        pageUrl,
+        promptTabId,
+        messageId,
+        branchId,
+      });
+      setActiveSessionIds((current) => ({
+        ...current,
+        [promptTabId]: response.payload.sessionId,
+      }));
+      setRestoreMessageIds((current) => ({
+        ...current,
+        [promptTabId]: response.payload.messageId,
+      }));
+      setPromptTabMessages(promptTabId, (current) => {
+        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'assistant');
+        if (targetIndex < 0) {
+          return current;
+        }
+        return current
+          .slice(0, targetIndex + 1)
+          .map((message) =>
+            message.id === messageId && message.role === 'assistant'
+              ? syncAssistantMessageState({
+                  ...message,
+                  branches: message.branches.map((branch) =>
+                    branch.id === branchId
+                      ? {
+                          ...branch,
+                          content: '',
+                          status: 'loading',
+                          errorMessage: null,
+                        }
+                      : branch,
+                  ),
+                })
+              : message,
+          );
+      });
+    } catch {
+      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+    }
+  };
+
+  /** 切换当前轮继续对话使用的主分支。 */
+  const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
+    try {
+      setPromptTabNotice(promptTabId, '');
+      await api.selectAssistantBranch({
+        tabId,
+        pageUrl,
+        promptTabId,
+        messageId,
+        branchId,
+      });
+      setPromptTabMessages(promptTabId, (current) =>
+        current.map((message) =>
+          message.id === messageId && message.role === 'assistant'
+            ? syncAssistantMessageState({
+                ...message,
+                selectedBranchId: branchId,
+              })
+            : message,
+        ),
+      );
+    } catch {
+      setPromptTabNotice(promptTabId, t('workspace.notice.selectPrimaryBranchFailed'));
     }
   };
 
@@ -1050,10 +1233,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       setPromptTabMessages(promptTabId, (current) =>
         current.map((message) =>
           message.id === messageId && message.role === 'assistant'
-            ? {
+            ? syncAssistantMessageState({
                 ...message,
                 branches: message.branches.filter((branch) => branch.id !== branchId),
-              }
+              })
             : message,
         ),
       );
@@ -1063,9 +1246,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   return (
-    <main data-testid="sidebar-shell" className="flex min-h-screen flex-col bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground">
+    <main
+      data-testid="sidebar-shell"
+      className="flex h-screen min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
+    >
       <ToastStack toasts={toast ? [toast] : []} />
-      <header className="border-b border-border bg-card/90 px-4 py-3 backdrop-blur-sm">
+      <header className="shrink-0 border-b border-border bg-card/90 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1">
             <Tooltip content={t('sidebar.method.readability')}>
@@ -1076,7 +1262,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 aria-label={t('sidebar.method.readability')}
                 aria-pressed={method === 'readability'}
                 className={cn(
-                  'rounded-md border border-transparent',
+                  'border border-transparent',
                   method === 'readability' && 'border-primary/30 bg-primary/10 text-primary',
                 )}
                 onClick={() => void handleSwitchMethod('readability')}
@@ -1091,7 +1277,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 size="icon-sm"
                 aria-label={t('sidebar.method.jina')}
                 aria-pressed={method === 'jina'}
-                className={cn('rounded-md border border-transparent', method === 'jina' && 'border-primary/30 bg-primary/10 text-primary')}
+                className={cn('border border-transparent', method === 'jina' && 'border-primary/30 bg-primary/10 text-primary')}
                 onClick={() => void handleSwitchMethod('jina')}
               >
                 <span className="text-[11px] font-semibold leading-none">J</span>
@@ -1144,18 +1330,18 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
       <section
         data-testid="sidebar-extraction-panel"
-        className="overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
+        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
         style={{ height: `${extractionPanelHeight}px` }}
       >
-        {content ? (
+        {normalizedExtractionContent ? (
           <pre
             data-testid="sidebar-extraction-content"
             className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground"
           >
-            {content}
+            {normalizedExtractionContent}
           </pre>
         ) : null}
-        {!content && state === 'bootstrapping' ? (
+        {!normalizedExtractionContent && state === 'bootstrapping' ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <WorkspaceStatusGlyph label={t('sidebar.state.bootstrapping')} status="loading" className="size-4" />
@@ -1163,9 +1349,9 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             </div>
           </div>
         ) : null}
-        {!content && state === 'blocked' ? (
+        {!normalizedExtractionContent && state === 'blocked' ? (
           <div className="flex h-full items-center justify-center">
-            <div className="grid max-w-sm gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+            <div className="grid max-w-sm gap-3 border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
               <div className="flex items-center gap-2">
                 <ShieldAlertIcon className="size-4" />
                 <span className="font-medium">{t('sidebar.state.blockedTitle')}</span>
@@ -1180,7 +1366,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             </div>
           </div>
         ) : null}
-        {!content && state === 'extracting' ? (
+        {!normalizedExtractionContent && state === 'extracting' ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-primary">
               <WorkspaceStatusGlyph label={t('sidebar.state.extracting')} status="loading" className="size-4" />
@@ -1188,7 +1374,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             </div>
           </div>
         ) : null}
-        {!content && state === 'error' ? (
+        {!normalizedExtractionContent && state === 'error' ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex items-center gap-2 text-sm text-destructive">
               <WorkspaceStatusGlyph label={t('sidebar.state.error')} status="error" className="size-4" />
@@ -1198,13 +1384,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ) : null}
       </section>
 
-      <div className="border-b border-border px-4 py-0.5">
+      <div className="shrink-0 border-b border-border px-4 py-0.5">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label={t('sidebar.resizeExtraction')}
           data-testid="sidebar-extraction-resize-handle"
-          className="mx-auto h-1.5 w-10 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="mx-auto h-1.5 w-10 cursor-row-resize bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setExtractionResizeState({
               startY: event.clientY,
@@ -1214,7 +1400,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         />
       </div>
 
-      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="border-b border-border bg-muted/20 px-4 py-1.5">
+      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-4 py-1.5">
         <div className="flex flex-wrap gap-1.5">
           {promptTabs.map((promptTab) => {
             const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
@@ -1234,7 +1420,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 type="button"
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
-                  'relative inline-flex items-center gap-2 overflow-hidden rounded-md border px-3 py-2 text-left text-xs shadow-sm transition-colors',
+                  'relative inline-flex items-center gap-2 overflow-hidden border px-3 py-2 text-left text-xs shadow-sm transition-colors',
                   showLoadingRing && 'tab-loading-border border-transparent',
                   isActive
                     ? showLoadingRing
@@ -1246,7 +1432,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 )}
                 onClick={() => {
                   setActivePromptTabId(promptTab.id);
-                  if (state !== 'ready' || !content.trim()) {
+                  if (state === 'bootstrapping' || state === 'extracting' || state === 'blocked') {
                     return;
                   }
                   if (!shouldTriggerPromptTab(promptTab, messageMap[promptTab.id] ?? [], activeSessionIds[promptTab.id] ?? null)) {
@@ -1266,7 +1452,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 {hasPromptTabText && !showLoadingRing ? (
                   <span
                     data-testid={`prompt-tab-line-${promptTab.id}`}
-                    className="pointer-events-none absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
                   />
                 ) : null}
               </button>
@@ -1276,12 +1462,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       </section>
 
       {activeChatNotice ? (
-        <div className="border-b border-border px-4 py-2">
+        <div className="shrink-0 border-b border-border px-4 py-2">
           <Badge variant="outline">{activeChatNotice}</Badge>
         </div>
       ) : null}
 
-      <section className="min-h-0 flex-1">
+      <section className="min-h-0 flex-1 overflow-hidden">
         {promptTabs.map((promptTab) => (
           <div
             key={promptTab.id}
@@ -1311,7 +1497,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               onCancelEdit={() => setPromptTabEditing(promptTab.id, null)}
               onSubmitEdit={(messageId) => handleEditUserMessage(promptTab.id, messageId, editingMap[promptTab.id]?.text ?? '')}
               onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
-              onRetryAssistantMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
+              onRetryAssistantMessage={(messageId, branchId) => handleRetryMessage(promptTab.id, messageId, branchId)}
+              onSelectAssistantBranch={(messageId, branchId) => handleSelectAssistantBranch(promptTab.id, messageId, branchId)}
               onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
               onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}

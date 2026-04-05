@@ -221,10 +221,6 @@ export const BasicSettingsPanel = ({
               />
             </label>
 
-            <label className="grid gap-2">
-              <span className="text-sm font-medium">{t('settings.previewHint')}</span>
-              <Input value={t('settings.previewDescription')} aria-label={t('settings.previewHint')} disabled />
-            </label>
           </div>
 
           <label className="grid gap-2">

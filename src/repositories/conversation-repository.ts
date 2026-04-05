@@ -59,14 +59,20 @@ const createEmptyConversation = (
 /** 创建 loading 中的助手消息占位。 */
 const createLoadingAssistantMessage = ({
   messageId,
+  primaryBranchId,
   modelId,
+  modelLabel,
   retryFromMessageId,
   now,
 }: {
   /** 新助手消息 id。 */
   messageId: string;
+  /** 首个主分支 id。 */
+  primaryBranchId: string;
   /** 使用的模型 id。 */
   modelId: string;
+  /** 使用的模型展示名。 */
+  modelLabel: string;
   /** 被替换的旧助手消息 id。 */
   retryFromMessageId: string | null;
   /** 当前时间。 */
@@ -78,13 +84,65 @@ const createLoadingAssistantMessage = ({
   images: [],
   status: 'loading',
   modelId,
-  branches: [],
+  branches: [
+    {
+      id: primaryBranchId,
+      modelId,
+      modelLabel,
+      isPrimary: true,
+      content: '',
+      status: 'loading',
+      errorMessage: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ],
+  selectedBranchId: primaryBranchId,
   retryFromMessageId,
   editedAt: null,
   errorMessage: null,
   createdAt: now,
   updatedAt: now,
 });
+
+/** 解析 assistant 当前选中的主分支。 */
+const getSelectedBranch = (assistantMessage: AssistantMessageRecord): BranchRecord | null => {
+  const selectedBranchId = assistantMessage.selectedBranchId ?? assistantMessage.branches[0]?.id ?? null;
+  if (!selectedBranchId) {
+    return null;
+  }
+
+  return assistantMessage.branches.find((branch) => branch.id === selectedBranchId) ?? assistantMessage.branches[0] ?? null;
+};
+
+/** 用选中的主分支镜像 assistant 容器，统一后续会话与导出语义。 */
+const syncAssistantMessageFromSelectedBranch = (
+  assistantMessage: AssistantMessageRecord,
+  now: number,
+): AssistantMessageRecord => {
+  const selectedBranch = getSelectedBranch(assistantMessage);
+  if (!selectedBranch) {
+    return {
+      ...assistantMessage,
+      content: '',
+      status: 'done',
+      errorMessage: null,
+      modelId: null,
+      selectedBranchId: null,
+      updatedAt: now,
+    };
+  }
+
+  return {
+    ...assistantMessage,
+    content: selectedBranch.content,
+    status: selectedBranch.status,
+    errorMessage: selectedBranch.errorMessage,
+    modelId: selectedBranch.modelId,
+    selectedBranchId: selectedBranch.id,
+    updatedAt: now,
+  };
+};
 
 /** 从消息列表推导最新助手摘要。 */
 const buildLastAssistantState = (messages: ConversationRecord['messages']): ConversationRecord['lastAssistantState'] => {
@@ -122,6 +180,14 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
   const persistConversation = async (conversation: ConversationRecord) => {
     await storage.set({ [getConversationKey(conversation.normalizedUrl, conversation.promptTabId)]: conversation });
     return conversation;
+  };
+  /** 空会话不保留占位记录，避免把“未持久化轮次”误判为已有历史。 */
+  const persistConversationOrRemove = async (conversation: ConversationRecord) => {
+    if (conversation.messages.length === 0) {
+      await storage.remove(getConversationKey(conversation.normalizedUrl, conversation.promptTabId));
+      return null;
+    }
+    return persistConversation(conversation);
   };
   /** 同一 promptTab 的写操作必须串行，避免并发分支互相覆盖。 */
   const withPromptTabMutation = async <T>(normalizedUrl: string, promptTabId: string, task: () => Promise<T>) => {
@@ -225,7 +291,9 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId,
       content,
       newAssistantMessageId,
+      newPrimaryBranchId,
       modelId,
+      modelLabel,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -238,8 +306,12 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       content: string;
       /** 新助手消息 id。 */
       newAssistantMessageId: string;
+      /** 新主分支 id。 */
+      newPrimaryBranchId: string;
       /** 重新生成时使用的模型 id。 */
       modelId: string;
+      /** 重新生成时使用的模型展示名。 */
+      modelLabel: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -264,11 +336,46 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...preservedMessages,
           createLoadingAssistantMessage({
             messageId: newAssistantMessageId,
+            primaryBranchId: newPrimaryBranchId,
             modelId,
+            modelLabel,
             retryFromMessageId: null,
             now,
           }),
         ];
+        const next = conversationRecordSchema.parse({
+          ...conversation,
+          messages: nextMessages,
+          lastAssistantState: buildLastAssistantState(nextMessages),
+          updatedAt: now,
+        });
+        return persistConversation(next);
+      });
+    },
+
+    /** 按目标消息裁剪其后的全部结果。 */
+    async truncateMessagesAfter({
+      normalizedUrl,
+      promptTabId,
+      messageId,
+      now,
+    }: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 保留到该消息。 */
+      messageId: string;
+      /** 当前时间。 */
+      now: number;
+    }) {
+      return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
+        const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
+        const targetIndex = conversation.messages.findIndex((message) => message.id === messageId);
+        if (targetIndex < 0) {
+          throw new Error(`message not found: ${messageId}`);
+        }
+        const nextMessages = conversation.messages.slice(0, targetIndex + 1);
         const next = conversationRecordSchema.parse({
           ...conversation,
           messages: nextMessages,
@@ -285,7 +392,9 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId,
       messageId,
       newAssistantMessageId,
+      newPrimaryBranchId,
       modelId,
+      modelLabel,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -296,8 +405,12 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId: string;
       /** 新助手消息 id。 */
       newAssistantMessageId: string;
+      /** 新主分支 id。 */
+      newPrimaryBranchId: string;
       /** 重试时使用的模型 id。 */
       modelId: string;
+      /** 重试时使用的模型展示名。 */
+      modelLabel: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -310,7 +423,9 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...preservedMessages,
           createLoadingAssistantMessage({
             messageId: newAssistantMessageId,
+            primaryBranchId: newPrimaryBranchId,
             modelId,
+            modelLabel,
             retryFromMessageId: messageId,
             now,
           }),
@@ -343,6 +458,41 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
     async removeLoadingState(normalizedUrl: string, promptTabId: string) {
       await withPromptTabMutation(normalizedUrl, promptTabId, async () => {
         await storage.remove(getLoadingKey(normalizedUrl, promptTabId));
+      });
+    },
+
+    /** 按消息 id 回滚刚创建的一轮消息。 */
+    async rollbackTurnMessages({
+      normalizedUrl,
+      promptTabId,
+      userMessageId,
+      assistantMessageId,
+      now,
+    }: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 目标用户消息 id。 */
+      userMessageId: string;
+      /** 目标助手消息 id。 */
+      assistantMessageId: string;
+      /** 当前时间。 */
+      now: number;
+    }) {
+      return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
+        const conversation = await readConversation(normalizedUrl, promptTabId);
+        if (!conversation) {
+          return null;
+        }
+        const nextMessages = conversation.messages.filter((message) => message.id !== userMessageId && message.id !== assistantMessageId);
+        const nextConversation = conversationRecordSchema.parse({
+          ...conversation,
+          messages: nextMessages,
+          lastAssistantState: buildLastAssistantState(nextMessages),
+          updatedAt: now,
+        });
+        return persistConversationOrRemove(nextConversation);
       });
     },
 
@@ -404,7 +554,9 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       normalizedUrl,
       promptTabId,
       messageId,
+      primaryBranchId,
       modelId,
+      modelLabel,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -413,8 +565,12 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId: string;
       /** 新消息 id。 */
       messageId: string;
+      /** 当前主分支 id。 */
+      primaryBranchId: string;
       /** 使用的模型 id。 */
       modelId: string;
+      /** 使用的模型展示名。 */
+      modelLabel: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -425,18 +581,14 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           messages: [
             ...conversation.messages,
             {
-              id: messageId,
-              role: 'assistant',
-              content: '',
-              images: [],
-              status: 'loading',
-              modelId,
-              branches: [],
-              retryFromMessageId: null,
-              editedAt: null,
-              errorMessage: null,
-              createdAt: now,
-              updatedAt: now,
+              ...createLoadingAssistantMessage({
+                messageId,
+                primaryBranchId,
+                modelId,
+                modelLabel,
+                retryFromMessageId: null,
+                now,
+              }),
             },
           ],
           lastAssistantState: {
@@ -472,22 +624,35 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
         const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
         const target = requireLoadingAssistantMessage(conversation, messageId);
-        const nextContent = target.content + chunk;
+        const selectedBranch = getSelectedBranch(target);
+        if (!selectedBranch || selectedBranch.status !== 'loading') {
+          throw new Error(`assistant selected branch is already terminal: ${messageId}`);
+        }
         const next = conversationRecordSchema.parse({
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...message,
-                  content: nextContent,
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...target,
+                    branches: target.branches.map((branch) =>
+                      branch.id === selectedBranch.id
+                        ? {
+                            ...branch,
+                            content: branch.content + chunk,
+                            updatedAt: now,
+                          }
+                        : branch,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           lastAssistantState: {
             messageId,
-            status: target.status,
-            summary: nextContent,
+            status: selectedBranch.status,
+            summary: selectedBranch.content + chunk,
           },
           updatedAt: now,
         });
@@ -514,22 +679,36 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
         const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
         const target = requireLoadingAssistantMessage(conversation, messageId);
+        const selectedBranch = getSelectedBranch(target);
+        if (!selectedBranch || selectedBranch.status !== 'loading') {
+          throw new Error(`assistant selected branch is already terminal: ${messageId}`);
+        }
         const next = conversationRecordSchema.parse({
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...message,
-                  status: 'done',
-                  errorMessage: null,
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...target,
+                    branches: target.branches.map((branch) =>
+                      branch.id === selectedBranch.id
+                        ? {
+                            ...branch,
+                            status: 'done',
+                            errorMessage: null,
+                            updatedAt: now,
+                          }
+                        : branch,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           lastAssistantState: {
             messageId,
             status: 'done',
-            summary: target.content,
+            summary: selectedBranch.content,
           },
           updatedAt: now,
         });
@@ -562,22 +741,36 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
         const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
         const target = requireLoadingAssistantMessage(conversation, messageId);
+        const selectedBranch = getSelectedBranch(target);
+        if (!selectedBranch || selectedBranch.status !== 'loading') {
+          throw new Error(`assistant selected branch is already terminal: ${messageId}`);
+        }
         const next = conversationRecordSchema.parse({
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...message,
-                  status,
-                  errorMessage,
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...target,
+                    branches: target.branches.map((branch) =>
+                      branch.id === selectedBranch.id
+                        ? {
+                            ...branch,
+                            status,
+                            errorMessage,
+                            updatedAt: now,
+                          }
+                        : branch,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           lastAssistantState: {
             messageId,
             status,
-            summary: target.content,
+            summary: selectedBranch.content,
           },
           updatedAt: now,
         });
@@ -617,23 +810,26 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...assistantMessage,
-                  branches: [
-                    ...assistantMessage.branches,
-                    {
-                      id: branchId,
-                      modelId,
-                      modelLabel,
-                      content: '',
-                      status: 'loading',
-                      errorMessage: null,
-                      createdAt: now,
-                      updatedAt: now,
-                    },
-                  ],
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    branches: [
+                      ...assistantMessage.branches,
+                      {
+                        id: branchId,
+                        modelId,
+                        modelLabel,
+                        isPrimary: false,
+                        content: '',
+                        status: 'loading',
+                        errorMessage: null,
+                        createdAt: now,
+                        updatedAt: now,
+                      },
+                    ],
+                  },
+                  now,
+                )
               : message,
           ),
           updatedAt: now,
@@ -676,19 +872,21 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          content: item.content + chunk,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    branches: assistantMessage.branches.map((item) =>
+                      item.id === branchId
+                        ? {
+                            ...item,
+                            content: item.content + chunk,
+                            updatedAt: now,
+                          }
+                        : item,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           updatedAt: now,
@@ -728,20 +926,22 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          status: 'done',
-                          errorMessage: null,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    branches: assistantMessage.branches.map((item) =>
+                      item.id === branchId
+                        ? {
+                            ...item,
+                            status: 'done',
+                            errorMessage: null,
+                            updatedAt: now,
+                          }
+                        : item,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           updatedAt: now,
@@ -787,20 +987,22 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          status,
-                          errorMessage,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    branches: assistantMessage.branches.map((item) =>
+                      item.id === branchId
+                        ? {
+                            ...item,
+                            status,
+                            errorMessage,
+                            updatedAt: now,
+                          }
+                        : item,
+                    ),
+                  },
+                  now,
+                )
               : message,
           ),
           updatedAt: now,
@@ -837,12 +1039,124 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...conversation,
           messages: conversation.messages.map((message) =>
             message.id === messageId
-              ? {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.filter((item) => item.id !== branchId),
-                  updatedAt: now,
-                }
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    branches: assistantMessage.branches.filter((item) => item.id !== branchId),
+                    selectedBranchId:
+                      assistantMessage.selectedBranchId === branchId
+                        ? assistantMessage.branches.find((item) => item.id !== branchId)?.id ?? null
+                        : assistantMessage.selectedBranchId,
+                  },
+                  now,
+                )
               : message,
+          ),
+          updatedAt: now,
+        });
+        return persistConversation(next);
+      });
+    },
+
+    /** 重置单个助手分支为 loading。 */
+    async restartAssistantBranch({
+      normalizedUrl,
+      promptTabId,
+      messageId,
+      branchId,
+      now,
+    }: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 助手消息 id。 */
+      messageId: string;
+      /** 分支 id。 */
+      branchId: string;
+      /** 当前时间。 */
+      now: number;
+    }) {
+      return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
+        const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
+        const assistantMessage = requireAssistantMessage(conversation, messageId);
+        requireAssistantBranch(assistantMessage, branchId);
+        const nextAssistantMessage = syncAssistantMessageFromSelectedBranch(
+          {
+            ...assistantMessage,
+            branches: assistantMessage.branches.map((branch) =>
+              branch.id === branchId
+                ? {
+                    ...branch,
+                    content: '',
+                    status: 'loading',
+                    errorMessage: null,
+                    updatedAt: now,
+                  }
+                : branch,
+            ),
+          },
+          now,
+        );
+        const nextMessages = conversation.messages.map((message) => (message.id === messageId ? nextAssistantMessage : message));
+        const next = conversationRecordSchema.parse({
+          ...conversation,
+          messages: nextMessages,
+          lastAssistantState: buildLastAssistantState(nextMessages),
+          updatedAt: now,
+        });
+        return persistConversation(next);
+      });
+    },
+
+    /** 更新当前轮的主分支选择。 */
+    async selectAssistantBranch({
+      normalizedUrl,
+      promptTabId,
+      messageId,
+      branchId,
+      now,
+    }: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 助手消息 id。 */
+      messageId: string;
+      /** 新主分支 id。 */
+      branchId: string;
+      /** 当前时间。 */
+      now: number;
+    }) {
+      return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
+        const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
+        const assistantMessage = requireAssistantMessage(conversation, messageId);
+        requireAssistantBranch(assistantMessage, branchId);
+        const next = conversationRecordSchema.parse({
+          ...conversation,
+          messages: conversation.messages.map((message) =>
+            message.id === messageId
+              ? syncAssistantMessageFromSelectedBranch(
+                  {
+                    ...assistantMessage,
+                    selectedBranchId: branchId,
+                  },
+                  now,
+                )
+              : message,
+          ),
+          lastAssistantState: buildLastAssistantState(
+            conversation.messages.map((message) =>
+              message.id === messageId
+                ? syncAssistantMessageFromSelectedBranch(
+                    {
+                      ...assistantMessage,
+                      selectedBranchId: branchId,
+                    },
+                    now,
+                  )
+                : message,
+            ),
           ),
           updatedAt: now,
         });

@@ -85,7 +85,7 @@ test('settings models panel can add copy delete and persist through save', async
   await page.getByLabel('API Key').fill('new-secret');
 
   await page.getByTestId('language-model-summary-model-1').click();
-  await page.getByRole('button', { name: '复制模型' }).click();
+  await page.getByTestId('language-model-item-model-1').getByRole('button', { name: '复制模型' }).click();
   await expect(page.getByTestId(/language-model-summary-model-/).filter({ hasText: '主模型 副本' }).first()).toBeVisible();
 
   await page.getByTestId('language-model-summary-model-1').click();

@@ -11,6 +11,7 @@ import {
   sidebarExportConversationCommandSchema,
   sidebarRetryMessageCommandSchema,
   sidebarRetryUserMessageCommandSchema,
+  sidebarSelectAssistantBranchCommandSchema,
   sidebarSendChatCommandSchema,
   sidebarStopBranchCommandSchema,
   sidebarStopSessionCommandSchema,
@@ -100,6 +101,16 @@ type ConversationRepository = {
   }) => Promise<void>;
   /** 删除单个分支 loading。 */
   removeBranchLoadingState?: (normalizedUrl: string, promptTabId: string, branchId: string) => Promise<void>;
+  /** 切换当前轮主分支。 */
+  selectAssistantBranch?: (input: {
+    normalizedUrl: string;
+    promptTabId: string;
+    messageId: string;
+    branchId: string;
+    now: number;
+  }) => Promise<void>;
+  /** 读取单个会话。 */
+  getConversation?: (normalizedUrl: string, promptTabId: string) => Promise<SidebarConversationRecord | null>;
 };
 
 type BlacklistRepository = {
@@ -126,6 +137,8 @@ type ChatDispatchService = {
     images: string[];
     /** 当前请求要带给模型的页面正文。 */
     pageContent: string;
+    /** 失败时是否回滚本轮新增消息。 */
+    rollbackOnFailure?: boolean;
   }) => Promise<ChatSession>;
   /** 编辑目标用户消息并重发。 */
   editUserMessage: (input: {
@@ -138,7 +151,7 @@ type ChatDispatchService = {
     /** 编辑后的用户文本。 */
     content: string;
   }) => Promise<ChatSession>;
-  /** 重试目标用户消息，追加为既有助手消息的新分支。 */
+  /** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
   retryUserMessage: (input: {
     /** 归一化页面 URL。 */
     normalizedUrl: string;
@@ -146,25 +159,18 @@ type ChatDispatchService = {
     promptTabId: string;
     /** 目标用户消息 id。 */
     messageId: string;
-  }) => Promise<
-    ChatSession & {
-      /** 新建分支 id。 */
-      branchId: string;
-      /** 分支模型 id。 */
-      modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }
-  >;
-  /** 重试目标助手消息，并替换旧结果。 */
+  }) => Promise<ChatSession>;
+  /** 重试目标助手分支。 */
   retryMessage: (input: {
     /** 归一化页面 URL。 */
     normalizedUrl: string;
     /** promptTab 稳定 id。 */
     promptTabId: string;
-    /** 被替换的旧助手消息 id。 */
+    /** 助手消息 id。 */
     messageId: string;
-  }) => Promise<ChatSession>;
+    /** 目标分支 id。 */
+    branchId: string;
+  }) => Promise<ChatSession & { branchId: string }>;
   /** 为既有助手消息继续新增分支。 */
   expandBranches: (input: {
     /** 归一化页面 URL。 */
@@ -340,6 +346,7 @@ export const createSidebarCommandHandler = ({
           displayText: command.displayText,
           images: command.images,
           pageContent: command.includePageContent ? page?.content ?? '' : '',
+          rollbackOnFailure: command.rollbackOnFailure,
         });
         sessionRegistry.register(session, {
           normalizedUrl,
@@ -359,6 +366,9 @@ export const createSidebarCommandHandler = ({
             sessionId: session.sessionId,
             userMessageId: session.userMessageId ?? null,
             messageId: session.messageId,
+            branchId: session.branchId ?? '',
+            modelId: session.modelId ?? command.modelId,
+            modelLabel: session.modelLabel ?? '',
           },
         };
       }
@@ -397,6 +407,9 @@ export const createSidebarCommandHandler = ({
           payload: {
             editedMessageId: command.messageId,
             messageId: session.messageId,
+            branchId: session.branchId ?? '',
+            modelId: session.modelId ?? '',
+            modelLabel: session.modelLabel ?? '',
             sessionId: session.sessionId,
           },
         };
@@ -417,7 +430,6 @@ export const createSidebarCommandHandler = ({
         sessionRegistry.register(session, {
           normalizedUrl,
           promptTabId: command.promptTabId,
-          branchId: session.branchId,
         });
         commandLogger.info('chat.user_retry.accepted', {
           browserTabId: command.tabId,
@@ -432,10 +444,10 @@ export const createSidebarCommandHandler = ({
           type: 'RETRY_USER_MESSAGE_SUCCESS' as const,
           payload: {
             retriedMessageId: command.messageId,
-            assistantMessageId: session.messageId,
-            branchId: session.branchId,
-            modelId: session.modelId,
-            modelLabel: session.modelLabel,
+            messageId: session.messageId,
+            branchId: session.branchId ?? '',
+            modelId: session.modelId ?? '',
+            modelLabel: session.modelLabel ?? '',
             sessionId: session.sessionId,
           },
         };
@@ -456,10 +468,12 @@ export const createSidebarCommandHandler = ({
           normalizedUrl,
           promptTabId: command.promptTabId,
           messageId: command.messageId,
+          branchId: command.branchId,
         });
         sessionRegistry.register(session, {
           normalizedUrl,
           promptTabId: command.promptTabId,
+          branchId: session.branchId,
         });
         commandLogger.info('chat.retry.accepted', {
           browserTabId: command.tabId,
@@ -468,13 +482,56 @@ export const createSidebarCommandHandler = ({
           targetMessageId: command.messageId,
           sessionId: session.sessionId,
           messageId: session.messageId,
+          branchId: session.branchId,
         });
         return {
           type: 'RETRY_MESSAGE_SUCCESS' as const,
           payload: {
-            replacedMessageId: command.messageId,
             messageId: session.messageId,
+            branchId: session.branchId,
             sessionId: session.sessionId,
+          },
+        };
+      }
+      case 'SELECT_ASSISTANT_BRANCH': {
+        const command = sidebarSelectAssistantBranchCommandSchema.parse(input);
+        assertPageSender(context.sender, runtime.id);
+        if (!conversationRepository.selectAssistantBranch || !conversationRepository.getConversation) {
+          throw new Error('unsupported command: SELECT_ASSISTANT_BRANCH');
+        }
+
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const conversation = await conversationRepository.getConversation(normalizedUrl, command.promptTabId);
+        if (!conversation) {
+          throw new Error('conversation not found');
+        }
+        const targetIndex = conversation.messages.findIndex((message) => message.id === command.messageId && message.role === 'assistant');
+        if (targetIndex < 0) {
+          throw new Error(`assistant message not found: ${command.messageId}`);
+        }
+        if (conversation.messages.slice(targetIndex + 1).length > 0) {
+          throw new Error('assistant branch can only be selected on the latest round');
+        }
+
+        await conversationRepository.selectAssistantBranch({
+          normalizedUrl,
+          promptTabId: command.promptTabId,
+          messageId: command.messageId,
+          branchId: command.branchId,
+          now: Date.now(),
+        });
+        commandLogger.info('branch.primary.selected', {
+          browserTabId: command.tabId,
+          normalizedUrl,
+          promptTab: command.promptTabId,
+          messageId: command.messageId,
+          branchId: command.branchId,
+        });
+        return {
+          type: 'SELECT_ASSISTANT_BRANCH_SUCCESS' as const,
+          payload: {
+            messageId: command.messageId,
+            branchId: command.branchId,
           },
         };
       }

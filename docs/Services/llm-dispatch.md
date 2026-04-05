@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-模型调度服务负责统一封装 Vercel AI SDK 调用、主回答与分支回答并发、图片能力校验、流式事件分发和取消。当前已落地主回答流式闭环、自动触发复用 `dispatchChat`、主回答后的分支并发扩展，以及消息编辑与重试的重放链路。
+模型调度服务负责统一封装 Vercel AI SDK 调用、助手分支并发、图片能力校验、流式事件分发和取消。当前已落地“所有助手消息统一建模为分支结果集合”的流式闭环、自动触发复用 `dispatchChat`、分支并发扩展，以及消息编辑与重试的重放链路。
 
 ## 2. 核心抽象
 
@@ -18,7 +18,7 @@
 负责：
 
 - 把配置模型解析成可调用 provider。
-- 组装主回答和分支回答上下文。
+- 组装“当前选中主分支 + 其他分支”的上下文。
 - 调用 `streamText` 与 `generateText`。
 - 发送 chunk、done、error、cancel 事件。
 - 维护 loading state 生命周期。
@@ -50,22 +50,34 @@
 - Azure OpenAI
 - Google Gemini
 - Anthropic
+- Amazon Bedrock
+- Google Vertex
 
 Provider 适配规则：
 
 - OpenAI Compatible、Azure OpenAI -> `@ai-sdk/openai-compatible`
 - Google Gemini -> `@ai-sdk/google`
 - Anthropic -> `@ai-sdk/anthropic`
+- Amazon Bedrock -> `@ai-sdk/amazon-bedrock`
+- Google Vertex -> `@ai-sdk/google-vertex`
+
+请求参数透传规则：
+
+- `temperature`、`maxOutputTokens` 会进入所有真实 `streamText / generateText` 调用。
+- `gemini / google-vertex` 的 `url_context / google_search` 通过 provider tools 透传。
+- `anthropic / gemini / google-vertex / amazon-bedrock` 的 `reasoningEffort` 会映射到各自 SDK 的 providerOptions。
+- 设置页“测试模型”走 background 命令链路，并统一发送 `hi` 做最小连通性校验。
 
 ## 5. 关键流程
 
 1. 读取模型配置和页面上下文。
 2. 校验模型可用性与图片能力；如果图片能力不匹配，则在任何持久化和网络请求之前直接失败。
 3. 若本次请求附带页面正文，则把 `PageRecord.content` 与用户消息拼成同一次用户输入；若缓存缺失或开关关闭，则退化为仅发送用户消息。
-4. 先写用户消息、助手占位消息和 loading state。
-5. 调用 AI SDK `streamText` 输出主回答。
+4. 先写用户消息、带首个主分支的助手占位消息和 loading state。
+5. 调用 AI SDK `streamText` 输出当前轮首个主分支。
 6. 每个 chunk 先写会话，再推送 `CHAT_STREAM_CHUNK` 事件。
-7. 流结束后把助手消息收敛到 `done`、`error` 或 `cancelled`。
+7. 流结束后把目标分支收敛到 `done`、`error` 或 `cancelled`，并同步助手消息镜像。
+7.1. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
 8. 最后清理 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
 9. 继续新增分支时，先解析“全局分支模型 + 当前 `promptTab` 分支模型”的合并结果，再过滤掉主回答已使用的模型。
 10. 每个分支独立写入分支占位、分支 chunk 和分支终态；单分支失败不会影响其他分支和主回答。
@@ -75,6 +87,7 @@ Provider 适配规则：
 - 自动触发不走独立调度器，直接复用 `dispatchChat`。
 - 自动触发当前统一以请求级 `pageContent` 注入页面正文，不改写页面级 `includePageContent`。
 - 自动触发会话必须进入与手动发送同一套活跃会话注册表，保证 `STOP_SESSION`、页面级清空与恢复行为一致。
+- 自动触发首轮失败时启用 `rollbackOnFailure`，不持久化用户消息、助手错误态和 `auto-error` 标签状态。
 
 编辑与分支操作规则：
 
@@ -83,13 +96,16 @@ Provider 适配规则：
   - 更新消息内容后，裁剪该消息之后的助手结果与分支结果。
   - 基于编辑后的消息重新发起一次新的主请求。
 - `retryMessage`：
-  - 保留原用户消息。
-  - 用新的助手消息替换旧助手消息及其后续结果。
-  - 新助手消息写入 `retryFromMessageId`，用于标记替换来源。
+  - 仅接受助手消息内的某个目标分支。
+  - 先裁剪该轮之后的全部消息。
+  - 只重跑目标分支，不替换整条助手消息。
 - `retryUserMessage`：
   - 仅接受用户消息作为目标。
-  - 查找该用户消息后的第一条助手消息。
-  - 保留原助手主回答，把新结果追加为该助手消息的新分支。
+  - 裁剪该用户消息之后的全部消息。
+  - 基于“到该用户消息为止”的历史重新生成一条新的助手消息。
+- `selectAssistantBranch`：
+  - 仅允许切换当前轮最后一条助手消息。
+  - 后续继续对话时，历史上下文统一取 `selectedBranchId` 对应分支内容。
 - `expandBranches`：
   - 只对目标助手消息追加新的分支请求。
   - 不覆盖现有分支。
@@ -108,12 +124,17 @@ Provider 适配规则：
 - 图片输入模型不支持：
   - 返回能力错误，不进入持久化和网络请求。
 - 流式中断：
-  - 当前目标置为错误态并回收 loading。
+  - 当前目标分支置为错误态并回收 loading。
 - 用户取消：
   - 正常结束，不标记系统错误。
+- Provider 明确返回错误文本：
+  - 直接透传到目标助手分支的 `errorMessage`，UI 不再改写成统一文案。
 - setup 在助手占位消息创建后失败：
   - 助手消息补偿收敛到 `error`。
   - `session.done` 不会启动。
+- 首轮快捷输入开启 `rollbackOnFailure` 后流式失败：
+  - 先把助手消息收敛到 `error`，随后立即回滚本轮新增的用户消息和助手消息。
+  - 返回给 UI 的失败事件只用于当前会话展示，不再作为可恢复历史落库。
 - loading 清理失败：
   - 不改变已经收敛的 `done`、`error`、`cancelled` 结果。
 - port 推送失败：
@@ -153,7 +174,7 @@ Provider 适配规则：
 - 异常流测试：取消、side panel 关闭重开恢复、loading 清理失败不覆盖主结果。
 - 不变量测试：终态消息不可继续追加 chunk 或覆盖终态结果。
 - 不变量测试：`includePageContent=true/false`、页面正文缓存缺失时，实际发给模型的上下文与请求级开关一致。
-- 可观测性测试：事件顺序固定为 `STARTED -> CHUNK* -> FINISHED | FAILED | CANCELLED`。
+- 可观测性测试：主流事件顺序固定为 `STARTED -> CHUNK* -> FINISHED | FAILED | CANCELLED`，且主流事件必须携带 `branchId`，`STARTED` 还必须携带 `modelId/modelLabel`。
 - E2E 允许通过 `globalThis.__THINK_BOT_TEST_STREAM__` 注入测试流桩，并通过 `globalThis.__THINK_BOT_TEST_LAST_STREAM_MESSAGES__` 观察最终送入模型的消息体；两者都仅限自动化环境，不得影响正式 provider 调用。
 
 ## 11. 相关文档

@@ -13,7 +13,12 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Tooltip } from '../../components/ui/tooltip';
-import { getEnabledCompleteModels } from '../../domain/config/config-schema';
+import {
+  DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  MAX_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_PANEL_HEIGHT,
+  getEnabledCompleteModels,
+} from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import { downloadTextFile } from '../../shared/download-file';
 import {
@@ -32,6 +37,7 @@ import {
   type ModelOption,
   type PromptTabStatusKind,
   type PromptTabDefinition,
+  syncAssistantMessageState,
   upsertAssistantBranch,
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
@@ -44,6 +50,7 @@ import {
   loadWorkspaceLocaleResources,
   type WorkspaceLocaleCode,
 } from '../workspace/workspace-copy';
+import { normalizeExtractionText } from '../workspace/extraction-text';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 import type { ConversationsApi } from './conversations-api';
 
@@ -79,6 +86,9 @@ const MAX_SIDEBAR_WIDTH = 520;
 
 /** 限制左侧栏宽度。 */
 const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width));
+/** 限制提取区高度范围。 */
+const clampExtractionPanelHeight = (height: number) =>
+  Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
 
 /** conversations 历史工作台。 */
 export const ConversationsShell = ({ api }: ConversationsShellProps) => {
@@ -105,6 +115,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [pageNotice, setPageNotice] = useState('');
   const [chatNotices, setChatNotices] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [isTitleEditing, setIsTitleEditing] = useState(false);
@@ -116,6 +127,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const activeComposer = activePromptTab ? composerMap[activePromptTab.id] ?? null : null;
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
+  const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
 
   /** 更新单个标签的消息列表。 */
   const setPromptTabMessages = (promptTabId: string, update: (_current: ChatMessageState[]) => ChatMessageState[]) => {
@@ -246,6 +258,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setLocaleCode(nextLocaleCode);
       setPages(pagesResponse.pages);
       setModels(nextModels);
+      setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
       setConfigLoaded(true);
 
       const initialPage = pagesResponse.pages[0] ?? null;
@@ -318,6 +331,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           nextModels.find((model) => model.id === configResponse.config.basic.defaultModelId)?.id ?? nextModels[0]?.id ?? '';
         setLocaleCode(nextLocaleCode);
         setModels(nextModels);
+        setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
         applyDetailState({
           detail: {
             page: detailResponse.page,
@@ -385,7 +399,22 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 content: message?.content ?? '',
                 status: 'loading',
                 errorMessage: null,
-                branches: message?.branches ?? [],
+                branches:
+                  typeof payload.branchId === 'string' && typeof payload.modelId === 'string' && typeof payload.modelLabel === 'string'
+                    ? [
+                        ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
+                        {
+                          id: payload.branchId,
+                          modelId: payload.modelId,
+                          modelLabel: payload.modelLabel,
+                          isPrimary: true,
+                          content: message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? '',
+                          status: 'loading',
+                          errorMessage: null,
+                        },
+                      ]
+                    : message?.branches ?? [],
+                selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
               })),
             );
           }
@@ -406,10 +435,29 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               upsertAssistantMessage(current, payload.messageId as string, (message) => ({
                 id: payload.messageId as string,
                 role: 'assistant',
-                content: `${message?.content ?? ''}${payload.chunk}`,
+                content:
+                  typeof payload.branchId === 'string' &&
+                  (message?.selectedBranchId === payload.branchId || (!message?.selectedBranchId && message?.branches[0]?.id === payload.branchId))
+                    ? `${message?.content ?? ''}${payload.chunk}`
+                    : message?.content ?? '',
                 status: 'loading',
                 errorMessage: null,
-                branches: message?.branches ?? [],
+                branches:
+                  typeof payload.branchId === 'string'
+                    ? [
+                        ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
+                        {
+                          id: payload.branchId,
+                          modelId: message?.branches.find((branch) => branch.id === payload.branchId)?.modelId ?? '',
+                          modelLabel: message?.branches.find((branch) => branch.id === payload.branchId)?.modelLabel ?? t('workspace.status.primaryBranch'),
+                          isPrimary: message?.branches.find((branch) => branch.id === payload.branchId)?.isPrimary ?? true,
+                          content: `${message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? ''}${payload.chunk}`,
+                          status: 'loading',
+                          errorMessage: null,
+                        },
+                      ]
+                    : message?.branches ?? [],
+                selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
               })),
             );
           }
@@ -431,7 +479,19 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 content: message?.content ?? '',
                 status: 'done',
                 errorMessage: null,
-                branches: message?.branches ?? [],
+                branches:
+                  typeof payload.branchId === 'string'
+                    ? (message?.branches ?? []).map((branch) =>
+                        branch.id === payload.branchId
+                          ? {
+                              ...branch,
+                              status: 'done',
+                              errorMessage: null,
+                            }
+                          : branch,
+                      )
+                    : message?.branches ?? [],
+                selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
               })),
             );
           }
@@ -459,7 +519,24 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     : payload.type === 'CHAT_STREAM_FAILED'
                       ? t('workspace.status.error')
                       : t('workspace.status.cancelled'),
-                branches: message?.branches ?? [],
+                branches:
+                  typeof payload.branchId === 'string'
+                    ? (message?.branches ?? []).map((branch) =>
+                        branch.id === payload.branchId
+                          ? {
+                              ...branch,
+                              status: payload.type === 'CHAT_STREAM_FAILED' ? 'error' : 'cancelled',
+                              errorMessage:
+                                typeof payload.errorMessage === 'string'
+                                  ? payload.errorMessage
+                                  : payload.type === 'CHAT_STREAM_FAILED'
+                                    ? t('workspace.status.error')
+                                    : t('workspace.status.cancelled'),
+                            }
+                          : branch,
+                      )
+                    : message?.branches ?? [],
+                selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
               })),
             );
           }
@@ -476,6 +553,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 id: payload.branchId,
                 modelId: payload.modelId,
                 modelLabel: payload.modelLabel,
+                isPrimary: branch?.isPrimary ?? false,
                 content: branch?.content ?? '',
                 status: 'loading',
                 errorMessage: null,
@@ -490,6 +568,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 id: payload.branchId,
                 modelId: branch?.modelId ?? '',
                 modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                isPrimary: branch?.isPrimary ?? false,
                 content: `${branch?.content ?? ''}${payload.chunk}`,
                 status: 'loading',
                 errorMessage: null,
@@ -506,6 +585,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 id: payload.branchId,
                 modelId: branch?.modelId ?? '',
                 modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                isPrimary: branch?.isPrimary ?? false,
                 content: branch?.content ?? '',
                 status:
                   payload.type === 'BRANCH_STREAM_FINISHED'
@@ -541,10 +621,11 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               upsertAssistantMessage(current, payload.messageId as string, (message) => ({
                 id: payload.messageId as string,
                 role: 'assistant',
-                content: message?.content ?? payload.content,
+                content: payload.content,
                 status: 'loading',
                 errorMessage: null,
                 branches: message?.branches ?? [],
+                selectedBranchId: message?.selectedBranchId ?? null,
               })),
             );
           }
@@ -563,13 +644,13 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
   /** 复制提取内容。 */
   const handleCopyExtraction = async () => {
-    if (!detail.page?.content?.trim()) {
+    if (!normalizedExtractionContent) {
       setPageNotice(t('conversations.notice.emptyExtraction'));
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(detail.page.content);
+      await navigator.clipboard.writeText(normalizedExtractionContent);
       setPageNotice(t('conversations.notice.copySuccess'));
     } catch {
       setPageNotice(t('conversations.notice.copyFailed'));
@@ -642,6 +723,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         status: 'done',
         errorMessage: null,
         branches: [],
+        selectedBranchId: null,
       },
     ]);
 
@@ -674,13 +756,44 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           content: message?.content ?? '',
           status: 'loading',
           errorMessage: null,
-          branches: message?.branches ?? [],
+          branches: [
+            ...(message?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
+            {
+              id: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+              isPrimary: true,
+              content: message?.branches.find((branch) => branch.id === response.payload.branchId)?.content ?? '',
+              status: 'loading',
+              errorMessage: null,
+            },
+          ],
+          selectedBranchId: response.payload.branchId,
         }));
       });
     } catch {
       setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
       setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
     }
+  };
+
+  /** 判断当前 promptTab 是否应直接触发快捷输入请求。 */
+  const shouldTriggerPromptTab = (promptTab: PromptTabDefinition, messages: ChatMessageState[], sessionId: string | null) =>
+    promptTab.id !== CHAT_PROMPT_TAB_ID && Boolean(promptTab.triggerPrompt) && messages.length === 0 && !sessionId;
+
+  /** 手动点击快捷输入标签时，直接发送对应提示词。 */
+  const handleTriggerPromptTab = async (promptTab: PromptTabDefinition) => {
+    if (!promptTab.triggerPrompt) {
+      return;
+    }
+
+    await handleSend(promptTab.id, {
+      text: promptTab.triggerPrompt,
+      displayText: promptTab.name,
+      images: [],
+      modelId: promptTab.preferredModelId,
+      includePageContent: true,
+    });
   };
 
   /** 编辑用户消息。 */
@@ -726,7 +839,18 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             content: '',
             status: 'loading',
             errorMessage: null,
-            branches: [],
+            branches: [
+              {
+                id: response.payload.branchId,
+                modelId: response.payload.modelId,
+                modelLabel: response.payload.modelLabel,
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: response.payload.branchId,
           },
         ];
       });
@@ -735,7 +859,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
   };
 
-  /** 重试用户消息，并把结果追加为原助手消息的新分支。 */
+  /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
   const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
     if (!selectedPage) {
       return;
@@ -748,42 +872,60 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         promptTabId,
         messageId,
       });
-      setPromptTabMessages(promptTabId, (current) =>
-        upsertAssistantMessage(current, response.payload.assistantMessageId, (assistantMessage) => ({
-          id: response.payload.assistantMessageId,
-          role: 'assistant',
-          content: assistantMessage?.content ?? '',
-          status: assistantMessage?.status ?? 'done',
-          errorMessage: assistantMessage?.errorMessage ?? null,
-          branches: [
-            ...(assistantMessage?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
-            {
-              id: response.payload.branchId,
-              modelId: response.payload.modelId,
-              modelLabel: response.payload.modelLabel,
-              content: '',
-              status: 'loading',
-              errorMessage: null,
-            },
-          ],
-        })),
-      );
+      setActiveSessionIds((current) => ({
+        ...current,
+        [promptTabId]: response.payload.sessionId,
+      }));
+      setRestoreMessageIds((current) => ({
+        ...current,
+        [promptTabId]: response.payload.messageId,
+      }));
+      setPromptTabMessages(promptTabId, (current) => {
+        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'user');
+        if (targetIndex < 0) {
+          return current;
+        }
+        return [
+          ...current.slice(0, targetIndex + 1),
+          {
+            id: response.payload.messageId,
+            role: 'assistant',
+            content: '',
+            status: 'loading',
+            errorMessage: null,
+            branches: [
+              {
+                id: response.payload.branchId,
+                modelId: response.payload.modelId,
+                modelLabel: response.payload.modelLabel,
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: response.payload.branchId,
+          },
+        ];
+      });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
     }
   };
 
-  /** 重试助手消息。 */
-  const handleRetryMessage = async (promptTabId: string, messageId: string) => {
+  /** 重试目标助手分支。 */
+  const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
     if (!selectedPage) {
       return;
     }
 
     try {
+      setPromptTabNotice(promptTabId, '');
       const response = await api.retryMessage({
         pageUrl: selectedPage.url,
         promptTabId,
         messageId,
+        branchId,
       });
       setActiveSessionIds((current) => ({
         ...current,
@@ -798,20 +940,55 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         if (targetIndex < 0) {
           return current;
         }
-        return [
-          ...current.slice(0, targetIndex),
-          {
-            id: response.payload.messageId,
-            role: 'assistant',
-            content: '',
-            status: 'loading',
-            errorMessage: null,
-            branches: [],
-          },
-        ];
+        return current.slice(0, targetIndex + 1).map((message) =>
+          message.id === messageId && message.role === 'assistant'
+            ? syncAssistantMessageState({
+                ...message,
+                branches: message.branches.map((branch) =>
+                  branch.id === branchId
+                    ? {
+                        ...branch,
+                        content: '',
+                        status: 'loading',
+                        errorMessage: null,
+                      }
+                    : branch,
+                ),
+              })
+            : message,
+        );
       });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+    }
+  };
+
+  /** 切换当前轮继续对话使用的主分支。 */
+  const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
+    if (!selectedPage) {
+      return;
+    }
+
+    try {
+      setPromptTabNotice(promptTabId, '');
+      await api.selectAssistantBranch({
+        pageUrl: selectedPage.url,
+        promptTabId,
+        messageId,
+        branchId,
+      });
+      setPromptTabMessages(promptTabId, (current) =>
+        current.map((message) =>
+          message.id === messageId && message.role === 'assistant'
+            ? syncAssistantMessageState({
+                ...message,
+                selectedBranchId: branchId,
+              })
+            : message,
+        ),
+      );
+    } catch {
+      setPromptTabNotice(promptTabId, t('workspace.notice.selectPrimaryBranchFailed'));
     }
   };
 
@@ -878,10 +1055,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setPromptTabMessages(promptTabId, (current) =>
         current.map((message) =>
           message.id === messageId && message.role === 'assistant'
-            ? {
+            ? syncAssistantMessageState({
                 ...message,
                 branches: message.branches.filter((branch) => branch.id !== branchId),
-              }
+              })
             : message,
         ),
       );
@@ -977,12 +1154,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   };
 
   return (
-    <main data-testid="conversations-shell" className="flex min-h-screen bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground">
+    <main
+      data-testid="conversations-shell"
+      className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
+    >
       <aside className="flex shrink-0 flex-col border-r border-border bg-card/80 backdrop-blur-sm" style={{ width: `${sidebarWidth}px` }}>
         <header className="border-b border-border px-4 py-4">
           <h1 className="text-lg font-semibold">{t('conversations.title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('conversations.subtitle')}</p>
-          <label className="mt-3 flex items-center gap-2 rounded-md border border-input bg-input/20 px-3 py-2 text-xs text-muted-foreground">
+          <label className="mt-3 flex items-center gap-2 border border-input bg-input/20 px-3 py-2 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
             <input
               aria-label={t('conversations.searchLabel')}
@@ -1070,7 +1249,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           aria-orientation="vertical"
           aria-label={t('conversations.resizeSidebar')}
           data-testid="conversations-sidebar-resize-handle"
-          className="h-24 w-2 cursor-col-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="h-24 w-2 cursor-col-resize bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) =>
             setSidebarResizeState({
               startX: event.clientX,
@@ -1080,8 +1259,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         />
       </div>
 
-      <section className="flex min-h-0 flex-1 flex-col">
-        <header className="border-b border-border bg-card/80 px-6 py-4 backdrop-blur-sm">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <header className="shrink-0 border-b border-border bg-card/80 px-6 py-4 backdrop-blur-sm">
           {detail.page ? (
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-4">
@@ -1089,7 +1268,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   {isTitleEditing ? (
                     <input
                       aria-label={t('conversations.editTitle')}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-lg font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                      className="w-full border border-input bg-background px-3 py-2 text-lg font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                       value={titleDraft}
                       autoFocus
                       onChange={(event) => setTitleDraft(event.target.value)}
@@ -1139,24 +1318,34 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           )}
         </header>
 
-        <section className="min-h-0 flex-1 overflow-y-auto border-b border-border bg-background/80 px-6 py-4">
+        <section
+          data-testid="conversations-extraction-panel"
+          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-6 py-4"
+          style={{ height: `${extractionPanelHeight}px` }}
+        >
           {detailStatus === 'loading' && !detail.page ? (
             <div className="flex items-center gap-2 text-sm text-primary">
               <LoaderCircleIcon className="size-4 animate-spin" />
               <span>{t('conversations.state.bootstrapping')}</span>
             </div>
           ) : null}
-          {detail.page?.content ? <article className="whitespace-pre-wrap text-sm leading-6">{detail.page.content}</article> : null}
-          {detail.page && !detail.page.content ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
+          {normalizedExtractionContent ? (
+            <article data-testid="conversations-extraction-content" className="whitespace-pre-wrap text-sm leading-6">
+              {normalizedExtractionContent}
+            </article>
+          ) : null}
+          {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
 
-        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="border-b border-border bg-muted/20 px-6 py-3">
+        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-6 py-1.5">
           <div className="flex flex-wrap gap-1.5">
             {promptTabs.map((promptTab) => {
               const isActive = promptTab.id === activePromptTabId;
               const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
               const statusKey = getPromptTabStatusLabelKey(status);
               const statusLabel = statusKey ? t(statusKey) : promptTab.name;
+              const hasPromptTabText = promptTabHasContent(messageMap[promptTab.id] ?? []);
+              const showLoadingRing = status === 'loading' || status === 'auto-running';
 
               return (
                 <button
@@ -1165,19 +1354,45 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   role="tab"
                   aria-selected={isActive}
                   type="button"
+                  title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                   className={cn(
-                    'flex min-w-[84px] items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-xs shadow-sm transition-colors',
-                    isActive ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/90 hover:bg-muted',
+                    'relative inline-flex items-center gap-2 overflow-hidden border px-3 py-2 text-left text-xs shadow-sm transition-colors',
+                    showLoadingRing && 'tab-loading-border border-transparent',
+                    isActive
+                      ? showLoadingRing
+                        ? 'bg-primary/10 text-foreground'
+                        : 'border-primary/30 bg-primary/10 text-foreground'
+                      : showLoadingRing
+                        ? 'bg-background/90 text-foreground hover:bg-muted'
+                        : 'border-border bg-background/90 hover:bg-muted',
                   )}
-                  onClick={() => setActivePromptTabId(promptTab.id)}
+                  onClick={() => {
+                    setActivePromptTabId(promptTab.id);
+                    if (!shouldTriggerPromptTab(promptTab, messageMap[promptTab.id] ?? [], activeSessionIds[promptTab.id] ?? null)) {
+                      return;
+                    }
+                    void handleTriggerPromptTab(promptTab);
+                  }}
                 >
-                  <span className="truncate">{promptTab.name}</span>
-                  <span className="flex items-center gap-1">
-                    {promptTab.autoTrigger ? <SparklesIcon className={cn('size-3', isActive ? 'text-primary-foreground/90' : 'text-amber-600')} /> : null}
-                    {status !== 'idle' ? (
-                      <WorkspaceStatusGlyph label={statusLabel} status={toPromptVisualStatus(status)} className="size-3.5" />
-                    ) : null}
-                  </span>
+                  {showLoadingRing ? (
+                    <span data-testid={`prompt-tab-loading-${promptTab.id}`} className="sr-only">
+                      {statusLabel}
+                    </span>
+                  ) : null}
+
+                  <span className="relative z-10 truncate">{promptTab.name}</span>
+                  {promptTab.autoTrigger ? (
+                    <SparklesIcon className={cn('relative z-10 size-3', isActive ? 'text-primary' : 'text-amber-600')} />
+                  ) : null}
+                  {!showLoadingRing && status !== 'idle' ? (
+                    <WorkspaceStatusGlyph label={statusLabel} status={toPromptVisualStatus(status)} className="relative z-10 size-3.5" />
+                  ) : null}
+                  {hasPromptTabText && !showLoadingRing ? (
+                    <span
+                      data-testid={`prompt-tab-line-${promptTab.id}`}
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
+                    />
+                  ) : null}
                 </button>
               );
             })}
@@ -1185,12 +1400,12 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
 
         {activeChatNotice ? (
-          <div className="border-b border-border px-6 py-2">
+          <div className="shrink-0 border-b border-border px-6 py-2">
             <Badge variant="outline">{activeChatNotice}</Badge>
           </div>
         ) : null}
 
-        <section className="min-h-0 flex-1">
+        <section className="min-h-0 flex-1 overflow-hidden">
           {promptTabs.map((promptTab) => (
             <div
               key={promptTab.id}
@@ -1218,8 +1433,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 onCancelEdit={() => setPromptTabEditing(promptTab.id, null)}
                 onSubmitEdit={(messageId) => handleEditUserMessage(promptTab.id, messageId, editingMap[promptTab.id]?.text ?? '')}
                 onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
-                onRetryAssistantMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
+                onRetryAssistantMessage={(messageId, branchId) => handleRetryMessage(promptTab.id, messageId, branchId)}
+                onSelectAssistantBranch={(messageId, branchId) => handleSelectAssistantBranch(promptTab.id, messageId, branchId)}
                 onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
+                onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
                 onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
                 onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
                 onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
@@ -1303,3 +1520,13 @@ const toPromptVisualStatus = (status: PromptTabStatusKind) => {
       return 'idle';
   }
 };
+
+/** 判断标签是否已有可见文本内容。 */
+const promptTabHasContent = (messages: ChatMessageState[]) =>
+  messages.some((message) => {
+    if ((message.displayContent ?? message.content).trim()) {
+      return true;
+    }
+
+    return message.branches.some((branch) => branch.content.trim().length > 0);
+  });

@@ -76,6 +76,17 @@ describe('ModelForm', () => {
     expect(screen.getByRole('combobox', { name: 'Provider' })).toHaveTextContent('Azure OpenAI');
     expect(screen.getByLabelText('Base URL')).toBeInTheDocument();
     expect(screen.getByLabelText('Deployment')).toBeInTheDocument();
+
+    await selectOption('Provider', 'Gemini');
+    expect(screen.getByLabelText('Reasoning Effort')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument();
+
+    await selectOption('Provider', 'Amazon Bedrock');
+    expect(screen.getByLabelText('Region')).toBeInTheDocument();
+
+    await selectOption('Provider', 'Google Vertex');
+    expect(screen.getByLabelText('Project')).toBeInTheDocument();
+    expect(screen.getByLabelText('Location')).toBeInTheDocument();
   });
 
   it('API Key 默认掩码并可切换显示', () => {
@@ -143,12 +154,8 @@ describe('ModelForm', () => {
     await user.click(screen.getByRole('checkbox', { name: '启用模型' }));
     await user.clear(screen.getByLabelText('Temperature'));
     await user.type(screen.getByLabelText('Temperature'), '0.7');
-    await user.clear(screen.getByLabelText('Thinking Budget'));
-    await user.type(screen.getByLabelText('Thinking Budget'), '2048');
     await user.clear(screen.getByLabelText('Max Output Tokens'));
     await user.type(screen.getByLabelText('Max Output Tokens'), '4096');
-    await user.clear(screen.getByLabelText('Tools'));
-    await user.type(screen.getByLabelText('Tools'), 'url-context, search');
 
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -156,10 +163,10 @@ describe('ModelForm', () => {
         model: 'gpt-5.4',
         enabled: false,
         temperature: 0.7,
-        thinkingBudget: 2048,
         maxOutputTokens: 4096,
-        tools: ['url-context', 'search'],
       }),
     );
+
+    expect(screen.queryByLabelText('Thinking Budget')).not.toBeInTheDocument();
   });
 });

@@ -1,4 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import type { ModelConfig } from '../../domain/config/config-schema';
 import type { RecentErrorSummary } from '../../domain/error/recent-error-schema';
 
 type CacheStats = {
@@ -97,6 +98,15 @@ export const settingsApi = {
     const response = await requestConfig<RuntimeResponse<{ result: { provider: string; ok: true; message: string } }>>({
       type: 'TEST_SYNC_CONNECTION',
       sync,
+    });
+    return response.result;
+  },
+
+  /** 测试单个模型连通性。 */
+  async testModel(model: ModelConfig) {
+    const response = await requestConfig<RuntimeResponse<{ result: { provider: string; text: string } }>>({
+      type: 'TEST_MODEL',
+      model,
     });
     return response.result;
   },

@@ -77,6 +77,8 @@ const ControlledLanguageModelsPanel = ({ config: initialConfig = createConfig() 
       disabled={false}
       onSelectModel={setSelectedModelId}
       onChange={setConfig}
+      onTestModel={() => undefined}
+      testingModelId={null}
       t={t}
     />
   );
@@ -95,6 +97,8 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={onSelectModel}
         onChange={onChange}
+        onTestModel={vi.fn()}
+        testingModelId={null}
         t={t}
       />,
     );
@@ -135,6 +139,8 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={vi.fn()}
         onChange={onChange}
+        onTestModel={vi.fn()}
+        testingModelId={null}
         t={t}
       />,
     );
@@ -167,6 +173,8 @@ describe('LanguageModelsPanel', () => {
         disabled={false}
         onSelectModel={vi.fn()}
         onChange={onChange}
+        onTestModel={vi.fn()}
+        testingModelId={null}
         t={t}
       />,
     );
@@ -189,11 +197,14 @@ describe('LanguageModelsPanel', () => {
 
     const primaryItem = screen.getByTestId('language-model-item-model-1');
     const secondaryItem = screen.getByTestId('language-model-item-model-2');
-    expect(within(primaryItem).getByLabelText('模型名称')).toHaveValue('主模型');
-    expect(within(primaryItem).queryByRole('checkbox', { name: '启用模型' })).not.toBeInTheDocument();
+    expect(within(primaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
     expect(within(secondaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
 
     const user = userEvent.setup();
+    await user.click(within(primaryItem).getByTestId('language-model-summary-model-1'));
+    expect(within(primaryItem).getByLabelText('模型名称')).toHaveValue('主模型');
+    expect(within(primaryItem).queryByRole('checkbox', { name: '启用模型' })).not.toBeInTheDocument();
+
     await user.click(within(primaryItem).getByTestId('language-model-summary-model-1'));
     expect(within(primaryItem).queryByLabelText('模型名称')).not.toBeInTheDocument();
 

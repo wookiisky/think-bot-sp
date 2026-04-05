@@ -70,6 +70,12 @@ type SendChatResponse = {
     userMessageId: string | null;
     /** 助手消息 id。 */
     messageId: string;
+    /** 主分支 id。 */
+    branchId: string;
+    /** 主分支模型 id。 */
+    modelId: string;
+    /** 主分支模型展示名。 */
+    modelLabel: string;
   };
 };
 
@@ -82,6 +88,12 @@ type EditUserMessageResponse = {
     editedMessageId: string;
     /** 新助手消息 id。 */
     messageId: string;
+    /** 主分支 id。 */
+    branchId: string;
+    /** 主分支模型 id。 */
+    modelId: string;
+    /** 主分支模型展示名。 */
+    modelLabel: string;
     /** 新建流式会话 id。 */
     sessionId: string;
   };
@@ -94,13 +106,13 @@ type RetryUserMessageResponse = {
   payload: {
     /** 被重试的用户消息 id。 */
     retriedMessageId: string;
-    /** 目标助手消息 id。 */
-    assistantMessageId: string;
-    /** 新建分支 id。 */
+    /** 新助手消息 id。 */
+    messageId: string;
+    /** 主分支 id。 */
     branchId: string;
-    /** 分支模型 id。 */
+    /** 主分支模型 id。 */
     modelId: string;
-    /** 分支模型展示名。 */
+    /** 主分支模型展示名。 */
     modelLabel: string;
     /** 新建流式会话 id。 */
     sessionId: string;
@@ -112,12 +124,24 @@ type RetryMessageResponse = {
   type: 'RETRY_MESSAGE_SUCCESS';
   /** 响应载荷。 */
   payload: {
-    /** 被替换的旧助手消息 id。 */
-    replacedMessageId: string;
-    /** 新助手消息 id。 */
+    /** 助手消息 id。 */
     messageId: string;
+    /** 分支 id。 */
+    branchId: string;
     /** 新建流式会话 id。 */
     sessionId: string;
+  };
+};
+
+type SelectAssistantBranchResponse = {
+  /** 响应类型。 */
+  type: 'SELECT_ASSISTANT_BRANCH_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 助手消息 id。 */
+    messageId: string;
+    /** 当前主分支 id。 */
+    branchId: string;
   };
 };
 
@@ -248,6 +272,7 @@ type SidebarApi = {
       displayText?: string;
       images: string[];
       includePageContent: boolean;
+      rollbackOnFailure?: boolean;
     }]
   ) => Promise<SendChatResponse>;
   /** 编辑目标用户消息并重发。 */
@@ -260,8 +285,12 @@ type SidebarApi = {
   ) => Promise<RetryUserMessageResponse>;
   /** 重试目标助手消息，并替换旧结果。 */
   retryMessage: (
-    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; branchId: string }]
   ) => Promise<RetryMessageResponse>;
+  /** 切换当前轮的主分支。 */
+  selectAssistantBranch: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; branchId: string }]
+  ) => Promise<SelectAssistantBranchResponse>;
   /** 为既有助手消息继续新增分支。 */
   expandMessageBranches: (
     ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
@@ -358,6 +387,12 @@ export const createSidebarApi = (): SidebarApi => ({
   retryMessage(input) {
     return chrome.runtime.sendMessage({
       type: 'RETRY_MESSAGE',
+      ...input,
+    });
+  },
+  selectAssistantBranch(input) {
+    return chrome.runtime.sendMessage({
+      type: 'SELECT_ASSISTANT_BRANCH',
       ...input,
     });
   },

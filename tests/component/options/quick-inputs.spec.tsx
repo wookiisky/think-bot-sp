@@ -199,6 +199,7 @@ describe('QuickInputsPanel', () => {
     );
 
     const user = userEvent.setup();
+    await user.click(screen.getByTestId('quick-input-summary-quick-1'));
 
     expect(screen.getByText('引用的模型已失效，建议重新选择。')).toBeInTheDocument();
     expect(screen.getByText('部分专属分支模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
@@ -236,9 +237,13 @@ describe('QuickInputsPanel', () => {
     );
 
     const user = userEvent.setup();
+    expect(screen.queryByLabelText('快捷输入提示词')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
+    expect(screen.queryByText('当前快捷输入会在全局分支模型基础上叠加这些模型。')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId('quick-input-summary-quick-1'));
     expect(screen.getByLabelText('快捷输入提示词')).toHaveValue('请总结当前页面内容，保留重点结论。');
     expect(screen.getByLabelText('快捷输入名称')).toBeInTheDocument();
-    expect(screen.queryByText('当前快捷输入会在全局分支模型基础上叠加这些模型。')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('quick-input-summary-quick-1'));
     expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();

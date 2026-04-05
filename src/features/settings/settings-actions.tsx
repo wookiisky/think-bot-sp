@@ -71,7 +71,9 @@ export const SettingsActions = ({
         </Button>
       </div>
       {hasUnsavedChanges ? (
-        <p className="m-0 text-right text-sm text-amber-700 dark:text-amber-300">{t('settings.unsavedChanges')}</p>
+        <p className="m-0 rounded-full bg-amber-500/10 px-3 py-1 text-right text-sm text-amber-700 dark:text-amber-300">
+          {t('settings.unsavedChanges')}
+        </p>
       ) : null}
     </div>
   );

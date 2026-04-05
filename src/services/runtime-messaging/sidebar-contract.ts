@@ -16,6 +16,7 @@ export const sidebarCommandTypeValues = [
   'EDIT_USER_MESSAGE',
   'RETRY_USER_MESSAGE',
   'RETRY_MESSAGE',
+  'SELECT_ASSISTANT_BRANCH',
   'EXPAND_MESSAGE_BRANCHES',
   'STOP_SESSION',
   'STOP_BRANCH',
@@ -89,6 +90,8 @@ export const sidebarSendChatCommandSchema = sidebarCommandBaseSchema.extend({
   images: z.array(z.string()),
   /** 是否附带页面正文。 */
   includePageContent: z.boolean(),
+  /** 失败时是否回滚本轮新增消息。 */
+  rollbackOnFailure: z.boolean().optional(),
 });
 
 /** 编辑目标用户消息并重发。 */
@@ -103,7 +106,7 @@ export const sidebarEditUserMessageCommandSchema = sidebarCommandBaseSchema.exte
   text: z.string().min(1),
 });
 
-/** 重试目标用户消息，并把结果追加为既有助手消息的新分支。 */
+/** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
 export const sidebarRetryUserMessageCommandSchema = sidebarCommandBaseSchema.extend({
   /** 命令类型。 */
   type: z.literal('RETRY_USER_MESSAGE'),
@@ -113,14 +116,28 @@ export const sidebarRetryUserMessageCommandSchema = sidebarCommandBaseSchema.ext
   messageId: z.string().min(1),
 });
 
-/** 重试目标助手消息，并用新的主回答替换旧结果。 */
+/** 重试目标助手分支。 */
 export const sidebarRetryMessageCommandSchema = sidebarCommandBaseSchema.extend({
   /** 命令类型。 */
   type: z.literal('RETRY_MESSAGE'),
   /** 当前 promptTab 稳定 id。 */
   promptTabId: z.string().min(1),
-  /** 被替换的旧助手消息 id。 */
+  /** 助手消息 id。 */
   messageId: z.string().min(1),
+  /** 目标分支 id。 */
+  branchId: z.string().min(1),
+});
+
+/** 切换当前轮后续对话使用的主分支。 */
+export const sidebarSelectAssistantBranchCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('SELECT_ASSISTANT_BRANCH'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 助手消息 id。 */
+  messageId: z.string().min(1),
+  /** 目标分支 id。 */
+  branchId: z.string().min(1),
 });
 
 /** 为既有助手消息继续新增分支。 */
@@ -199,6 +216,7 @@ export const sidebarCommandSchema = z.discriminatedUnion('type', [
   sidebarEditUserMessageCommandSchema,
   sidebarRetryUserMessageCommandSchema,
   sidebarRetryMessageCommandSchema,
+  sidebarSelectAssistantBranchCommandSchema,
   sidebarExpandMessageBranchesCommandSchema,
   sidebarStopSessionCommandSchema,
   sidebarStopBranchCommandSchema,
@@ -355,6 +373,12 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     /** 助手消息 id。 */
     messageId: z.string().min(1),
+    /** 主分支 id。 */
+    branchId: z.string().min(1),
+    /** 主分支模型 id。 */
+    modelId: z.string().min(1),
+    /** 主分支模型展示名。 */
+    modelLabel: z.string().min(1),
   }),
   z.object({
     /** 事件类型。 */
@@ -367,6 +391,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     /** 助手消息 id。 */
     messageId: z.string().min(1),
+    /** 主分支 id。 */
+    branchId: z.string().min(1),
     /** 增量文本。 */
     chunk: z.string(),
   }),
@@ -381,6 +407,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     /** 助手消息 id。 */
     messageId: z.string().min(1),
+    /** 主分支 id。 */
+    branchId: z.string().min(1),
   }),
   z.object({
     /** 事件类型。 */
@@ -393,6 +421,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     /** 助手消息 id。 */
     messageId: z.string().min(1),
+    /** 主分支 id。 */
+    branchId: z.string().min(1),
     /** 错误消息。 */
     errorMessage: z.string().min(1),
   }),
@@ -407,6 +437,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     sessionId: z.string().min(1),
     /** 助手消息 id。 */
     messageId: z.string().min(1),
+    /** 主分支 id。 */
+    branchId: z.string().min(1),
   }),
   z.object({
     /** 事件类型。 */

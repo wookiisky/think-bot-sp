@@ -2,8 +2,19 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createDefaultConfig } from '../../../src/domain/config/config-schema';
+import { DEFAULT_EXTRACTION_PANEL_HEIGHT, createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { ConversationsShell } from '../../../src/features/conversations/conversations-shell';
+
+const quickInputConfig = {
+  id: 'quick-review',
+  name: '快速审阅',
+  prompt: '请快速审阅当前页面。',
+  autoTrigger: true,
+  modelId: 'model-1',
+  branchModelIds: [],
+  order: 0,
+  deletedAt: null,
+};
 
 const createConversationsApi = (overrides?: Record<string, unknown>) => ({
   listPages: vi.fn().mockResolvedValue({
@@ -137,7 +148,17 @@ const createConversationsApi = (overrides?: Record<string, unknown>) => ({
       ],
     }),
   }),
-  sendChat: vi.fn(),
+  sendChat: vi.fn().mockResolvedValue({
+    type: 'SEND_CHAT_SUCCESS',
+    payload: {
+      sessionId: 'session-1',
+      userMessageId: 'user-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      modelId: 'model-1',
+      modelLabel: '模型一',
+    },
+  }),
   editUserMessage: vi.fn(),
   retryUserMessage: vi.fn(),
   retryMessage: vi.fn(),
@@ -170,9 +191,11 @@ describe('ConversationsShell', () => {
     render(<ConversationsShell api={api} />);
 
     await waitFor(() => expect(api.listPages).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('conversations-shell').className).toContain('overflow-hidden');
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
+    expect(screen.getByTestId('conversations-extraction-panel')).toHaveStyle({ height: `${DEFAULT_EXTRACTION_PANEL_HEIGHT}px` });
   });
 
   it('支持搜索过滤历史页面', async () => {
@@ -208,5 +231,206 @@ describe('ConversationsShell', () => {
     await user.click(screen.getByLabelText('删除页面 页面 A 新标题'));
     await user.click(within(screen.getByTestId('delete-page-confirm-https://example.com/article-a')).getByRole('button', { name: '删除页面' }));
     await waitFor(() => expect(api.deletePage).toHaveBeenCalledWith('https://example.com/article-a'));
+  });
+
+  it('提取区显示和复制都会统一删除空行，标签下划线与 tab 等宽', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
+    const api = createConversationsApi({
+      getPageDetail: vi.fn().mockResolvedValue({
+        type: 'GET_PAGE_DETAIL_SUCCESS',
+        page: {
+          id: 'https://example.com/article-a',
+          url: 'https://example.com/article-a',
+          normalizedUrl: 'https://example.com/article-a',
+          title: '页面 A',
+          faviconUrl: '',
+          content: '## 正文标题\n\n- 要点一\n\n\n结论',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 2,
+          expiresAt: 3,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article-a:chat',
+            normalizedUrl: 'https://example.com/article-a',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: '历史回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-1',
+              status: 'done',
+              summary: '历史回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        activePromptTabId: 'chat',
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    expect(await screen.findByTestId('conversations-extraction-content')).toHaveTextContent('## 正文标题');
+    expect(screen.getByTestId('conversations-extraction-content')).toHaveTextContent('- 要点一');
+    expect(screen.getByTestId('conversations-extraction-content')).toHaveTextContent('结论');
+    expect(screen.getByTestId('prompt-tab-line-chat').className).toContain('inset-x-0');
+
+    await user.click(screen.getByRole('button', { name: '复制提取内容' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('## 正文标题\n- 要点一\n结论'));
+  });
+
+  it('打开历史页面时不会自动触发 quick input 标签发送', async () => {
+    const api = createConversationsApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          quickInputs: [quickInputConfig],
+          models: [
+            {
+              id: 'model-1',
+              name: '模型一',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      getPageDetail: vi.fn().mockResolvedValue({
+        type: 'GET_PAGE_DETAIL_SUCCESS',
+        page: {
+          id: 'https://example.com/article-a',
+          url: 'https://example.com/article-a',
+          normalizedUrl: 'https://example.com/article-a',
+          title: '页面 A',
+          faviconUrl: '',
+          content: '正文 A',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [
+            {
+              promptTabId: 'quick-review',
+              initializedAt: 1,
+              lastAutoTriggerAt: 1,
+              autoTriggerStatus: 'done',
+              lastClearedAt: null,
+            },
+          ],
+          createdAt: 1,
+          updatedAt: 2,
+          expiresAt: 3,
+        },
+        conversations: [],
+        loadingStates: [],
+        activePromptTabId: 'quick-review',
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await screen.findByRole('tab', { name: /快速审阅/ });
+    await screen.findByText('正文 A');
+
+    expect(api.sendChat).not.toHaveBeenCalled();
+  });
+
+  it('手动点击 quick input 标签时仍会触发发送', async () => {
+    const user = userEvent.setup();
+    const api = createConversationsApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          quickInputs: [quickInputConfig],
+          models: [
+            {
+              id: 'model-1',
+              name: '模型一',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      getPageDetail: vi.fn().mockResolvedValue({
+        type: 'GET_PAGE_DETAIL_SUCCESS',
+        page: {
+          id: 'https://example.com/article-a',
+          url: 'https://example.com/article-a',
+          normalizedUrl: 'https://example.com/article-a',
+          title: '页面 A',
+          faviconUrl: '',
+          content: '正文 A',
+          extractionMethod: 'readability',
+          includePageContent: false,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 2,
+          expiresAt: 3,
+        },
+        conversations: [],
+        loadingStates: [],
+        activePromptTabId: 'chat',
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await user.click(await screen.findByRole('tab', { name: /快速审阅/ }));
+
+    await waitFor(() =>
+      expect(api.sendChat).toHaveBeenCalledWith({
+        pageUrl: 'https://example.com/article-a',
+        promptTabId: 'quick-review',
+        modelId: 'model-1',
+        text: '请快速审阅当前页面。',
+        images: [],
+        includePageContent: true,
+      }),
+    );
   });
 });

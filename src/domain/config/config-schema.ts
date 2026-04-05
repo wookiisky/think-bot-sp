@@ -8,12 +8,58 @@ export const MIN_EXTRACTION_PANEL_HEIGHT = 1;
 export const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
 /** 提取区最大默认高度。 */
 export const MAX_EXTRACTION_PANEL_HEIGHT = 420;
+/** 分支阅读列最小宽度。 */
+export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 350;
 /** Jina 响应模板默认占位符。 */
 export const DEFAULT_JINA_RESPONSE_TEMPLATE = '{{content}}';
 
-const modelProviderSchema = z.enum(['openai-compatible', 'gemini', 'azure-openai', 'anthropic']);
+export const MODEL_PROVIDER_VALUES = [
+  'openai-compatible',
+  'gemini',
+  'azure-openai',
+  'anthropic',
+  'amazon-bedrock',
+  'google-vertex',
+] as const;
 
-const modelConfigSchema = z
+export const MODEL_TOOL_VALUES = ['url_context', 'google_search'] as const;
+
+export const REASONING_EFFORT_VALUES = ['low', 'medium', 'high', 'max'] as const;
+
+const modelProviderSchema = z.enum(MODEL_PROVIDER_VALUES);
+const reasoningEffortSchema = z.enum(REASONING_EFFORT_VALUES);
+
+/** 获取 provider 默认 Base URL。 */
+export const getDefaultModelBaseUrl = (provider: z.infer<typeof modelProviderSchema>): string => {
+  switch (provider) {
+    case 'openai-compatible':
+      return 'https://api.openai.com/v1';
+    case 'gemini':
+      return 'https://generativelanguage.googleapis.com/v1beta';
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1';
+    case 'azure-openai':
+    case 'amazon-bedrock':
+    case 'google-vertex':
+      return '';
+    default:
+      throw new Error(`unsupported provider: ${String(provider)}`);
+  }
+};
+
+/** 判断当前 provider 是否支持 reasoning effort。 */
+export const providerSupportsReasoningEffort = (provider: z.infer<typeof modelProviderSchema>): boolean =>
+  provider === 'anthropic' || provider === 'gemini' || provider === 'amazon-bedrock' || provider === 'google-vertex';
+
+/** 判断当前 provider 是否支持 Google grounding tools。 */
+export const providerSupportsGoogleTools = (provider: z.infer<typeof modelProviderSchema>): boolean =>
+  provider === 'gemini' || provider === 'google-vertex';
+
+/** 获取 provider 默认 tools 选项。 */
+export const getDefaultModelTools = (provider: z.infer<typeof modelProviderSchema>): string[] =>
+  providerSupportsGoogleTools(provider) ? [...MODEL_TOOL_VALUES] : [];
+
+export const modelConfigSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -23,8 +69,13 @@ const modelConfigSchema = z
     baseUrl: z.string(),
     apiKey: z.string(),
     deployment: z.string(),
+    region: z.string().optional(),
+    project: z.string().optional(),
+    location: z.string().optional(),
     temperature: z.number(),
     tools: z.array(z.string()),
+    reasoningEffort: reasoningEffortSchema.optional(),
+    /** 兼容旧配置保留，设置页不再暴露。 */
     thinkingBudget: z.number().int().nonnegative().nullable(),
     maxOutputTokens: z.number().int().positive().nullable(),
     supportsImages: z.boolean().default(false),
@@ -37,6 +88,8 @@ const modelConfigSchema = z
       gemini: ['apiKey', 'model'],
       'azure-openai': ['baseUrl', 'apiKey', 'deployment'],
       anthropic: ['apiKey', 'model'],
+      'amazon-bedrock': ['apiKey', 'model'],
+      'google-vertex': ['apiKey', 'model'],
     };
 
     for (const field of requiredFields[value.provider]) {
@@ -47,6 +100,14 @@ const modelConfigSchema = z
           path: [field],
         });
       }
+    }
+
+    if (value.provider === 'amazon-bedrock' && !(value.region ?? '').trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'amazon-bedrock provider field region is required',
+        path: ['region'],
+      });
     }
   });
 
@@ -263,6 +324,10 @@ export const extensionConfigSchema = z
 
 export type ExtensionConfig = z.infer<typeof extensionConfigSchema>;
 export type ModelConfig = ExtensionConfig['models'][number];
+
+/** 解析模型的 reasoning effort，旧配置缺省时默认 high。 */
+export const getResolvedReasoningEffort = (model: Pick<ModelConfig, 'reasoningEffort'>): z.infer<typeof reasoningEffortSchema> =>
+  model.reasoningEffort ?? 'high';
 
 /** 判断模型是否足够完整，可进入默认模型候选。 */
 export const isModelConfigComplete = (model: ModelConfig): boolean =>

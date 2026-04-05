@@ -31,6 +31,7 @@ describe('runtime-messaging', () => {
       'EDIT_USER_MESSAGE',
       'RETRY_USER_MESSAGE',
       'RETRY_MESSAGE',
+      'SELECT_ASSISTANT_BRANCH',
       'EXPAND_MESSAGE_BRANCHES',
       'STOP_SESSION',
       'STOP_BRANCH',
@@ -171,6 +172,7 @@ describe('runtime-messaging', () => {
         pageUrl: 'https://example.com/article',
         promptTabId: 'chat',
         messageId: 'assistant-1',
+        branchId: 'branch-1',
       }),
     ).toEqual({
       type: 'RETRY_MESSAGE',
@@ -178,6 +180,7 @@ describe('runtime-messaging', () => {
       pageUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      branchId: 'branch-1',
     });
     expect(
       sidebarPortClientMessageSchema.parse({
@@ -584,6 +587,9 @@ describe('runtime-messaging', () => {
         sessionId: 'session-1',
         userMessageId: 'user-1',
         messageId: 'assistant-1',
+        branchId: '',
+        modelId: 'model-1',
+        modelLabel: '',
       },
     });
     expect(pageRepository.setIncludePageContent).toHaveBeenCalledWith({
@@ -806,6 +812,9 @@ describe('runtime-messaging', () => {
     const editUserMessage = vi.fn().mockResolvedValue({
       sessionId: 'session-edit',
       messageId: 'assistant-edit',
+      branchId: 'assistant-edit:primary',
+      modelId: 'model-1',
+      modelLabel: '主模型',
       cancel: vi.fn(),
       done: Promise.resolve({
         sessionId: 'session-edit',
@@ -831,6 +840,7 @@ describe('runtime-messaging', () => {
     const retryMessage = vi.fn().mockResolvedValue({
       sessionId: 'session-retry',
       messageId: 'assistant-retry',
+      branchId: 'branch-retry',
       cancel: vi.fn(),
       done: Promise.resolve({
         sessionId: 'session-retry',
@@ -884,6 +894,9 @@ describe('runtime-messaging', () => {
       payload: {
         editedMessageId: 'user-1',
         messageId: 'assistant-edit',
+        branchId: 'assistant-edit:primary',
+        modelId: 'model-1',
+        modelLabel: '主模型',
         sessionId: 'session-edit',
       },
     });
@@ -908,7 +921,7 @@ describe('runtime-messaging', () => {
       type: 'RETRY_USER_MESSAGE_SUCCESS',
       payload: {
         retriedMessageId: 'user-1',
-        assistantMessageId: 'assistant-1',
+        messageId: 'assistant-1',
         branchId: 'branch-1',
         modelId: 'model-1',
         modelLabel: '主模型',
@@ -924,6 +937,7 @@ describe('runtime-messaging', () => {
           pageUrl: 'https://example.com/article',
           promptTabId: 'chat',
           messageId: 'assistant-1',
+          branchId: 'branch-retry',
         },
         {
           sender: {
@@ -935,8 +949,8 @@ describe('runtime-messaging', () => {
     ).resolves.toEqual({
       type: 'RETRY_MESSAGE_SUCCESS',
       payload: {
-        replacedMessageId: 'assistant-1',
         messageId: 'assistant-retry',
+        branchId: 'branch-retry',
         sessionId: 'session-retry',
       },
     });
@@ -956,6 +970,7 @@ describe('runtime-messaging', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      branchId: 'branch-retry',
     });
   });
 

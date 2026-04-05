@@ -17,6 +17,7 @@ describe('sidebar-auto-trigger-service', () => {
         messageId: 'assistant-auto-1',
         status: 'done' as const,
         errorMessage: null,
+        persisted: true,
       }),
     };
     const service = createSidebarAutoTriggerService({
@@ -120,6 +121,7 @@ describe('sidebar-auto-trigger-service', () => {
       displayText: '总结',
       images: [],
       pageContent: '页面正文',
+      rollbackOnFailure: true,
     });
     expect(register).toHaveBeenCalledWith(session, {
       normalizedUrl: 'https://example.com/article',
@@ -144,6 +146,7 @@ describe('sidebar-auto-trigger-service', () => {
         messageId: 'assistant-auto-safe',
         status: 'done' as const,
         errorMessage: null,
+        persisted: true,
       }),
     };
     const service = createSidebarAutoTriggerService({
@@ -228,6 +231,113 @@ describe('sidebar-auto-trigger-service', () => {
       url: 'https://example.com/article',
       promptTabId: 'quick-summary',
       autoTriggerStatus: 'done',
+    });
+  });
+
+  it('会话失败且消息已回滚时，不持久化 auto error 状态', async () => {
+    const setPromptTabState = vi.fn().mockResolvedValue(undefined);
+    const session = {
+      sessionId: 'session-auto-rollback',
+      messageId: 'assistant-auto-rollback',
+      cancel: vi.fn(),
+      done: Promise.resolve({
+        sessionId: 'session-auto-rollback',
+        messageId: 'assistant-auto-rollback',
+        status: 'error' as const,
+        errorMessage: 'provider timeout',
+        persisted: false,
+      }),
+    };
+    const service = createSidebarAutoTriggerService({
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue(
+          createDefaultConfig({
+            basic: {
+              defaultModelId: 'model-1',
+            },
+            models: [
+              {
+                id: 'model-1',
+                name: '主模型',
+                provider: 'openai-compatible',
+                enabled: true,
+                model: 'gpt-4.1-mini',
+                baseUrl: 'https://api.example.com',
+                apiKey: 'token',
+                deployment: '',
+                temperature: 0,
+                tools: [],
+                thinkingBudget: null,
+                maxOutputTokens: null,
+                supportsImages: true,
+                order: 0,
+                deletedAt: null,
+              },
+            ],
+            quickInputs: [
+              {
+                id: 'quick-summary',
+                name: '总结',
+                prompt: '请总结当前页面',
+                autoTrigger: true,
+                modelId: 'model-1',
+                order: 0,
+                deletedAt: null,
+              },
+            ],
+          }),
+        ),
+      },
+      pageRepository: {
+        getPage: vi
+          .fn()
+          .mockResolvedValueOnce({
+            promptTabStates: [],
+          })
+          .mockResolvedValueOnce({
+            promptTabStates: [
+              {
+                promptTabId: 'quick-summary',
+                initializedAt: 100,
+                lastAutoTriggerAt: 100,
+                autoTriggerStatus: 'running',
+                lastClearedAt: null,
+              },
+            ],
+          }),
+        setPromptTabState,
+      },
+      conversationRepository: {
+        getConversation: vi.fn().mockResolvedValue(null),
+        getLoadingState: vi.fn().mockResolvedValue(null),
+      },
+      chatDispatchService: {
+        dispatchChat: vi.fn().mockResolvedValue(session),
+      },
+      sessionRegistry: {
+        register: vi.fn(),
+      },
+      now: () => 100,
+    });
+
+    await service.handleExtractionCompleted({
+      browserTabId: 7,
+      pageUrl: 'https://example.com/article',
+      normalizedUrl: 'https://example.com/article',
+      pageContent: '页面正文',
+    });
+    await Promise.resolve();
+
+    expect(setPromptTabState).toHaveBeenNthCalledWith(2, {
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      autoTriggerStatus: 'idle',
     });
   });
 
@@ -328,6 +438,7 @@ describe('sidebar-auto-trigger-service', () => {
         messageId: 'assistant-auto-2',
         status: 'done' as const,
         errorMessage: null,
+        persisted: true,
       }),
     });
     const service = createSidebarAutoTriggerService({
@@ -417,10 +528,11 @@ describe('sidebar-auto-trigger-service', () => {
       displayText: '总结',
       images: [],
       pageContent: '页面正文',
+      rollbackOnFailure: true,
     });
   });
 
-  it('调度失败时会把自动触发状态写成 error', async () => {
+  it('调度失败时只展示错误，不持久化 auto error 状态', async () => {
     const setPromptTabState = vi.fn().mockResolvedValue(undefined);
     const service = createSidebarAutoTriggerService({
       logger: {
@@ -505,7 +617,7 @@ describe('sidebar-auto-trigger-service', () => {
       normalizedUrl: 'https://example.com/article',
       url: 'https://example.com/article',
       promptTabId: 'quick-summary',
-      autoTriggerStatus: 'error',
+      autoTriggerStatus: 'idle',
     });
   });
 });

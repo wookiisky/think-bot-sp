@@ -92,7 +92,7 @@
       - 必填：是
       - 含义：设置页与其他入口展示的模型名称。
     - `provider`
-      - 类型：`"openai-compatible" | "gemini" | "azure-openai" | "anthropic"`
+      - 类型：`"openai-compatible" | "gemini" | "azure-openai" | "anthropic" | "amazon-bedrock" | "google-vertex"`
       - 必填：是
       - 含义：Provider 类型，决定字段显隐、校验和调度适配器。
     - `enabled`
@@ -115,6 +115,18 @@
       - 类型：`string`
       - 必填：条件必填
       - 含义：Azure OpenAI 的 deployment 标识。
+    - `region`
+      - 类型：`string | undefined`
+      - 必填：条件必填
+      - 含义：Amazon Bedrock 区域；当前扩展按 Bearer Token + Region 方式接入。
+    - `project`
+      - 类型：`string | undefined`
+      - 必填：否
+      - 含义：Google Vertex project；配合 express mode 或代理时可为空。
+    - `location`
+      - 类型：`string | undefined`
+      - 必填：否
+      - 含义：Google Vertex location；配合 express mode 或代理时可为空。
     - `temperature`
       - 类型：`number`
       - 必填：否
@@ -122,11 +134,15 @@
     - `tools`
       - 类型：`string[]`
       - 必填：否
-      - 含义：模型启用的工具能力列表，例如 URL Context。
-    - `thinkingBudget`
-      - 类型：`number`
+      - 含义：模型启用的工具能力列表；当前设置页仅对 `gemini / google-vertex` 暴露 `url_context / google_search`。
+    - `reasoningEffort`
+      - 类型：`"low" | "medium" | "high" | "max" | undefined`
       - 必填：否
-      - 含义：支持思考预算的模型专属参数。
+      - 含义：统一 reasoning 强度配置；仅在支持的 provider 上透传到底层 SDK。
+    - `thinkingBudget`
+      - 类型：`number | null`
+      - 必填：否
+      - 含义：旧配置兼容字段，设置页已不再暴露，新实现不再消费。
     - `maxOutputTokens`
       - 类型：`number`
       - 必填：否
@@ -212,6 +228,7 @@
 - Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。
 - 图片输入能力必须显式写入 `supportsImages`，不能依赖模型名猜测。
 - 兼容旧配置时，如果 `supportsImages` 缺失，读取后默认补为 `false`。
+- 兼容旧配置时，如果 `reasoningEffort` 缺失，运行时按 `high` 处理。
 - 黑名单中的 `regex` 规则必须在保存和导入阶段通过正则校验；非法规则不得持久化。
 
 ## 4. 读写路径
@@ -245,6 +262,8 @@
   - `gemini`：`apiKey`、`model`
   - `azure-openai`：`baseUrl`、`apiKey`、`deployment`
   - `anthropic`：`apiKey`、`model`
+  - `amazon-bedrock`：`apiKey`、`region`、`model`
+  - `google-vertex`：`apiKey`、`model`
 
 ## 5. 生命周期与风险
 

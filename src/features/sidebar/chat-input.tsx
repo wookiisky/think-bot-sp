@@ -126,7 +126,7 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section className="border-t border-border bg-card/70 px-4 py-2.5 backdrop-blur-sm">
+    <section className="shrink-0 border-t border-border bg-card/70 px-4 py-2.5 backdrop-blur-sm">
       <div className="mb-1 flex justify-center">
         <div
           role="separator"

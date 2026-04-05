@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -8,8 +8,12 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Tooltip } from '../../components/ui/tooltip';
-import type { ExtensionConfig } from '../../domain/config/config-schema';
-import type { ModelConfig } from '../../domain/config/config-schema';
+import {
+  getDefaultModelBaseUrl,
+  getDefaultModelTools,
+  type ExtensionConfig,
+  type ModelConfig,
+} from '../../domain/config/config-schema';
 import { ModelForm } from './model-form';
 
 type LanguageModelsPanelProps = {
@@ -23,6 +27,10 @@ type LanguageModelsPanelProps = {
   onSelectModel(modelId: string | null): void;
   /** 更新完整配置。 */
   onChange(nextConfig: ExtensionConfig): void;
+  /** 测试单个模型。 */
+  onTestModel(model: ModelConfig): void;
+  /** 当前正在测试的模型 id。 */
+  testingModelId: string | null;
   /** 文案翻译函数。 */
   t(key: string): string;
 };
@@ -168,8 +176,11 @@ export const LanguageModelsPanel = ({
   disabled,
   onSelectModel,
   onChange,
+  onTestModel,
+  testingModelId,
   t,
 }: LanguageModelsPanelProps) => {
+  const [expandedModelId, setExpandedModelId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -183,18 +194,22 @@ export const LanguageModelsPanel = ({
   const visibleModels = [...config.models]
     .filter((model) => model.deletedAt === null)
     .sort((left, right) => left.order - right.order);
-  const activeModel = visibleModels.find((model) => model.id === selectedModelId) ?? null;
+  const activeModel = visibleModels.find((model) => model.id === expandedModelId) ?? null;
 
   useEffect(() => {
     if (visibleModels.length === 0 && selectedModelId !== null) {
       onSelectModel(null);
+      setExpandedModelId(null);
       return;
     }
 
     if (selectedModelId && !visibleModels.some((model) => model.id === selectedModelId)) {
       onSelectModel(visibleModels[0]?.id ?? null);
     }
-  }, [onSelectModel, selectedModelId, visibleModels]);
+    if (expandedModelId && !visibleModels.some((model) => model.id === expandedModelId)) {
+      setExpandedModelId(null);
+    }
+  }, [expandedModelId, onSelectModel, selectedModelId, visibleModels]);
 
   const nextModelId = () => `model-${config.models.length + 1}-${Date.now()}`;
 
@@ -204,11 +219,15 @@ export const LanguageModelsPanel = ({
     provider: 'openai-compatible',
     enabled: false,
     model: '',
-    baseUrl: '',
+    baseUrl: getDefaultModelBaseUrl('openai-compatible'),
     apiKey: '',
     deployment: '',
-    temperature: 0.2,
-    tools: [],
+    region: '',
+    project: '',
+    location: '',
+    temperature: 1.0,
+    tools: getDefaultModelTools('openai-compatible'),
+    reasoningEffort: 'high',
     thinkingBudget: null,
     maxOutputTokens: null,
     supportsImages: false,
@@ -243,6 +262,7 @@ export const LanguageModelsPanel = ({
     const nextModel = createModel(config.models.length);
     updateModels([...config.models, nextModel]);
     onSelectModel(nextModel.id);
+    setExpandedModelId(nextModel.id);
   };
 
   const handleCopyModel = (modelId: string) => {
@@ -261,6 +281,7 @@ export const LanguageModelsPanel = ({
     };
     updateModels([...config.models, copiedModel]);
     onSelectModel(copiedModel.id);
+    setExpandedModelId(copiedModel.id);
   };
 
   const handleDeleteModel = (modelId: string) => {
@@ -286,6 +307,7 @@ export const LanguageModelsPanel = ({
 
     updateModels(nextModels, nextDefaultModelId);
     onSelectModel(nextVisibleModels[0]?.id ?? null);
+    setExpandedModelId(null);
   };
 
   const moveModel = (modelId: string, direction: -1 | 1) => {
@@ -374,7 +396,11 @@ export const LanguageModelsPanel = ({
                       expanded={model.id === activeModel?.id}
                       disabled={disabled}
                       summary={buildModelSummary(model)}
-                      onSelect={() => onSelectModel(model.id === activeModel?.id ? null : model.id)}
+                      onSelect={() => {
+                        const nextExpandedId = model.id === activeModel?.id ? null : model.id;
+                        onSelectModel(model.id);
+                        setExpandedModelId(nextExpandedId);
+                      }}
                       onCopy={() => handleCopyModel(model.id)}
                       onMoveUp={() => moveModel(model.id, -1)}
                       onMoveDown={() => moveModel(model.id, 1)}
@@ -386,9 +412,11 @@ export const LanguageModelsPanel = ({
                         key={model.id}
                         model={model}
                         disabled={disabled}
+                        testing={testingModelId === model.id}
                         showHeader={false}
                         showEnabledField={false}
                         onChange={updateModel}
+                        onTest={() => onTestModel(model)}
                       />
                     </SortableModelCard>
                   ))}

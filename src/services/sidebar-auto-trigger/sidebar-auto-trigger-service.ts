@@ -26,6 +26,8 @@ type AutoTriggerSession = {
     status: 'done' | 'error' | 'cancelled';
     /** 错误消息。 */
     errorMessage: string | null;
+    /** 当前结果是否仍然保留在持久层。 */
+    persisted: boolean;
   }>;
 };
 
@@ -82,6 +84,7 @@ type SidebarAutoTriggerDeps = {
       displayText?: string;
       images: string[];
       pageContent: string;
+      rollbackOnFailure?: boolean;
     }) => Promise<AutoTriggerSession>;
   };
   /** 活跃会话注册表。 */
@@ -187,6 +190,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             displayText: quickInput.name,
             images: [],
             pageContent: input.pageContent,
+            rollbackOnFailure: true,
           });
           deps.sessionRegistry.register(session, {
             normalizedUrl: input.normalizedUrl,
@@ -217,7 +221,14 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
                 normalizedUrl: input.normalizedUrl,
                 url: input.pageUrl,
                 promptTabId: quickInput.id,
-                autoTriggerStatus: result.status === 'done' ? 'done' : result.status === 'error' ? 'error' : 'idle',
+                autoTriggerStatus:
+                  result.status === 'done'
+                    ? 'done'
+                    : result.status === 'error'
+                      ? result.persisted
+                        ? 'error'
+                        : 'idle'
+                      : 'idle',
               });
             })
             .catch((error: unknown) => {
@@ -235,7 +246,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             normalizedUrl: input.normalizedUrl,
             url: input.pageUrl,
             promptTabId: quickInput.id,
-            autoTriggerStatus: 'error',
+            autoTriggerStatus: 'idle',
           });
           deps.logger.error('auto_trigger.failed', {
             browserTabId: input.browserTabId,

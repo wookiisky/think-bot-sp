@@ -18,6 +18,8 @@ type ChatDispatchInput = {
   images: string[];
   /** 当前请求真正附带的页面正文。 */
   pageContent: string;
+  /** 失败时是否回滚本轮新增消息。 */
+  rollbackOnFailure?: boolean;
 };
 
 type ChatStreamEvent =
@@ -32,6 +34,12 @@ type ChatStreamEvent =
       sessionId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 主分支 id。 */
+      branchId: string;
+      /** 主分支模型 id。 */
+      modelId: string;
+      /** 主分支模型展示名。 */
+      modelLabel: string;
     }
   | {
       /** 事件类型。 */
@@ -96,6 +104,10 @@ type ChatStreamEvent =
       branchId: string;
       /** 错误消息。 */
       errorMessage: string;
+      /** 是否已回滚本轮新增消息。 */
+      rollbackOnFailure?: boolean;
+      /** 本轮用户消息 id。 */
+      userMessageId?: string;
     }
   | {
       /** 事件类型。 */
@@ -122,6 +134,8 @@ type ChatStreamEvent =
       sessionId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 主分支 id。 */
+      branchId: string;
       /** 增量文本。 */
       chunk: string;
     }
@@ -136,6 +150,8 @@ type ChatStreamEvent =
       sessionId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 主分支 id。 */
+      branchId: string;
     }
   | {
       /** 事件类型。 */
@@ -148,6 +164,8 @@ type ChatStreamEvent =
       sessionId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 主分支 id。 */
+      branchId: string;
       /** 错误消息。 */
       errorMessage: string;
     }
@@ -162,6 +180,8 @@ type ChatStreamEvent =
       sessionId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 主分支 id。 */
+      branchId: string;
     };
 
 type ChatStreamResult = {
@@ -173,12 +193,30 @@ type ChatStreamResult = {
   status: 'done' | 'error' | 'cancelled';
   /** 错误消息。 */
   errorMessage: string | null;
+  /** 当前结果是否仍然保留在持久层。 */
+  persisted: boolean;
 };
 
 type StreamTextResult = {
   /** 文本增量流。 */
   textStream: AsyncIterable<string>;
 };
+
+type ConversationHistoryMessage =
+  | {
+      /** 消息角色。 */
+      role: 'user';
+      /** 用户文本。 */
+      content: string;
+      /** 用户附带图片。 */
+      images: string[];
+    }
+  | {
+      /** 消息角色。 */
+      role: 'assistant';
+      /** 助手文本。 */
+      content: string;
+    };
 
 type StreamSession = {
   /** 本次流式会话 id。 */
@@ -187,6 +225,12 @@ type StreamSession = {
   userMessageId?: string | null;
   /** 助手消息 id。 */
   messageId: string;
+  /** 当前主分支 id。 */
+  branchId?: string;
+  /** 当前主分支模型 id。 */
+  modelId?: string;
+  /** 当前主分支模型展示名。 */
+  modelLabel?: string;
   /** 请求取消。 */
   cancel: () => void;
   /** 等待生命周期结束。 */
@@ -196,13 +240,6 @@ type StreamSession = {
 type BranchStreamSession = StreamSession & {
   /** 分支稳定 id。 */
   branchId: string;
-};
-
-type RetryUserBranchStreamSession = BranchStreamSession & {
-  /** 分支模型 id。 */
-  modelId: string;
-  /** 分支模型展示名。 */
-  modelLabel: string;
 };
 
 type ChatDispatchServiceDeps = {
@@ -249,8 +286,12 @@ type ChatDispatchServiceDeps = {
       promptTabId: string;
       /** 新消息 id。 */
       messageId: string;
+      /** 当前主分支 id。 */
+      primaryBranchId: string;
       /** 使用的模型 id。 */
       modelId: string;
+      /** 使用的模型展示名。 */
+      modelLabel: string;
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
@@ -293,6 +334,19 @@ type ChatDispatchServiceDeps = {
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
+    /** 回滚本轮新增的用户消息和助手消息。 */
+    rollbackTurnMessages: (_input: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 目标用户消息 id。 */
+      userMessageId: string;
+      /** 目标助手消息 id。 */
+      assistantMessageId: string;
+      /** 当前时间。 */
+      now: number;
+    }) => Promise<unknown>;
     /** 读取单个会话。 */
     getConversation: (_normalizedUrl: string, _promptTabId: string) => Promise<{
       messages: Array<{
@@ -307,12 +361,14 @@ type ChatDispatchServiceDeps = {
           id: string;
           modelId: string;
           modelLabel: string;
+          isPrimary: boolean;
           content: string;
           status: 'loading' | 'done' | 'error' | 'cancelled';
           errorMessage: string | null;
           createdAt: number;
           updatedAt: number;
         }>;
+        selectedBranchId: string | null;
         retryFromMessageId: string | null;
         editedAt: number | null;
         createdAt: number;
@@ -331,23 +387,23 @@ type ChatDispatchServiceDeps = {
       content: string;
       /** 新助手消息 id。 */
       newAssistantMessageId: string;
+      /** 新主分支 id。 */
+      newPrimaryBranchId: string;
       /** 重新生成时使用的模型 id。 */
       modelId: string;
+      /** 重新生成时使用的模型展示名。 */
+      modelLabel: string;
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
-    /** 重试目标助手消息，并用新的助手消息替换旧结果。 */
-    retryAssistantMessage: (_input: {
+    /** 裁剪某轮后的全部消息。 */
+    truncateMessagesAfter: (_input: {
       /** 归一化页面 URL。 */
       normalizedUrl: string;
       /** promptTab 稳定 id。 */
       promptTabId: string;
-      /** 被替换的旧助手消息 id。 */
+      /** 保留到该消息。 */
       messageId: string;
-      /** 新助手消息 id。 */
-      newAssistantMessageId: string;
-      /** 重试时使用的模型 id。 */
-      modelId: string;
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
@@ -401,6 +457,14 @@ type ChatDispatchServiceDeps = {
     }) => Promise<unknown>;
     /** 删除分支 loading。 */
     removeBranchLoadingState: (_normalizedUrl: string, _promptTabId: string, _branchId: string) => Promise<void>;
+    /** 切换当前轮的主分支。 */
+    selectAssistantBranch: (_input: {
+      normalizedUrl: string;
+      promptTabId: string;
+      messageId: string;
+      branchId: string;
+      now: number;
+    }) => Promise<unknown>;
   };
   /** port 总线。 */
   portBus: {
@@ -411,15 +475,16 @@ type ChatDispatchServiceDeps = {
   streamText: (_input: {
     /** AI SDK 模型对象。 */
     model: unknown;
+    /** 采样温度。 */
+    temperature?: number;
+    /** 单次输出 token 上限。 */
+    maxOutputTokens?: number;
+    /** provider tools。 */
+    tools?: Record<string, unknown>;
+    /** providerOptions。 */
+    providerOptions?: Record<string, unknown>;
     /** 对话消息。 */
-    messages: Array<{
-      /** 消息角色。 */
-      role: 'user';
-      /** 用户文本。 */
-      content: string;
-      /** 用户附带图片。 */
-      images: string[];
-    }>;
+    messages: ConversationHistoryMessage[];
     /** 取消信号。 */
     abortSignal: AbortSignal;
   }) => Promise<StreamTextResult>;
@@ -452,54 +517,106 @@ const getErrorMessage = (error: unknown, fallback: string): string =>
 const buildPromptContent = (input: Pick<ChatDispatchInput, 'content' | 'pageContent'>): string =>
   input.pageContent.trim() ? `页面内容：\n${input.pageContent}\n\n用户消息：${input.content}` : input.content;
 
-/** 为目标助手消息重建最小上下文，当前只复用其之前的用户消息。 */
-const buildUserMessagesBeforeAssistant = (
+/** 构造统一的 AI SDK 调用参数，避免各入口遗漏模型配置。 */
+const buildModelInvocation = (input: {
+  /** 解析后的 provider 模型。 */
+  resolvedModel: ResolvedProviderModel;
+  /** 当前用户消息。 */
+  messages: ConversationHistoryMessage[];
+  /** 取消信号。 */
+  abortSignal: AbortSignal;
+}) => ({
+  model: input.resolvedModel.sdkModel,
+  temperature: input.resolvedModel.temperature,
+  maxOutputTokens: input.resolvedModel.maxOutputTokens ?? undefined,
+  tools: input.resolvedModel.tools,
+  providerOptions: input.resolvedModel.providerOptions,
+  messages: input.messages,
+  abortSignal: input.abortSignal,
+});
+
+/** 解析当前轮被选中的主分支文本。 */
+const getSelectedAssistantContent = (
+  message: NonNullable<Awaited<ReturnType<ChatDispatchServiceDeps['conversationRepository']['getConversation']>>>['messages'][number],
+) => {
+  if (message.role !== 'assistant') {
+    return null;
+  }
+
+  const selectedBranchId = message.selectedBranchId ?? message.branches[0]?.id ?? null;
+  if (!selectedBranchId) {
+    return message.content.trim() ? message.content : null;
+  }
+  return message.branches.find((branch) => branch.id === selectedBranchId)?.content ?? message.content;
+};
+
+/** 为目标助手消息重建完整对话历史，不包含当前助手轮。 */
+const buildConversationHistoryBeforeAssistant = (
   conversation: NonNullable<Awaited<ReturnType<ChatDispatchServiceDeps['conversationRepository']['getConversation']>>>,
   targetMessageId: string,
-) => {
+) : ConversationHistoryMessage[] => {
   const targetIndex = conversation.messages.findIndex((message) => message.id === targetMessageId && message.role === 'assistant');
   if (targetIndex < 0) {
     throw new Error(`assistant message not found: ${targetMessageId}`);
   }
 
-  const messages = conversation.messages
-    .slice(0, targetIndex)
-    .filter((message): message is Extract<typeof message, { role: 'user' }> => message.role === 'user')
-    .map((message) => ({
-      role: 'user' as const,
-      content: message.content,
-      images: message.images,
-    }));
-  if (messages.length === 0) {
-    throw new Error(`user context not found for assistant message: ${targetMessageId}`);
-  }
-  return messages;
+  return toConversationHistory(conversation.messages.slice(0, targetIndex));
 };
 
-/** 为目标用户消息重建最小上下文，包含该用户消息本身。 */
-const buildUserMessagesThroughUser = (
+/** 为目标用户消息重建完整对话历史，包含该用户消息本身。 */
+const buildConversationHistoryThroughUser = (
   conversation: NonNullable<Awaited<ReturnType<ChatDispatchServiceDeps['conversationRepository']['getConversation']>>>,
   targetMessageId: string,
   replacementContent?: string,
-) => {
+) : ConversationHistoryMessage[] => {
   const targetIndex = conversation.messages.findIndex((message) => message.id === targetMessageId && message.role === 'user');
   if (targetIndex < 0) {
     throw new Error(`user message not found: ${targetMessageId}`);
   }
 
-  const messages = conversation.messages
-    .slice(0, targetIndex + 1)
-    .filter((message): message is Extract<typeof message, { role: 'user' }> => message.role === 'user')
-    .map((message) => ({
-      role: 'user' as const,
-      content: message.id === targetMessageId && replacementContent !== undefined ? replacementContent : message.content,
-      images: message.images,
-    }));
-  if (messages.length === 0) {
-    throw new Error(`user context not found for user message: ${targetMessageId}`);
-  }
-  return messages;
+  return toConversationHistory(
+    conversation.messages
+      .slice(0, targetIndex + 1)
+      .map((message) =>
+        message.id === targetMessageId && message.role === 'user' && replacementContent !== undefined
+          ? {
+              ...message,
+              content: replacementContent,
+            }
+          : message,
+      ),
+  );
 };
+
+/** 把会话消息压成发给模型的完整对话历史。 */
+const toConversationHistory = (
+  messages: NonNullable<Awaited<ReturnType<ChatDispatchServiceDeps['conversationRepository']['getConversation']>>>['messages'],
+): ConversationHistoryMessage[] =>
+  messages.flatMap((message) => {
+    if (message.role === 'user') {
+      return [
+        {
+          role: 'user' as const,
+          content: message.content,
+          images: message.images,
+        },
+      ];
+    }
+    if (message.role !== 'assistant') {
+      return [];
+    }
+
+    const selectedContent = getSelectedAssistantContent(message)?.trim() ?? '';
+    if (!selectedContent) {
+      return [];
+    }
+    return [
+      {
+        role: 'assistant' as const,
+        content: selectedContent,
+      },
+    ];
+  });
 
 /** 主聊天流调度服务。 */
 export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
@@ -523,7 +640,10 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
   return {
     /** 启动一次主聊天流。 */
     async dispatchChat(input: ChatDispatchInput): Promise<StreamSession> {
-      const model = await deps.configRepository.getModelById(input.modelId);
+      const [model, conversation] = await Promise.all([
+        deps.configRepository.getModelById(input.modelId),
+        deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId),
+      ]);
       if (!model) {
         throw new Error(`model not found: ${input.modelId}`);
       }
@@ -536,7 +656,17 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       const sessionId = createSessionId();
       const userMessageId = createMessageId();
       const assistantMessageId = createMessageId();
+      const primaryBranchId = createMessageId();
+      const streamMessages: ConversationHistoryMessage[] = [
+        ...toConversationHistory(conversation?.messages ?? []),
+        {
+          role: 'user',
+          content: buildPromptContent(input),
+          images: input.images,
+        },
+      ];
       const abortController = new AbortController();
+      const shouldRollbackOnFailure = input.rollbackOnFailure ?? false;
       const getLifecycleScope = () => ({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -564,6 +694,20 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
         }
       };
+      /** 首轮快捷输入失败后回滚本轮，避免把错误态持久化成历史。 */
+      const rollbackTurnMessagesSafely = async () => {
+        try {
+          await deps.conversationRepository.rollbackTurnMessages({
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            userMessageId,
+            assistantMessageId,
+            now: now(),
+          });
+        } catch {
+          // 回滚失败时保留原始失败态，避免把主错误覆盖成新的异常。
+        }
+      };
 
       let assistantMessageCreated = false;
       try {
@@ -580,7 +724,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
           messageId: assistantMessageId,
+          primaryBranchId,
           modelId: model.id,
+          modelLabel: resolvedModel.modelLabel,
           now: now(),
         });
         assistantMessageCreated = true;
@@ -617,19 +763,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             promptTabId: input.promptTabId,
             sessionId,
             messageId: assistantMessageId,
+            branchId: primaryBranchId,
+            modelId: model.id,
+            modelLabel: resolvedModel.modelLabel,
           });
 
-          const response = await deps.streamText({
-            model: resolvedModel.sdkModel,
-            messages: [
-              {
-                role: 'user',
-                content: buildPromptContent(input),
-                images: input.images,
-              },
-            ],
-            abortSignal: abortController.signal,
-          });
+          const response = await deps.streamText(
+            buildModelInvocation({
+              resolvedModel,
+              messages: streamMessages,
+              abortSignal: abortController.signal,
+            }),
+          );
 
           for await (const chunk of response.textStream) {
             if (!hasLoggedFirstChunk) {
@@ -654,6 +799,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               promptTabId: input.promptTabId,
               sessionId,
               messageId: assistantMessageId,
+              branchId: primaryBranchId,
               chunk,
             });
           }
@@ -670,6 +816,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             promptTabId: input.promptTabId,
             sessionId,
             messageId: assistantMessageId,
+            branchId: primaryBranchId,
           });
           logger.info('chat.stream.completed', {
             normalizedUrl: input.normalizedUrl,
@@ -682,6 +829,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             status: 'done',
             errorMessage: null,
+            persisted: true,
           };
         } catch (error) {
           const status = isAbortError(error) ? 'cancelled' : 'error';
@@ -695,6 +843,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             status,
             now: now(),
           });
+          if (shouldRollbackOnFailure && status === 'error') {
+            await rollbackTurnMessagesSafely();
+          }
 
           if (status === 'cancelled') {
             logger.info('chat.stream.cancelled', {
@@ -709,6 +860,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               promptTabId: input.promptTabId,
               sessionId,
               messageId: assistantMessageId,
+              branchId: primaryBranchId,
             });
           } else {
             logger.error('chat.stream.failed', {
@@ -724,7 +876,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               promptTabId: input.promptTabId,
               sessionId,
               messageId: assistantMessageId,
+              branchId: primaryBranchId,
               errorMessage,
+              ...(shouldRollbackOnFailure
+                ? {
+                    rollbackOnFailure: true,
+                    userMessageId,
+                  }
+                : {}),
             });
           }
 
@@ -733,6 +892,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             status,
             errorMessage,
+            persisted: !(shouldRollbackOnFailure && status === 'error'),
           };
         }
         await removeLoadingStateSafely();
@@ -743,6 +903,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         sessionId,
         userMessageId,
         messageId: assistantMessageId,
+        branchId: primaryBranchId,
+        modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
         cancel: () => {
           abortController.abort();
         },
@@ -784,10 +947,11 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`model not found: ${modelId}`);
       }
 
-      const streamMessages = buildUserMessagesThroughUser(conversation, input.messageId, input.content);
       const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       const sessionId = createSessionId();
       const assistantMessageId = createMessageId();
+      const primaryBranchId = createMessageId();
+      const streamMessages = buildConversationHistoryThroughUser(conversation, input.messageId, input.content);
       const abortController = new AbortController();
       const removeLoadingStateSafely = async () => {
         try {
@@ -803,7 +967,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         messageId: input.messageId,
         content: input.content,
         newAssistantMessageId: assistantMessageId,
+        newPrimaryBranchId: primaryBranchId,
         modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
         now: now(),
       });
       await deps.conversationRepository.saveLoadingState(
@@ -832,12 +998,17 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             promptTabId: input.promptTabId,
             sessionId,
             messageId: assistantMessageId,
+            branchId: primaryBranchId,
+            modelId: model.id,
+            modelLabel: resolvedModel.modelLabel,
           });
-          const response = await deps.streamText({
-            model: resolvedModel.sdkModel,
-            messages: streamMessages,
-            abortSignal: abortController.signal,
-          });
+          const response = await deps.streamText(
+            buildModelInvocation({
+              resolvedModel,
+              messages: streamMessages,
+              abortSignal: abortController.signal,
+            }),
+          );
 
           for await (const chunk of response.textStream) {
             if (!hasLoggedFirstChunk) {
@@ -862,6 +1033,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               promptTabId: input.promptTabId,
               sessionId,
               messageId: assistantMessageId,
+              branchId: primaryBranchId,
               chunk,
             });
           }
@@ -878,6 +1050,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             promptTabId: input.promptTabId,
             sessionId,
             messageId: assistantMessageId,
+            branchId: primaryBranchId,
           });
           logger.info('chat.stream.completed', {
             normalizedUrl: input.normalizedUrl,
@@ -890,6 +1063,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             status: 'done',
             errorMessage: null,
+            persisted: true,
           };
         } catch (error) {
           const status = isAbortError(error) ? 'cancelled' : 'error';
@@ -908,6 +1082,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             promptTabId: input.promptTabId,
             sessionId,
             messageId: assistantMessageId,
+            branchId: primaryBranchId,
             ...(status === 'error' ? { errorMessage } : {}),
           });
           if (status === 'cancelled') {
@@ -931,6 +1106,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             status,
             errorMessage,
+            persisted: true,
           };
         }
 
@@ -941,6 +1117,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       return {
         sessionId,
         messageId: assistantMessageId,
+        branchId: primaryBranchId,
+        modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
         cancel: () => {
           abortController.abort();
         },
@@ -948,7 +1127,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       };
     },
 
-    /** 重试目标用户消息，并把结果追加为既有助手消息的新分支。 */
+    /** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
     async retryUserMessage(input: {
       /** 归一化页面 URL。 */
       normalizedUrl: string;
@@ -956,7 +1135,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       promptTabId: string;
       /** 目标用户消息 id。 */
       messageId: string;
-    }): Promise<RetryUserBranchStreamSession> {
+    }): Promise<StreamSession> {
       const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
       if (!conversation) {
         throw new Error('conversation not found');
@@ -967,41 +1146,265 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`user message not found: ${input.messageId}`);
       }
 
-      const targetAssistant = conversation.messages
-        .slice(targetIndex + 1)
-        .find((message) => message.role === 'assistant') ?? null;
+      const targetAssistant = conversation.messages.slice(targetIndex + 1).find((message) => message.role === 'assistant') ?? null;
       if (!targetAssistant) {
         throw new Error(`assistant message not found after user message: ${input.messageId}`);
       }
-      if (!targetAssistant.modelId) {
+
+      const primaryBranch =
+        targetAssistant.branches.find((branch) => branch.isPrimary)
+        ?? (targetAssistant.selectedBranchId
+          ? targetAssistant.branches.find((branch) => branch.id === targetAssistant.selectedBranchId)
+          : targetAssistant.branches[0])
+        ?? null;
+      const modelId = primaryBranch?.modelId ?? targetAssistant.modelId ?? null;
+      if (!modelId) {
         throw new Error(`assistant model not found: ${targetAssistant.id}`);
       }
 
-      const model = await deps.configRepository.getModelById(targetAssistant.modelId);
+      const model = await deps.configRepository.getModelById(modelId);
       if (!model) {
-        throw new Error(`model not found: ${targetAssistant.modelId}`);
+        throw new Error(`model not found: ${modelId}`);
       }
 
-      const streamMessages = buildUserMessagesThroughUser(conversation, input.messageId);
+      const streamMessages = buildConversationHistoryThroughUser(conversation, input.messageId);
       const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
-      const branchId = createMessageId();
       const sessionId = createSessionId();
+      const assistantMessageId = createMessageId();
+      const primaryBranchId = createMessageId();
       const abortController = new AbortController();
-      await deps.conversationRepository.appendAssistantBranch({
+      const removeLoadingStateSafely = async () => {
+        try {
+          await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
+        } catch {
+          // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
+        }
+      };
+
+      await deps.conversationRepository.truncateMessagesAfter({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
-        messageId: targetAssistant.id,
-        branchId,
+        messageId: input.messageId,
+        now: now(),
+      });
+      await deps.conversationRepository.appendAssistantMessage({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: assistantMessageId,
+        primaryBranchId,
         modelId: model.id,
         modelLabel: resolvedModel.modelLabel,
+        now: now(),
+      });
+      await deps.conversationRepository.saveLoadingState(
+        createLoadingState({
+          normalizedUrl: input.normalizedUrl,
+          promptTabId: input.promptTabId,
+          sessionId,
+          now: now(),
+        }),
+      );
+
+      const done = (async (): Promise<ChatStreamResult> => {
+        let result: ChatStreamResult;
+        let hasLoggedFirstChunk = false;
+        try {
+          logger.info('chat.stream.started', {
+            normalizedUrl: input.normalizedUrl,
+            promptTab: input.promptTabId,
+            sessionId,
+            messageId: assistantMessageId,
+            provider: resolvedModel.providerId,
+          });
+          publishToPromptTabSafely({
+            type: 'CHAT_STREAM_STARTED',
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            sessionId,
+            messageId: assistantMessageId,
+            branchId: primaryBranchId,
+            modelId: model.id,
+            modelLabel: resolvedModel.modelLabel,
+          });
+          const response = await deps.streamText(
+            buildModelInvocation({
+              resolvedModel,
+              messages: streamMessages,
+              abortSignal: abortController.signal,
+            }),
+          );
+
+          for await (const chunk of response.textStream) {
+            if (!hasLoggedFirstChunk) {
+              hasLoggedFirstChunk = true;
+              logger.info('chat.stream.first_chunk', {
+                normalizedUrl: input.normalizedUrl,
+                promptTab: input.promptTabId,
+                sessionId,
+                messageId: assistantMessageId,
+              });
+            }
+            await deps.conversationRepository.appendAssistantChunk({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              messageId: assistantMessageId,
+              chunk,
+              now: now(),
+            });
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_CHUNK',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranchId,
+              chunk,
+            });
+          }
+
+          await deps.conversationRepository.finishAssistantMessage({
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            messageId: assistantMessageId,
+            now: now(),
+          });
+          publishToPromptTabSafely({
+            type: 'CHAT_STREAM_FINISHED',
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            sessionId,
+            messageId: assistantMessageId,
+            branchId: primaryBranchId,
+          });
+          logger.info('chat.stream.completed', {
+            normalizedUrl: input.normalizedUrl,
+            promptTab: input.promptTabId,
+            sessionId,
+            messageId: assistantMessageId,
+          });
+          result = {
+            sessionId,
+            messageId: assistantMessageId,
+            status: 'done',
+            errorMessage: null,
+            persisted: true,
+          };
+        } catch (error) {
+          const status = isAbortError(error) ? 'cancelled' : 'error';
+          const errorMessage = status === 'cancelled' ? 'stream cancelled' : getErrorMessage(error, 'chat dispatch failed');
+          await deps.conversationRepository.failAssistantMessage({
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            messageId: assistantMessageId,
+            errorMessage,
+            status,
+            now: now(),
+          });
+          publishToPromptTabSafely({
+            type: status === 'cancelled' ? 'CHAT_STREAM_CANCELLED' : 'CHAT_STREAM_FAILED',
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            sessionId,
+            messageId: assistantMessageId,
+            branchId: primaryBranchId,
+            ...(status === 'error' ? { errorMessage } : {}),
+          });
+          if (status === 'cancelled') {
+            logger.info('chat.stream.cancelled', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+            });
+          } else {
+            logger.error('chat.stream.failed', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              reason: errorMessage,
+            });
+          }
+          result = {
+            sessionId,
+            messageId: assistantMessageId,
+            status,
+            errorMessage,
+            persisted: true,
+          };
+        }
+
+        await removeLoadingStateSafely();
+        return result;
+      })();
+
+      return {
+        sessionId,
+        messageId: assistantMessageId,
+        branchId: primaryBranchId,
+        modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
+        cancel: () => {
+          abortController.abort();
+        },
+        done,
+      };
+    },
+
+    /** 重试目标助手分支，裁剪其后的结果并仅重跑该分支。 */
+    async retryMessage(input: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 助手消息 id。 */
+      messageId: string;
+      /** 分支 id。 */
+      branchId: string;
+    }): Promise<BranchStreamSession> {
+      const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
+      if (!conversation) {
+        throw new Error('conversation not found');
+      }
+
+      const targetMessage = conversation.messages.find((message) => message.id === input.messageId && message.role === 'assistant') ?? null;
+      if (!targetMessage) {
+        throw new Error(`assistant message not found: ${input.messageId}`);
+      }
+
+      const targetBranch = targetMessage.branches.find((branch) => branch.id === input.branchId) ?? null;
+      if (!targetBranch) {
+        throw new Error(`assistant branch not found: ${input.branchId}`);
+      }
+
+      const model = await deps.configRepository.getModelById(targetBranch.modelId);
+      if (!model) {
+        throw new Error(`model not found: ${targetBranch.modelId}`);
+      }
+
+      const streamMessages = buildConversationHistoryBeforeAssistant(conversation, input.messageId);
+      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
+      const sessionId = createSessionId();
+      const abortController = new AbortController();
+      await deps.conversationRepository.truncateMessagesAfter({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: input.messageId,
+        now: now(),
+      });
+      await deps.conversationRepository.restartAssistantBranch({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: input.messageId,
+        branchId: input.branchId,
         now: now(),
       });
       await deps.conversationRepository.upsertBranchLoadingState({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         sessionId,
-        messageId: targetAssistant.id,
-        branchId,
+        messageId: input.messageId,
+        branchId: input.branchId,
         modelId: model.id,
         status: 'loading',
         now: now(),
@@ -1015,8 +1418,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTab: input.promptTabId,
             sessionId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
             provider: resolvedModel.providerId,
             modelId: model.id,
           });
@@ -1025,16 +1428,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             sessionId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
             modelId: model.id,
             modelLabel: resolvedModel.modelLabel,
           });
-          const response = await deps.streamText({
-            model: resolvedModel.sdkModel,
-            messages: streamMessages,
-            abortSignal: abortController.signal,
-          });
+          const response = await deps.streamText(
+            buildModelInvocation({
+              resolvedModel,
+              messages: streamMessages,
+              abortSignal: abortController.signal,
+            }),
+          );
 
           for await (const chunk of response.textStream) {
             if (!hasLoggedFirstChunk) {
@@ -1043,15 +1448,15 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
                 normalizedUrl: input.normalizedUrl,
                 promptTab: input.promptTabId,
                 sessionId,
-                messageId: targetAssistant.id,
-                branchId,
+                messageId: input.messageId,
+                branchId: input.branchId,
               });
             }
             await deps.conversationRepository.appendAssistantBranchChunk({
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
               chunk,
               now: now(),
             });
@@ -1060,8 +1465,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
               chunk,
             });
           }
@@ -1069,8 +1474,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           await deps.conversationRepository.finishAssistantBranch({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
             now: now(),
           });
           publishToPromptTabSafely({
@@ -1078,21 +1483,22 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             sessionId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
           });
           logger.info('branch.stream.completed', {
             normalizedUrl: input.normalizedUrl,
             promptTab: input.promptTabId,
             sessionId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
           });
           result = {
             sessionId,
-            messageId: targetAssistant.id,
+            messageId: input.messageId,
             status: 'done',
             errorMessage: null,
+            persisted: true,
           };
         } catch (error) {
           const status = isAbortError(error) ? 'cancelled' : 'error';
@@ -1100,8 +1506,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           await deps.conversationRepository.failAssistantBranch({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
-            messageId: targetAssistant.id,
-            branchId,
+            messageId: input.messageId,
+            branchId: input.branchId,
             errorMessage,
             status,
             now: now(),
@@ -1111,24 +1517,24 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               normalizedUrl: input.normalizedUrl,
               promptTab: input.promptTabId,
               sessionId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
             });
             publishToPromptTabSafely({
               type: 'BRANCH_STREAM_CANCELLED',
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
             });
           } else {
             logger.error('branch.stream.failed', {
               normalizedUrl: input.normalizedUrl,
               promptTab: input.promptTabId,
               sessionId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
               reason: errorMessage,
             });
             publishToPromptTabSafely({
@@ -1136,219 +1542,28 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId,
-              messageId: targetAssistant.id,
-              branchId,
+              messageId: input.messageId,
+              branchId: input.branchId,
               errorMessage,
             });
           }
           result = {
             sessionId,
-            messageId: targetAssistant.id,
+            messageId: input.messageId,
             status,
             errorMessage,
+            persisted: true,
           };
         }
 
-        await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, branchId);
+        await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, input.branchId);
         return result;
       })();
 
       return {
-        branchId,
-        modelId: model.id,
-        modelLabel: resolvedModel.modelLabel,
+        branchId: input.branchId,
         sessionId,
-        messageId: targetAssistant.id,
-        cancel: () => {
-          abortController.abort();
-        },
-        done,
-      };
-    },
-
-    /** 重试目标助手消息，并用新的助手消息替换旧结果。 */
-    async retryMessage(input: {
-      /** 归一化页面 URL。 */
-      normalizedUrl: string;
-      /** promptTab 稳定 id。 */
-      promptTabId: string;
-      /** 被替换的旧助手消息 id。 */
-      messageId: string;
-    }): Promise<StreamSession> {
-      const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
-      if (!conversation) {
-        throw new Error('conversation not found');
-      }
-
-      const targetMessage = conversation.messages.find((message) => message.id === input.messageId && message.role === 'assistant') ?? null;
-      if (!targetMessage) {
-        throw new Error(`assistant message not found: ${input.messageId}`);
-      }
-      if (!targetMessage.modelId) {
-        throw new Error(`assistant model not found: ${input.messageId}`);
-      }
-
-      const model = await deps.configRepository.getModelById(targetMessage.modelId);
-      if (!model) {
-        throw new Error(`model not found: ${targetMessage.modelId}`);
-      }
-
-      const streamMessages = buildUserMessagesBeforeAssistant(conversation, input.messageId);
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
-      const sessionId = createSessionId();
-      const assistantMessageId = createMessageId();
-      const abortController = new AbortController();
-      const removeLoadingStateSafely = async () => {
-        try {
-          await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
-        } catch {
-          // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
-        }
-      };
-
-      await deps.conversationRepository.retryAssistantMessage({
-        normalizedUrl: input.normalizedUrl,
-        promptTabId: input.promptTabId,
         messageId: input.messageId,
-        newAssistantMessageId: assistantMessageId,
-        modelId: model.id,
-        now: now(),
-      });
-      await deps.conversationRepository.saveLoadingState(
-        createLoadingState({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          now: now(),
-        }),
-      );
-
-      const done = (async (): Promise<ChatStreamResult> => {
-        let result: ChatStreamResult;
-        let hasLoggedFirstChunk = false;
-        try {
-          logger.info('chat.stream.started', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            provider: resolvedModel.providerId,
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_STARTED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          const response = await deps.streamText({
-            model: resolvedModel.sdkModel,
-            messages: streamMessages,
-            abortSignal: abortController.signal,
-          });
-
-          for await (const chunk of response.textStream) {
-            if (!hasLoggedFirstChunk) {
-              hasLoggedFirstChunk = true;
-              logger.info('chat.stream.first_chunk', {
-                normalizedUrl: input.normalizedUrl,
-                promptTab: input.promptTabId,
-                sessionId,
-                messageId: assistantMessageId,
-              });
-            }
-            await deps.conversationRepository.appendAssistantChunk({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              messageId: assistantMessageId,
-              chunk,
-              now: now(),
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CHUNK',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              chunk,
-            });
-          }
-
-          await deps.conversationRepository.finishAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            now: now(),
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_FINISHED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          logger.info('chat.stream.completed', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status: 'done',
-            errorMessage: null,
-          };
-        } catch (error) {
-          const status = isAbortError(error) ? 'cancelled' : 'error';
-          const errorMessage = status === 'cancelled' ? 'stream cancelled' : getErrorMessage(error, 'chat dispatch failed');
-          await deps.conversationRepository.failAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            errorMessage,
-            status,
-            now: now(),
-          });
-          publishToPromptTabSafely({
-            type: status === 'cancelled' ? 'CHAT_STREAM_CANCELLED' : 'CHAT_STREAM_FAILED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            ...(status === 'error' ? { errorMessage } : {}),
-          });
-          if (status === 'cancelled') {
-            logger.info('chat.stream.cancelled', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-            });
-          } else {
-            logger.error('chat.stream.failed', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              reason: errorMessage,
-            });
-          }
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status,
-            errorMessage,
-          };
-        }
-
-        await removeLoadingStateSafely();
-        return result;
-      })();
-
-      return {
-        sessionId,
-        messageId: assistantMessageId,
         cancel: () => {
           abortController.abort();
         },
@@ -1380,14 +1595,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`assistant message not found: ${input.messageId}`);
       }
 
-      const branchModelIds = resolvePromptTabBranchModelIds(config, input.promptTabId).filter(
-        (modelId) => modelId !== targetMessage.modelId,
-      );
+      const existingBranchModelIds = new Set(targetMessage.branches.map((branch) => branch.modelId));
+      const branchModelIds = resolvePromptTabBranchModelIds(config, input.promptTabId).filter((modelId) => !existingBranchModelIds.has(modelId));
       if (branchModelIds.length === 0) {
         throw new Error('no branch models configured');
       }
 
-      const branchMessages = buildUserMessagesBeforeAssistant(conversation, input.messageId);
+      const branchMessages = buildConversationHistoryBeforeAssistant(conversation, input.messageId);
 
       return Promise.all(
         branchModelIds.map(async (modelId) => {
@@ -1443,11 +1657,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
                 modelId,
                 modelLabel: resolvedModel.modelLabel,
               });
-              const response = await deps.streamText({
-                model: resolvedModel.sdkModel,
-                messages: branchMessages,
-                abortSignal: abortController.signal,
-              });
+              const response = await deps.streamText(
+                buildModelInvocation({
+                  resolvedModel,
+                  messages: branchMessages,
+                  abortSignal: abortController.signal,
+                }),
+              );
 
               for await (const chunk of response.textStream) {
                 if (!hasLoggedFirstChunk) {
@@ -1506,6 +1722,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
                 messageId: input.messageId,
                 status: 'done',
                 errorMessage: null,
+                persisted: true,
               };
             } catch (error) {
               const status = isAbortError(error) ? 'cancelled' : 'error';
@@ -1559,6 +1776,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
                 messageId: input.messageId,
                 status,
                 errorMessage,
+                persisted: true,
               };
             }
 

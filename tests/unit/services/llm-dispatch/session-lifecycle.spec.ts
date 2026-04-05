@@ -100,7 +100,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       }),
       createSessionId: () => 'session-1',
       createMessageId: (() => {
-        const ids = ['user-1', 'assistant-1'];
+        const ids = ['user-1', 'assistant-1', 'branch-1'];
         return () => ids.shift() ?? 'exhausted';
       })(),
       now: (() => {
@@ -171,6 +171,9 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-1',
         messageId: 'assistant-1',
+        branchId: 'branch-1',
+        modelId: 'model-1',
+        modelLabel: '主模型',
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -178,6 +181,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-1',
         messageId: 'assistant-1',
+        branchId: 'branch-1',
         chunk: '第一段',
       },
       {
@@ -186,6 +190,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-1',
         messageId: 'assistant-1',
+        branchId: 'branch-1',
         chunk: '第二段',
       },
       {
@@ -194,6 +199,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-1',
         messageId: 'assistant-1',
+        branchId: 'branch-1',
       },
     ]);
   });
@@ -339,7 +345,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       }),
       createSessionId: () => 'session-2',
       createMessageId: (() => {
-        const ids = ['user-2', 'assistant-2'];
+        const ids = ['user-2', 'assistant-2', 'branch-2'];
         return () => ids.shift() ?? 'exhausted';
       })(),
       now: (() => {
@@ -400,6 +406,9 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-2',
         messageId: 'assistant-2',
+        branchId: 'branch-2',
+        modelId: 'model-1',
+        modelLabel: '主模型',
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -407,6 +416,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-2',
         messageId: 'assistant-2',
+        branchId: 'branch-2',
         chunk: '第一段',
       },
       {
@@ -415,6 +425,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-2',
         messageId: 'assistant-2',
+        branchId: 'branch-2',
       },
     ]);
   });
@@ -466,7 +477,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       }),
       createSessionId: () => 'session-3',
       createMessageId: (() => {
-        const ids = ['user-3', 'assistant-3'];
+        const ids = ['user-3', 'assistant-3', 'branch-3'];
         return () => ids.shift() ?? 'exhausted';
       })(),
       now: (() => {
@@ -489,6 +500,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       messageId: 'assistant-3',
       status: 'error',
       errorMessage: 'provider timeout',
+      persisted: true,
     });
     await expect(conversationRepository.getLoadingState('https://example.com/article', 'chat')).resolves.toBeNull();
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
@@ -519,6 +531,9 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-3',
         messageId: 'assistant-3',
+        branchId: 'branch-3',
+        modelId: 'model-1',
+        modelLabel: '主模型',
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -526,6 +541,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-3',
         messageId: 'assistant-3',
+        branchId: 'branch-3',
         chunk: '第一段',
       },
       {
@@ -534,7 +550,116 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-3',
         messageId: 'assistant-3',
+        branchId: 'branch-3',
         errorMessage: 'provider timeout',
+      },
+    ]);
+  });
+
+  it('首轮快捷输入失败且要求回滚时，不保留用户消息和助手错误态', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    const publishToPromptTab = vi.fn();
+    const service = createChatDispatchService({
+      configRepository: {
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText: vi.fn().mockResolvedValue({
+        textStream: (async function* () {
+          yield '第一段';
+          throw new Error('provider timeout');
+        })(),
+      }),
+      createSessionId: () => 'session-rollback',
+      createMessageId: (() => {
+        const ids = ['user-rollback', 'assistant-rollback', 'branch-rollback'];
+        return () => ids.shift() ?? 'exhausted';
+      })(),
+      now: (() => {
+        const values = [40, 41, 42, 43, 44];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.dispatchChat({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      modelId: 'model-1',
+      content: '请总结当前页面',
+      displayText: '总结',
+      images: [],
+      pageContent: '页面正文',
+      rollbackOnFailure: true,
+    });
+
+    await expect(session.done).resolves.toEqual({
+      sessionId: 'session-rollback',
+      messageId: 'assistant-rollback',
+      status: 'error',
+      errorMessage: 'provider timeout',
+      persisted: false,
+    });
+    await expect(conversationRepository.getLoadingState('https://example.com/article', 'quick-summary')).resolves.toBeNull();
+    await expect(conversationRepository.getConversation('https://example.com/article', 'quick-summary')).resolves.toBeNull();
+    expect(collectPublishedEvents(publishToPromptTab)).toEqual([
+      {
+        type: 'CHAT_STREAM_STARTED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        sessionId: 'session-rollback',
+        messageId: 'assistant-rollback',
+        branchId: 'branch-rollback',
+        modelId: 'model-1',
+        modelLabel: '主模型',
+      },
+      {
+        type: 'CHAT_STREAM_CHUNK',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        sessionId: 'session-rollback',
+        messageId: 'assistant-rollback',
+        branchId: 'branch-rollback',
+        chunk: '第一段',
+      },
+      {
+        type: 'CHAT_STREAM_FAILED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        sessionId: 'session-rollback',
+        messageId: 'assistant-rollback',
+        branchId: 'branch-rollback',
+        errorMessage: 'provider timeout',
+        rollbackOnFailure: true,
+        userMessageId: 'user-rollback',
       },
     ]);
   });
@@ -748,7 +873,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       }),
       createSessionId: () => 'session-6',
       createMessageId: (() => {
-        const ids = ['user-6', 'assistant-6'];
+        const ids = ['user-6', 'assistant-6', 'branch-6'];
         return () => ids.shift() ?? 'exhausted';
       })(),
       now: (() => {
@@ -798,6 +923,9 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-6',
         messageId: 'assistant-6',
+        branchId: 'branch-6',
+        modelId: 'model-6',
+        modelLabel: '主模型',
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -805,6 +933,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-6',
         messageId: 'assistant-6',
+        branchId: 'branch-6',
         chunk: '收尾成功',
       },
       {
@@ -813,6 +942,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-6',
         messageId: 'assistant-6',
+        branchId: 'branch-6',
       },
     ]);
   });
@@ -943,7 +1073,20 @@ describe('chat-dispatch-service session lifecycle', () => {
           status: 'done',
           errorMessage: null,
           modelId: 'model-main',
-          branches: [],
+          branches: [
+            {
+              id: 'assistant-1:primary',
+              modelId: 'model-main',
+              modelLabel: '主模型',
+              isPrimary: true,
+              content: '主回答',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          selectedBranchId: 'assistant-1:primary',
           retryFromMessageId: null,
           editedAt: null,
           createdAt: 2,
@@ -1117,12 +1260,14 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-1',
         status: 'done',
         errorMessage: null,
+        persisted: true,
       },
       {
         sessionId: 'branch-session-b',
         messageId: 'assistant-1',
         status: 'error',
         errorMessage: 'branch provider timeout',
+        persisted: true,
       },
     ]);
     await expect(conversationRepository.getLoadingState('https://example.com/article', 'quick-summary')).resolves.toBeNull();
@@ -1131,7 +1276,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         messages: expect.arrayContaining([
           expect.objectContaining({
             id: 'assistant-1',
-            branches: [
+            branches: expect.arrayContaining([
               expect.objectContaining({
                 id: 'branch-a',
                 modelId: 'model-branch-a',
@@ -1148,7 +1293,7 @@ describe('chat-dispatch-service session lifecycle', () => {
                 status: 'error',
                 errorMessage: 'branch provider timeout',
               }),
-            ],
+            ]),
           }),
         ]),
       }),
@@ -1240,7 +1385,20 @@ describe('chat-dispatch-service session lifecycle', () => {
           status: 'done',
           errorMessage: null,
           modelId: 'model-1',
-          branches: [],
+          branches: [
+            {
+              id: 'assistant-1:primary',
+              modelId: 'model-1',
+              modelLabel: '主模型',
+              isPrimary: true,
+              content: '旧回答',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          selectedBranchId: 'assistant-1:primary',
           retryFromMessageId: null,
           editedAt: null,
           createdAt: 2,
@@ -1323,7 +1481,10 @@ describe('chat-dispatch-service session lifecycle', () => {
       },
       streamText,
       createSessionId: () => 'session-edit',
-      createMessageId: () => 'assistant-edit',
+      createMessageId: (() => {
+        const ids = ['assistant-edit', 'assistant-edit:primary'];
+        return () => ids.shift() ?? 'exhausted-edit';
+      })(),
       now: (() => {
         const values = [10, 11, 12, 13, 14];
         return () => values.shift() ?? 99;
@@ -1375,6 +1536,9 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-edit',
         messageId: 'assistant-edit',
+        branchId: 'assistant-edit:primary',
+        modelId: 'model-1',
+        modelLabel: '主模型',
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -1382,6 +1546,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-edit',
         messageId: 'assistant-edit',
+        branchId: 'assistant-edit:primary',
         chunk: '编辑后回答',
       },
       {
@@ -1390,6 +1555,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         promptTabId: 'chat',
         sessionId: 'session-edit',
         messageId: 'assistant-edit',
+        branchId: 'assistant-edit:primary',
       },
     ]);
   });
@@ -1424,7 +1590,20 @@ describe('chat-dispatch-service session lifecycle', () => {
           status: 'error',
           errorMessage: '旧错误',
           modelId: 'model-1',
-          branches: [],
+          branches: [
+            {
+              id: 'assistant-1:primary',
+              modelId: 'model-1',
+              modelLabel: '主模型',
+              isPrimary: true,
+              content: '旧回答',
+              status: 'error',
+              errorMessage: '旧错误',
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          selectedBranchId: 'assistant-1:primary',
           retryFromMessageId: null,
           editedAt: null,
           createdAt: 2,
@@ -1506,7 +1685,10 @@ describe('chat-dispatch-service session lifecycle', () => {
       },
       streamText,
       createSessionId: () => 'session-retry',
-      createMessageId: () => 'assistant-retry',
+      createMessageId: (() => {
+        const ids = ['assistant-retry', 'branch-retry'];
+        return () => ids.shift() ?? 'exhausted-retry';
+      })(),
       now: (() => {
         const values = [20, 21, 22, 23, 24];
         return () => values.shift() ?? 99;
@@ -1517,11 +1699,12 @@ describe('chat-dispatch-service session lifecycle', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      branchId: 'assistant-1:primary',
     });
 
     await expect(session.done).resolves.toMatchObject({
       sessionId: 'session-retry',
-      messageId: 'assistant-retry',
+      messageId: 'assistant-1',
       status: 'done',
     });
     expect(streamText).toHaveBeenCalledWith({
@@ -1542,16 +1725,15 @@ describe('chat-dispatch-service session lifecycle', () => {
           content: '问题',
         }),
         expect.objectContaining({
-          id: 'assistant-retry',
+          id: 'assistant-1',
           content: '重试后回答',
-          retryFromMessageId: 'assistant-1',
           status: 'done',
         }),
       ],
     });
   });
 
-  it('retryUserMessage 会把结果追加为原助手消息的新分支，并保留主回答', async () => {
+  it('retryUserMessage 会裁剪后续结果，并重新生成当前轮助手消息', async () => {
     const storage = createFakeStorageArea();
     const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
     await conversationRepository.saveConversation({
@@ -1581,7 +1763,20 @@ describe('chat-dispatch-service session lifecycle', () => {
           status: 'done',
           errorMessage: null,
           modelId: 'model-1',
-          branches: [],
+          branches: [
+            {
+              id: 'assistant-1:primary',
+              modelId: 'model-1',
+              modelLabel: '主模型',
+              isPrimary: true,
+              content: '原回答',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 2,
+              updatedAt: 2,
+            },
+          ],
+          selectedBranchId: 'assistant-1:primary',
           retryFromMessageId: null,
           editedAt: null,
           createdAt: 2,
@@ -1664,7 +1859,10 @@ describe('chat-dispatch-service session lifecycle', () => {
       },
       streamText,
       createSessionId: () => 'session-user-retry',
-      createMessageId: () => 'branch-user-retry',
+      createMessageId: (() => {
+        const ids = ['assistant-user-retry', 'branch-user-retry'];
+        return () => ids.shift() ?? 'exhausted-user-retry';
+      })(),
       now: (() => {
         const values = [30, 31, 32, 33, 34];
         return () => values.shift() ?? 99;
@@ -1678,10 +1876,10 @@ describe('chat-dispatch-service session lifecycle', () => {
     });
 
     expect(session.branchId).toBe('branch-user-retry');
-    expect(session.messageId).toBe('assistant-1');
+    expect(session.messageId).toBe('assistant-user-retry');
     await expect(session.done).resolves.toMatchObject({
       sessionId: 'session-user-retry',
-      messageId: 'assistant-1',
+      messageId: 'assistant-user-retry',
       status: 'done',
     });
     expect(streamText).toHaveBeenCalledWith({
@@ -1698,9 +1896,9 @@ describe('chat-dispatch-service session lifecycle', () => {
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toSatisfy((conversation) =>
       conversation?.messages.some(
         (message) =>
-          message.id === 'assistant-1' &&
+          message.id === 'assistant-user-retry' &&
           message.role === 'assistant' &&
-          message.content === '原回答' &&
+          message.content === '分支重试回答' &&
           message.branches.some(
             (branch) => branch.id === 'branch-user-retry' && branch.content === '分支重试回答' && branch.status === 'done',
           ),
@@ -1708,30 +1906,30 @@ describe('chat-dispatch-service session lifecycle', () => {
     );
     expect(collectPublishedEvents(publishToPromptTab)).toEqual([
       {
-        type: 'BRANCH_STREAM_STARTED',
+        type: 'CHAT_STREAM_STARTED',
         normalizedUrl: 'https://example.com/article',
         promptTabId: 'chat',
         sessionId: 'session-user-retry',
-        messageId: 'assistant-1',
+        messageId: 'assistant-user-retry',
         branchId: 'branch-user-retry',
         modelId: 'model-1',
         modelLabel: '主模型',
       },
       {
-        type: 'BRANCH_STREAM_CHUNK',
+        type: 'CHAT_STREAM_CHUNK',
         normalizedUrl: 'https://example.com/article',
         promptTabId: 'chat',
         sessionId: 'session-user-retry',
-        messageId: 'assistant-1',
+        messageId: 'assistant-user-retry',
         branchId: 'branch-user-retry',
         chunk: '分支重试回答',
       },
       {
-        type: 'BRANCH_STREAM_FINISHED',
+        type: 'CHAT_STREAM_FINISHED',
         normalizedUrl: 'https://example.com/article',
         promptTabId: 'chat',
         sessionId: 'session-user-retry',
-        messageId: 'assistant-1',
+        messageId: 'assistant-user-retry',
         branchId: 'branch-user-retry',
       },
     ]);

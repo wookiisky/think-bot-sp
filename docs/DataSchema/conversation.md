@@ -4,7 +4,7 @@
 
 - 名称：`ConversationRecord`
 - 存储类型：`chrome.storage.local`
-- 业务意义：保存页面下各 `promptTab` 的聊天历史、主回答和分支回答。
+- 业务意义：保存页面下各 `promptTab` 的聊天历史；每条助手消息统一由“分支结果集合 + 当前选中主分支”组成。
 - 所属模块：侧边栏、对话管理页、模型调度、导出。
 - 上下游依赖：
   - 上游：LLM Dispatch、用户输入。
@@ -45,6 +45,7 @@
 - `errorMessage`
 - `modelId`
 - `branches`
+- `selectedBranchId`
 - `retryFromMessageId`
 - `editedAt`
 - `createdAt`
@@ -55,6 +56,7 @@
 - `id`
 - `modelId`
 - `modelLabel`
+- `isPrimary`
 - `content`
 - `status`
 - `errorMessage`
@@ -66,6 +68,8 @@
 - 主 key：`conversation:{normalizedUrl}:{promptTabId}`
 - 同一页面默认聊天与快捷输入 `promptTab` 必须分开存储。
 - 分支挂在所属助手消息下，不能独立脱离消息主链。
+- 助手消息存在分支时，`selectedBranchId` 必须指向当前消息内的某个分支。
+- 助手消息顶层 `content/status/errorMessage/modelId` 只是当前选中主分支的镜像，不再单独代表另一份主回答。
 - 错误分支允许持久化错误结果，但不保留无意义空 loading 记录。
 - 阶段 4 的主回答消息状态机固定为 `loading -> done | error | cancelled`，进入终态后不能继续追加 chunk 或覆盖终态结果。
 - 同一 `promptTab` 下若存在多分支并发写入，仓储层必须串行化写操作，避免分支互相覆盖。
@@ -83,9 +87,10 @@
   - 批量恢复页面下多个 `promptTab` 会话。
 - 典型更新：
 - 追加用户消息。
-- 先创建助手占位消息，再按 chunk 增量写入主回答。
-- 将助手消息从 `loading` 收敛到 `done`、`error` 或 `cancelled`。
+- 先创建带首个主分支的助手占位消息，再按 chunk 增量写入当前选中分支。
+- 将当前选中分支和助手消息镜像一起从 `loading` 收敛到 `done`、`error` 或 `cancelled`。
 - 编辑用户消息并裁剪其后的依赖回答。
+- 切换助手消息的 `selectedBranchId`。
 - 更新分支状态。
 - 继续为既有回答新增分支。
 - 删除目标分支。
@@ -99,7 +104,8 @@
 - 若 setup 在助手占位消息创建后失败，允许保留用户消息，但助手消息必须立刻收敛为 `error`，不能永久停在 `loading`。
 - 编辑用户消息时，目标消息写入 `editedAt`，并且该消息之后的助手结果和分支结果必须整体裁剪后再重新发起请求。
 - 自动触发的快捷输入用户消息允许额外保存 `displayContent`，用于 UI 展示快捷输入名称；编辑后必须回退为真实文本展示。
-- 重试助手消息时，目标助手消息及其后续结果必须被整体替换，新助手消息记录 `retryFromMessageId`。
+- 用户消息重试时，目标用户消息后的全部结果必须被裁剪，并重建该轮新的助手消息。
+- 助手分支重试时，不再替换整条助手消息；而是裁剪该轮之后的消息，并只重跑目标分支。
 - 页面删除或硬删除时一并删除。
 - 风险：
   - 分支写入覆盖主消息。
@@ -111,7 +117,8 @@
 - `Chat` 与快捷输入隔离测试。
 - 分支并发写入测试。
 - 用户消息编辑后裁剪与重发测试。
-- 重试替换旧助手消息测试。
+- 主分支切换与镜像同步测试。
+- 分支级重试与历史裁剪测试。
 - 继续新增分支与删除目标分支测试。
 - 清空当前 `promptTab` 不影响其他 `promptTab` 测试。
 - 导出结构正确性测试。

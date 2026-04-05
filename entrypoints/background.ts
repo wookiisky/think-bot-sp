@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 
-import { streamText } from 'ai';
+import { generateText, streamText } from 'ai';
 import { defineBackground } from 'wxt/utils/define-background';
 import { normalizePageUrl } from '../src/domain/page/page-schema';
 import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapter';
@@ -103,6 +103,24 @@ export default defineBackground(() => {
     pageRepository,
     recentErrorRepository,
     syncService,
+    modelTestService: {
+      async testModel(model) {
+        const resolvedModel = resolveProviderModel(model);
+        const response = await generateText({
+          model: resolvedModel.sdkModel,
+          prompt: 'hi',
+          temperature: resolvedModel.temperature,
+          maxOutputTokens: resolvedModel.maxOutputTokens ?? undefined,
+          tools: resolvedModel.tools,
+          providerOptions: resolvedModel.providerOptions,
+        });
+
+        return {
+          provider: resolvedModel.providerId,
+          text: response.text,
+        };
+      },
+    },
   });
   /** 记录最近一次错误，失败时只记日志，不影响原始响应。 */
   const recordRecentError = (input: {

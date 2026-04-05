@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   exportConfig: vi.fn(),
   importConfig: vi.fn(),
   testSyncConnection: vi.fn(),
+  testModel: vi.fn(),
   syncNow: vi.fn(),
 }));
 
@@ -29,6 +30,7 @@ vi.mock('../../../src/features/settings/settings-api', () => ({
     exportConfig: mocks.exportConfig,
     importConfig: mocks.importConfig,
     testSyncConnection: mocks.testSyncConnection,
+    testModel: mocks.testModel,
     syncNow: mocks.syncNow,
   },
 }));
@@ -48,6 +50,7 @@ describe('SettingsShell', () => {
     mocks.exportConfig.mockReset();
     mocks.importConfig.mockReset();
     mocks.testSyncConnection.mockReset();
+    mocks.testModel.mockReset();
     mocks.syncNow.mockReset();
     mocks.getRecentError.mockResolvedValue(null);
   });
@@ -583,11 +586,53 @@ describe('SettingsShell', () => {
 
     await screen.findByRole('heading', { name: '设置' });
     fireEvent.click(screen.getByRole('tab', { name: '语言模型' }));
+    fireEvent.click(screen.getByTestId('language-model-summary-model-1'));
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
     fireEvent.click(screen.getByText('模型二').closest('button') as HTMLButtonElement);
 
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
+  });
+
+  it('测试模型成功后通过 toast 展示返回文本', async () => {
+    const config = createDefaultConfig({
+      models: [
+        {
+          id: 'model-1',
+          name: '模型一',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'secret',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          reasoningEffort: 'high',
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: false,
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+    });
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.testModel.mockResolvedValueOnce({ provider: 'openai-compatible', text: 'hello' });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('tab', { name: '语言模型' }));
+    fireEvent.click(screen.getByTestId('language-model-summary-model-1'));
+    fireEvent.click(screen.getByRole('button', { name: '测试模型' }));
+
+    await waitFor(() => {
+      expect(mocks.testModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'model-1' }));
+    });
+    expect(await screen.findByText('模型测试成功')).toBeInTheDocument();
+    expect(screen.getByText('hello')).toBeInTheDocument();
   });
 
   it('清理缓存后会刷新缓存统计', async () => {

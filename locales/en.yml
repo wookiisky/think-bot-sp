@@ -133,6 +133,8 @@ workspace.retryMessage: Retry
 workspace.expandBranches: Expand Branches
 workspace.stopBranch: Stop Branch
 workspace.deleteBranch: Delete Branch
+workspace.selectPrimaryBranch: Use As Next Primary
+workspace.useAsPrimary: Used For Next Turn
 workspace.scrollToMessageTop: Scroll To Message Top
 workspace.scrollToMessageBottom: Scroll To Message Bottom
 workspace.copyPlainText: Copy Plain Text
@@ -146,6 +148,7 @@ workspace.status.error: Failed
 workspace.status.cancelled: Stopped
 workspace.status.restore: Restoring Stream
 workspace.status.branch: Branch
+workspace.status.primaryBranch: Primary Branch
 workspace.promptStatus.loading: Loading
 workspace.promptStatus.autoRunning: Auto Trigger Running
 workspace.promptStatus.autoError: Auto Trigger Failed
@@ -157,6 +160,7 @@ workspace.notice.retryFailed: Failed to retry. Please retry.
 workspace.notice.expandBranchFailed: Failed to add a branch. Please retry.
 workspace.notice.stopBranchFailed: Failed to stop the branch. Please retry.
 workspace.notice.deleteBranchFailed: Failed to delete the branch. Please retry.
+workspace.notice.selectPrimaryBranchFailed: Failed to switch the primary branch. Please retry.
 workspace.notice.copyPlainSuccess: Plain text copied
 workspace.notice.copyPlainFailed: Failed to copy plain text. Please retry.
 workspace.notice.copyMarkdownSuccess: Markdown copied
@@ -197,7 +201,6 @@ sidebar.state.blockedDescription: Waiting for confirmation
 sidebar.state.extracting: Extracting page content
 sidebar.state.error: Extraction failed. Please retry.
 conversations.title: History Workspace
-conversations.subtitle: Restore extracted content and chats by page, then continue working in context.
 conversations.searchLabel: Search History Pages
 conversations.searchPlaceholder: Search title or URL
 conversations.empty: No history pages yet.

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
+  CheckIcon,
   ChevronsDownIcon,
   ChevronsUpIcon,
   CopyIcon,
@@ -19,6 +20,7 @@ import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Textarea } from '../../components/ui/textarea';
 import { Tooltip } from '../../components/ui/tooltip';
+import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from '../workspace/chat-markdown';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
@@ -47,6 +49,8 @@ type ChatThreadProps = {
       modelId: string;
       /** 分支模型展示名。 */
       modelLabel: string;
+      /** 是否为首个主分支。 */
+      isPrimary: boolean;
       /** 分支内容。 */
       content: string;
       /** 分支状态。 */
@@ -54,6 +58,8 @@ type ChatThreadProps = {
       /** 分支错误消息。 */
       errorMessage: string | null;
     }>;
+    /** 当前选中的主分支。 */
+    selectedBranchId: string | null;
   }>;
   /** 当前恢复中的助手消息 id。 */
   restoreMessageId: string | null;
@@ -74,7 +80,9 @@ type ChatThreadProps = {
   /** 重试目标用户消息。 */
   onRetryUserMessage: (...input: [messageId: string]) => Promise<void>;
   /** 重试目标助手消息。 */
-  onRetryAssistantMessage: (...input: [messageId: string]) => Promise<void>;
+  onRetryAssistantMessage: (...input: [messageId: string, branchId: string]) => Promise<void>;
+  /** 切换当前轮的主分支。 */
+  onSelectAssistantBranch: (...input: [messageId: string, branchId: string]) => Promise<void>;
   /** 继续新增分支。 */
   onExpandBranches: (...input: [messageId: string]) => Promise<void>;
   /** 停止当前消息所属会话。 */
@@ -90,7 +98,7 @@ type ChatThreadProps = {
 /** 侧边栏聊天消息区。 */
 export const ChatThread = ({
   messages,
-  restoreMessageId,
+  restoreMessageId: _restoreMessageId,
   editingMessageId,
   editingText,
   t,
@@ -100,6 +108,7 @@ export const ChatThread = ({
   onSubmitEdit,
   onRetryUserMessage,
   onRetryAssistantMessage,
+  onSelectAssistantBranch,
   onExpandBranches,
   onStop,
   onStopBranch,
@@ -107,26 +116,7 @@ export const ChatThread = ({
   onNotice,
 }: ChatThreadProps) => {
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const [isNarrowBranchViewport, setIsNarrowBranchViewport] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return undefined;
-    }
-
-    const mediaQuery = window.matchMedia('(max-width: 960px)');
-    /** 统一同步阅读列布局，避免窄屏下出现难以操作的横向卡片。 */
-    const syncViewportState = () => {
-      setIsNarrowBranchViewport(mediaQuery.matches);
-    };
-
-    syncViewportState();
-    mediaQuery.addEventListener?.('change', syncViewportState);
-    return () => {
-      mediaQuery.removeEventListener?.('change', syncViewportState);
-    };
-  }, []);
 
   /** 复制指定格式的消息内容。 */
   const handleCopyMessage = async (input: { content: string; mode: 'plain' | 'markdown' }) => {
@@ -161,11 +151,11 @@ export const ChatThread = ({
       <div className="divide-y divide-border/80">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
+          const messageIndex = messages.findIndex((current) => current.id === message.id);
           const isEditing = message.role === 'user' && editingMessageId === message.id;
           const visibleContent = message.displayContent ?? message.content;
           const isAssistantLoading = message.role === 'assistant' && message.status === 'loading';
-          const branchReadingLayout =
-            message.branches.length > 1 && !isNarrowBranchViewport ? 'horizontal' : 'vertical';
+          const canSelectAssistantBranch = message.role === 'assistant' && messages.slice(messageIndex + 1).length === 0;
 
           return (
             <div
@@ -186,7 +176,7 @@ export const ChatThread = ({
                 setHoveredMessageId((current) => (current === message.id ? null : current));
               }}
             >
-              <article className={resolveMessageBubbleClass(message.role, message.status)}>
+              <article data-testid={`chat-message-bubble-${message.id}`} className={resolveMessageBubbleClass(message.role, message.status)}>
                 {isAssistantLoading ? (
                   <div className="absolute right-0 top-0">
                     <Tooltip content={t('workspace.stop')}>
@@ -237,7 +227,7 @@ export const ChatThread = ({
                       </div>
                     ) : null}
 
-                    <ChatMarkdown content={visibleContent} />
+                    {message.role === 'assistant' ? null : <ChatMarkdown content={visibleContent} />}
                   </>
                 )}
 
@@ -249,28 +239,27 @@ export const ChatThread = ({
                 {message.branches.length > 0 ? (
                   <div
                     data-testid={`branch-rail-${message.id}`}
-                    data-reading-layout={branchReadingLayout}
-                    className={cn(
-                      'mt-3 border-t border-border/70 pt-3',
-                      branchReadingLayout === 'horizontal'
-                        ? 'flex gap-3 overflow-x-auto pb-2 pr-1 snap-x snap-mandatory'
-                        : 'grid gap-2',
-                    )}
+                    data-reading-layout="grid"
+                    className="mt-3 grid gap-3 border-t border-border/70 pt-3"
+                    style={{
+                      gridTemplateColumns: `repeat(auto-fit, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`,
+                    }}
                   >
                     {message.branches.map((branch) => (
                       <section
                         key={branch.id}
                         data-testid={`branch-${branch.id}`}
                         className={cn(
-                          'rounded-md border border-border/80 bg-background/70 px-3 py-2',
-                          branchReadingLayout === 'horizontal' && 'min-w-[19rem] max-w-[24rem] shrink-0 snap-start',
+                          'border border-border/80 bg-background/70 px-3 py-2',
+                          message.selectedBranchId === branch.id && 'border-primary bg-primary/5',
                         )}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline">{t('workspace.status.branch')}</Badge>
+                              <Badge variant="outline">{t(branch.isPrimary ? 'workspace.status.primaryBranch' : 'workspace.status.branch')}</Badge>
                               <span>{branch.modelLabel}</span>
+                              {message.selectedBranchId === branch.id ? <Badge variant="secondary">{t('workspace.useAsPrimary')}</Badge> : null}
                               <WorkspaceStatusGlyph
                                 label={resolveStatusLabel(branch.status, t)}
                                 status={toVisualStatus(branch.status)}
@@ -283,31 +272,58 @@ export const ChatThread = ({
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
                             {branch.status === 'loading' ? (
-                              <Tooltip content={t('workspace.stopBranch')}>
+                              <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon-xs"
-                                  aria-label={t('workspace.stopBranch')}
-                                  onClick={() => void onStopBranch(message.id, branch.id)}
+                                  aria-label={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}
+                                  onClick={() => void (branch.isPrimary ? onStop() : onStopBranch(message.id, branch.id))}
                                 >
                                   <XIcon />
                                 </Button>
                               </Tooltip>
                             ) : null}
-                            <MiniConfirm
-                              message={t('workspace.deleteBranch')}
-                              cancelLabel={t('common.cancel')}
-                              confirmLabel={t('workspace.deleteBranch')}
-                              contentTestId={`delete-branch-confirm-${branch.id}`}
-                              onConfirm={() => onDeleteBranch(message.id, branch.id)}
-                            >
-                              <Tooltip content={t('workspace.deleteBranch')}>
-                                <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.deleteBranch')}>
-                                  <Trash2Icon />
+                            {branch.status !== 'loading' ? (
+                              <Tooltip content={t('workspace.retryAssistantMessage')}>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  aria-label={t('workspace.retryAssistantMessage')}
+                                  onClick={() => void onRetryAssistantMessage(message.id, branch.id)}
+                                >
+                                  <RotateCcwIcon />
                                 </Button>
                               </Tooltip>
-                            </MiniConfirm>
+                            ) : null}
+                            <Tooltip content={t('workspace.selectPrimaryBranch')}>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label={t('workspace.selectPrimaryBranch')}
+                                disabled={!canSelectAssistantBranch || message.selectedBranchId === branch.id || branch.status === 'loading'}
+                                onClick={() => void onSelectAssistantBranch(message.id, branch.id)}
+                              >
+                                <CheckIcon />
+                              </Button>
+                            </Tooltip>
+                            {!branch.isPrimary ? (
+                              <MiniConfirm
+                                message={t('workspace.deleteBranch')}
+                                cancelLabel={t('common.cancel')}
+                                confirmLabel={t('workspace.deleteBranch')}
+                                contentTestId={`delete-branch-confirm-${branch.id}`}
+                                onConfirm={() => onDeleteBranch(message.id, branch.id)}
+                              >
+                                <Tooltip content={t('workspace.deleteBranch')}>
+                                  <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.deleteBranch')}>
+                                    <Trash2Icon />
+                                  </Button>
+                                </Tooltip>
+                              </MiniConfirm>
+                            ) : null}
                           </div>
                         </div>
                         {branch.status === 'error' ? <p className="mt-2 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
@@ -381,17 +397,6 @@ export const ChatThread = ({
 
                     {message.role === 'assistant' ? (
                       <>
-                        <Tooltip content={t('workspace.retryAssistantMessage')}>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('workspace.retryAssistantMessage')}
-                            onClick={() => void onRetryAssistantMessage(message.id)}
-                          >
-                            <RotateCcwIcon />
-                          </Button>
-                        </Tooltip>
                         <Tooltip content={t('workspace.expandBranches')}>
                           <Button
                             type="button"
@@ -495,8 +500,8 @@ const resolveStatusLabel = (status: 'loading' | 'done' | 'error' | 'cancelled', 
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative rounded-lg px-1 py-1 pr-12 transition-colors',
-    role === 'assistant' && 'text-foreground',
+    'relative px-1 py-1 pr-12 transition-colors',
+    role === 'assistant' && 'bg-muted/55 text-foreground',
     role === 'user' && 'text-foreground',
     role === 'system' && 'text-amber-900',
     status === 'error' && 'text-destructive',

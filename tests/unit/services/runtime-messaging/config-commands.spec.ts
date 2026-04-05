@@ -17,6 +17,7 @@ describe('config-commands', () => {
       'IMPORT_CONFIG',
       'EXPORT_CONFIG',
       'TEST_SYNC_CONNECTION',
+      'TEST_MODEL',
       'SYNC_NOW',
       'GET_LOCAL_CACHE_STATS',
       'CLEAR_LOCAL_CACHE',
@@ -27,7 +28,28 @@ describe('config-commands', () => {
   });
 
   it('按命令路由到对应仓储', async () => {
-    const config = createDefaultConfig();
+    const config = createDefaultConfig({
+      models: [
+        {
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: 'secret',
+          deployment: '',
+          temperature: 1,
+          tools: [],
+          reasoningEffort: 'high',
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: false,
+          order: 0,
+          deletedAt: null,
+        },
+      ],
+    });
     const syncedConfig = createDefaultConfig({
       sync: {
         ...config.sync,
@@ -58,11 +80,15 @@ describe('config-commands', () => {
       testConnection: vi.fn().mockResolvedValue({ provider: 'gist', ok: true, message: 'ok' }),
       syncNow: vi.fn().mockResolvedValue({ provider: 'gist', lastSyncAt: 123, snapshotBytes: 512 }),
     };
+    const modelTestService = {
+      testModel: vi.fn().mockResolvedValue({ provider: 'openai-compatible', text: 'hi' }),
+    };
     const handler = createConfigCommandHandler({
       configRepository,
       pageRepository,
       recentErrorRepository,
       syncService,
+      modelTestService,
     });
 
     await expect(handler({ type: 'GET_CONFIG' })).resolves.toEqual({
@@ -121,6 +147,12 @@ describe('config-commands', () => {
     });
     expect(syncService.testConnection).toHaveBeenCalledWith(config.sync);
 
+    await expect(handler({ type: 'TEST_MODEL', model: config.models[0] })).resolves.toEqual({
+      type: 'TEST_MODEL_SUCCESS',
+      result: { provider: 'openai-compatible', text: 'hi' },
+    });
+    expect(modelTestService.testModel).toHaveBeenCalledWith(config.models[0]);
+
     await expect(handler({ type: 'SYNC_NOW', config })).resolves.toEqual({
       type: 'SYNC_NOW_SUCCESS',
       config: syncedConfig,
@@ -163,6 +195,9 @@ describe('config-commands', () => {
       syncService: {
         testConnection: vi.fn(),
         syncNow: vi.fn(),
+      },
+      modelTestService: {
+        testModel: vi.fn(),
       },
     });
 

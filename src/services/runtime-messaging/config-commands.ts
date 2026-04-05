@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { extensionConfigSchema } from '../../domain/config/config-schema';
+import { extensionConfigSchema, modelConfigSchema } from '../../domain/config/config-schema';
 
 type SupportedCommandType =
   | 'GET_CONFIG'
@@ -11,6 +11,7 @@ type SupportedCommandType =
   | 'IMPORT_CONFIG'
   | 'EXPORT_CONFIG'
   | 'TEST_SYNC_CONNECTION'
+  | 'TEST_MODEL'
   | 'SYNC_NOW'
   | 'GET_LOCAL_CACHE_STATS'
   | 'CLEAR_LOCAL_CACHE';
@@ -23,6 +24,7 @@ export const supportedCommandTypes = new Set<SupportedCommandType>([
   'IMPORT_CONFIG',
   'EXPORT_CONFIG',
   'TEST_SYNC_CONNECTION',
+  'TEST_MODEL',
   'SYNC_NOW',
   'GET_LOCAL_CACHE_STATS',
   'CLEAR_LOCAL_CACHE',
@@ -53,6 +55,11 @@ const importConfigCommandSchema = z.object({
 const testSyncConnectionCommandSchema = z.object({
   type: z.literal('TEST_SYNC_CONNECTION'),
   sync: extensionConfigSchema.shape.sync,
+});
+
+const testModelCommandSchema = z.object({
+  type: z.literal('TEST_MODEL'),
+  model: modelConfigSchema,
 });
 
 const syncNowCommandSchema = z.object({
@@ -94,17 +101,24 @@ type SyncService = {
   syncNow: (config: ExtensionConfig) => Promise<{ provider: string; lastSyncAt: number; snapshotBytes: number }>;
 };
 
+type ModelTestService = {
+  /** 测试单个模型。 */
+  testModel: (model: ExtensionConfig['models'][number]) => Promise<{ provider: string; text: string }>;
+};
+
 /** 创建配置相关的 runtime command 处理器。 */
 export const createConfigCommandHandler = ({
   configRepository,
   pageRepository,
   recentErrorRepository,
   syncService,
+  modelTestService,
 }: {
   configRepository: ConfigRepositories;
   pageRepository: PageRepositories;
   recentErrorRepository: RecentErrorRepository;
   syncService: SyncService;
+  modelTestService: ModelTestService;
 }) => {
   return async (input: unknown) => {
     const parsedMessage = messageTypeSchema.safeParse(input);
@@ -153,6 +167,13 @@ export const createConfigCommandHandler = ({
         return {
           type: 'TEST_SYNC_CONNECTION_SUCCESS',
           result: await syncService.testConnection(command.sync),
+        };
+      }
+      case 'TEST_MODEL': {
+        const command = testModelCommandSchema.parse(input);
+        return {
+          type: 'TEST_MODEL_SUCCESS',
+          result: await modelTestService.testModel(command.model),
         };
       }
       case 'SYNC_NOW': {

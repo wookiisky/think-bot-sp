@@ -133,6 +133,8 @@ workspace.retryMessage: 重试
 workspace.expandBranches: 继续新增分支
 workspace.stopBranch: 停止分支
 workspace.deleteBranch: 删除分支
+workspace.selectPrimaryBranch: 设为后续主分支
+workspace.useAsPrimary: 当前用于后续对话
 workspace.scrollToMessageTop: 定位到消息顶部
 workspace.scrollToMessageBottom: 定位到消息底部
 workspace.copyPlainText: 复制纯文本
@@ -146,6 +148,7 @@ workspace.status.error: 失败
 workspace.status.cancelled: 已停止
 workspace.status.restore: 恢复生成中
 workspace.status.branch: 分支
+workspace.status.primaryBranch: 主分支
 workspace.promptStatus.loading: 生成中
 workspace.promptStatus.autoRunning: 自动触发中
 workspace.promptStatus.autoError: 自动触发失败
@@ -157,6 +160,7 @@ workspace.notice.retryFailed: 重试失败，请重试
 workspace.notice.expandBranchFailed: 新增分支失败，请重试
 workspace.notice.stopBranchFailed: 停止分支失败，请重试
 workspace.notice.deleteBranchFailed: 删除分支失败，请重试
+workspace.notice.selectPrimaryBranchFailed: 切换主分支失败，请重试
 workspace.notice.copyPlainSuccess: 已复制纯文本
 workspace.notice.copyPlainFailed: 复制纯文本失败，请重试
 workspace.notice.copyMarkdownSuccess: 已复制 Markdown
@@ -197,7 +201,6 @@ sidebar.state.blockedDescription: 等待放行
 sidebar.state.extracting: 正在提取页面正文
 sidebar.state.error: 提取失败，请重试
 conversations.title: 历史工作台
-conversations.subtitle: 按页面恢复提取内容与聊天，上下文可继续工作。
 conversations.searchLabel: 搜索历史页面
 conversations.searchPlaceholder: 搜索标题或 URL
 conversations.empty: 还没有历史页面。

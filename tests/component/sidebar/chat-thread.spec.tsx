@@ -13,6 +13,7 @@ const translations: Record<string, string> = {
   'workspace.status.cancelled': '已停止',
   'workspace.status.restore': '恢复生成中',
   'workspace.status.branch': '分支',
+  'workspace.status.primaryBranch': '主分支',
   'workspace.editMessage': '编辑',
   'workspace.editMessageInput': '编辑消息输入',
   'workspace.saveAndResend': '保存并重发',
@@ -23,6 +24,8 @@ const translations: Record<string, string> = {
   'workspace.stop': '停止',
   'workspace.stopBranch': '停止分支',
   'workspace.deleteBranch': '删除分支',
+  'workspace.selectPrimaryBranch': '设为后续主分支',
+  'workspace.useAsPrimary': '当前用于后续对话',
   'workspace.scrollToMessageTop': '定位到消息顶部',
   'workspace.scrollToMessageBottom': '定位到消息底部',
   'workspace.copyPlainText': '复制纯文本',
@@ -36,8 +39,6 @@ const translations: Record<string, string> = {
 const t = (key: string) => translations[key] ?? key;
 let clipboardWriteText: ReturnType<typeof vi.fn>;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn>;
-let matchMediaMatches = false;
-
 afterEach(() => {
   cleanup();
 });
@@ -56,19 +57,8 @@ beforeEach(() => {
     value: nextNavigator,
     configurable: true,
   });
-  Object.defineProperty(window, 'matchMedia', {
-    value: vi.fn().mockImplementation(() => ({
-      matches: matchMediaMatches,
-      media: '(max-width: 960px)',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-    configurable: true,
-    writable: true,
-  });
   scrollIntoViewSpy = vi.fn();
   HTMLElement.prototype.scrollIntoView = scrollIntoViewSpy;
-  matchMediaMatches = false;
 });
 
 describe('ChatThread', () => {
@@ -87,11 +77,13 @@ describe('ChatThread', () => {
                 id: 'branch-1',
                 modelId: 'model-2',
                 modelLabel: '分支模型',
-                content: '- 分支结果',
+                isPrimary: true,
+                content: '**主回答** [链接](https://example.com)\n\n- 分支结果',
                 status: 'done',
                 errorMessage: null,
               },
             ],
+            selectedBranchId: 'branch-1',
           },
         ]}
         restoreMessageId={null}
@@ -104,6 +96,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={vi.fn()}
         onStopBranch={vi.fn()}
@@ -115,6 +108,7 @@ describe('ChatThread', () => {
     expect(screen.getByText('主回答').tagName).toBe('STRONG');
     expect(screen.getByRole('link', { name: '链接' })).toHaveAttribute('href', 'https://example.com');
     expect(screen.getByText('分支结果')).toBeVisible();
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-muted/55');
   });
 
   it('消息卡片不再显示角色行，hover 后才显示操作按钮', async () => {
@@ -130,6 +124,7 @@ describe('ChatThread', () => {
             status: 'done',
             errorMessage: null,
             branches: [],
+            selectedBranchId: null,
           },
         ]}
         restoreMessageId={null}
@@ -142,6 +137,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={vi.fn()}
         onStopBranch={vi.fn()}
@@ -176,14 +172,26 @@ describe('ChatThread', () => {
             status: 'done',
             errorMessage: null,
             branches: [],
+            selectedBranchId: null,
           },
           {
             id: 'assistant-1',
             role: 'assistant',
-            content: '旧回答',
+            content: '',
             status: 'done',
             errorMessage: null,
-            branches: [],
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '主模型',
+                isPrimary: true,
+                content: '旧回答',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-1',
           },
         ]}
         restoreMessageId={null}
@@ -196,6 +204,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={onRetryUserMessage}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={vi.fn()}
         onStopBranch={vi.fn()}
@@ -225,7 +234,18 @@ describe('ChatThread', () => {
             content: '流式内容',
             status: 'loading',
             errorMessage: null,
-            branches: [],
+            branches: [
+              {
+                id: 'branch-loading',
+                modelId: 'model-1',
+                modelLabel: '主模型',
+                isPrimary: true,
+                content: '流式内容',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-loading',
           },
         ]}
         restoreMessageId={null}
@@ -238,6 +258,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={onStop}
         onStopBranch={vi.fn()}
@@ -246,13 +267,13 @@ describe('ChatThread', () => {
       />,
     );
 
-    expect(screen.getByLabelText('生成中')).toBeVisible();
-    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.getAllByLabelText('生成中').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '停止' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('恢复生成中')).toBeNull();
     expect(screen.queryByTestId('chat-message-actions-assistant-loading')).toBeNull();
   });
 
-  it('分支较多时会切换到横向阅读列', () => {
+  it('分支会按响应式 grid 展示，并使用通用最小列宽', () => {
     render(
       <ChatThread
         messages={[
@@ -267,6 +288,7 @@ describe('ChatThread', () => {
                 id: 'branch-1',
                 modelId: 'model-1',
                 modelLabel: '模型一',
+                isPrimary: true,
                 content: '分支一',
                 status: 'done',
                 errorMessage: null,
@@ -275,11 +297,13 @@ describe('ChatThread', () => {
                 id: 'branch-2',
                 modelId: 'model-2',
                 modelLabel: '模型二',
+                isPrimary: false,
                 content: '分支二',
                 status: 'done',
                 errorMessage: null,
               },
             ],
+            selectedBranchId: 'branch-1',
           },
         ]}
         restoreMessageId={null}
@@ -292,6 +316,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={vi.fn()}
         onStopBranch={vi.fn()}
@@ -301,13 +326,11 @@ describe('ChatThread', () => {
     );
 
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
-    expect(branchRail).toHaveAttribute('data-reading-layout', 'horizontal');
-    expect(branchRail.className).toContain('overflow-x-auto');
+    expect(branchRail).toHaveAttribute('data-reading-layout', 'grid');
+    expect(branchRail.getAttribute('style')).toContain('minmax(350px, 1fr)');
   });
 
-  it('窄屏时分支阅读列回落为纵向布局', () => {
-    matchMediaMatches = true;
-
+  it('窄屏测试下仍保持 grid 布局，由浏览器自行换列', () => {
     render(
       <ChatThread
         messages={[
@@ -322,6 +345,7 @@ describe('ChatThread', () => {
                 id: 'branch-1',
                 modelId: 'model-1',
                 modelLabel: '模型一',
+                isPrimary: true,
                 content: '分支一',
                 status: 'done',
                 errorMessage: null,
@@ -330,11 +354,13 @@ describe('ChatThread', () => {
                 id: 'branch-2',
                 modelId: 'model-2',
                 modelLabel: '模型二',
+                isPrimary: false,
                 content: '分支二',
                 status: 'done',
                 errorMessage: null,
               },
             ],
+            selectedBranchId: 'branch-1',
           },
         ]}
         restoreMessageId={null}
@@ -347,6 +373,7 @@ describe('ChatThread', () => {
         onSubmitEdit={vi.fn()}
         onRetryUserMessage={vi.fn()}
         onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
         onExpandBranches={vi.fn()}
         onStop={vi.fn()}
         onStopBranch={vi.fn()}
@@ -356,7 +383,7 @@ describe('ChatThread', () => {
     );
 
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
-    expect(branchRail).toHaveAttribute('data-reading-layout', 'vertical');
-    expect(branchRail.className).not.toContain('overflow-x-auto');
+    expect(branchRail).toHaveAttribute('data-reading-layout', 'grid');
+    expect(branchRail.getAttribute('style')).toContain('minmax(350px, 1fr)');
   });
 });

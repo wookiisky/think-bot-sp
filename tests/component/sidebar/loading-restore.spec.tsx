@@ -118,7 +118,7 @@ describe('SidebarShell loading restore', () => {
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
     expect(await screen.findByText('部分回答')).toBeVisible();
-    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.getAllByRole('button', { name: '停止' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 
@@ -264,7 +264,7 @@ describe('SidebarShell loading restore', () => {
 
     expect(await screen.findByText('快捷标签恢复内容')).toBeVisible();
     expect(screen.getByRole('tab', { name: /问题拆解/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
+    expect(screen.getAllByRole('button', { name: '停止' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 });

@@ -172,7 +172,7 @@ export const QuickInputsPanel = ({
   onImportTemplates,
   t,
 }: QuickInputsPanelProps) => {
-  const [expandedQuickInputId, setExpandedQuickInputId] = useState<string | null | undefined>(undefined);
+  const [expandedQuickInputId, setExpandedQuickInputId] = useState<string | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -195,13 +195,8 @@ export const QuickInputsPanel = ({
       return;
     }
 
-    if (expandedQuickInputId === undefined) {
-      setExpandedQuickInputId(visibleQuickInputs[0].id);
-      return;
-    }
-
     if (expandedQuickInputId !== null && !visibleQuickInputs.some((item) => item.id === expandedQuickInputId)) {
-      setExpandedQuickInputId(visibleQuickInputs[0].id);
+      setExpandedQuickInputId(null);
     }
   }, [expandedQuickInputId, visibleQuickInputs]);
 
@@ -371,60 +366,63 @@ export const QuickInputsPanel = ({
                         />
                       </label>
 
-                      <label className="grid gap-2">
-                        <span className="text-sm font-medium">{t('settings.quickInputModel')}</span>
-                        <Select
-                          value={modelSelectValue}
-                          disabled={disabled}
-                          onValueChange={(value) =>
-                            updateQuickInput(item.id, {
-                              modelId:
-                                value === '__none__'
-                                  ? null
-                                  : value.startsWith('__missing__:')
-                                    ? item.modelId
-                                    : value,
-                            })
-                          }
-                        >
-                          <SelectTrigger aria-label={t('settings.quickInputModel')} className="w-full">
-                            <SelectValue placeholder={t('settings.quickInputModel')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">{t('settings.quickInputNoModel')}</SelectItem>
-                            {hasMissingModelReference ? <SelectItem value={modelSelectValue}>{item.modelId}</SelectItem> : null}
-                            {availableModels.map((model) => (
-                              <SelectItem key={model.id} value={model.id}>
-                                {model.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </label>
+                      <div className="grid gap-2">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <label className="grid gap-2">
+                            <span className="text-sm font-medium">{t('settings.quickInputModel')}</span>
+                            <Select
+                              value={modelSelectValue}
+                              disabled={disabled}
+                              onValueChange={(value) =>
+                                updateQuickInput(item.id, {
+                                  modelId:
+                                    value === '__none__'
+                                      ? null
+                                      : value.startsWith('__missing__:')
+                                        ? item.modelId
+                                        : value,
+                                })
+                              }
+                            >
+                              <SelectTrigger aria-label={t('settings.quickInputModel')} className="w-full">
+                                <SelectValue placeholder={t('settings.quickInputModel')} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">{t('settings.quickInputNoModel')}</SelectItem>
+                                {hasMissingModelReference ? <SelectItem value={modelSelectValue}>{item.modelId}</SelectItem> : null}
+                                {availableModels.map((model) => (
+                                  <SelectItem key={model.id} value={model.id}>
+                                    {model.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {hasMissingModelReference ? (
+                              <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputModelMissing')}</p>
+                            ) : null}
+                          </label>
 
-                      {hasMissingModelReference ? (
-                        <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputModelMissing')}</p>
-                      ) : null}
-
-                      <label className="grid gap-2">
-                        <span className="text-sm font-medium">{t('settings.quickInputBranchModels')}</span>
-                        <MultiSelectPopover
-                          label={t('settings.quickInputBranchModels')}
-                          placeholder={t('settings.multiSelectPlaceholder')}
-                          summaryTemplate={t('settings.multiSelectSummary')}
-                          options={availableModels.map((model) => ({
-                            value: model.id,
-                            label: model.name,
-                          }))}
-                          values={branchModelIds}
-                          emptyText={t('settings.noBranchModels')}
-                          disabled={disabled}
-                          onChange={(nextValues) => updateQuickInput(item.id, { branchModelIds: nextValues })}
-                        />
-                        {hasMissingBranchModels ? (
-                          <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputBranchModelsMissing')}</p>
-                        ) : null}
-                      </label>
+                          <label className="grid gap-2">
+                            <span className="text-sm font-medium">{t('settings.quickInputBranchModels')}</span>
+                            <MultiSelectPopover
+                              label={t('settings.quickInputBranchModels')}
+                              placeholder={t('settings.multiSelectPlaceholder')}
+                              summaryTemplate={t('settings.multiSelectSummary')}
+                              options={availableModels.map((model) => ({
+                                value: model.id,
+                                label: model.name,
+                              }))}
+                              values={branchModelIds}
+                              emptyText={t('settings.noBranchModels')}
+                              disabled={disabled}
+                              onChange={(nextValues) => updateQuickInput(item.id, { branchModelIds: nextValues })}
+                            />
+                            {hasMissingBranchModels ? (
+                              <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputBranchModelsMissing')}</p>
+                            ) : null}
+                          </label>
+                        </div>
+                      </div>
                     </SortableQuickInputCard>
                   );
                 })}

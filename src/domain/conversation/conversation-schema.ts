@@ -14,6 +14,7 @@ const branchRecordSchema = z.object({
   id: z.string().min(1),
   modelId: z.string().min(1),
   modelLabel: z.string().min(1),
+  isPrimary: z.boolean().default(false),
   content: z.string(),
   status: z.enum(['loading', 'done', 'error', 'cancelled']),
   errorMessage: z.string().nullable(),
@@ -32,6 +33,7 @@ const messageRecordSchema = z
     errorMessage: z.string().nullable().default(null),
     modelId: z.string().nullable(),
     branches: z.array(branchRecordSchema),
+    selectedBranchId: z.string().nullable().default(null),
     retryFromMessageId: z.string().nullable(),
     editedAt: z.number().int().nonnegative().nullable(),
     createdAt: z.number().int().nonnegative(),
@@ -44,6 +46,25 @@ const messageRecordSchema = z
         message: 'branches must attach to assistant message',
         path: ['branches'],
       });
+    }
+
+    if (value.role !== 'assistant' && value.selectedBranchId !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'selectedBranchId must attach to assistant message',
+        path: ['selectedBranchId'],
+      });
+    }
+
+    if (value.role === 'assistant' && value.branches.length > 0) {
+      const selectedBranchId = value.selectedBranchId ?? value.branches[0]?.id ?? null;
+      if (!selectedBranchId || !value.branches.some((branch) => branch.id === selectedBranchId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'selectedBranchId must exist in assistant branches',
+          path: ['selectedBranchId'],
+        });
+      }
     }
   });
 
