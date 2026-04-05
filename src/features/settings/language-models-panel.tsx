@@ -1,4 +1,7 @@
-/* eslint-disable no-unused-vars */
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
@@ -20,7 +23,70 @@ type LanguageModelsPanelProps = {
   t(key: string): string;
 };
 
-/** 语言模型面板，先提供列表摘要与单项编辑。 */
+type SortableModelSummaryItemProps = {
+  /** 当前模型。 */
+  model: ModelConfig;
+  /** 是否选中。 */
+  selected: boolean;
+  /** 是否禁用。 */
+  disabled: boolean;
+  /** 摘要文本。 */
+  summary: string;
+  /** 选中当前模型。 */
+  onSelect(): void;
+  /** 文案翻译函数。 */
+  t(key: string): string;
+};
+
+/** 可拖拽模型摘要行。 */
+const SortableModelSummaryItem = ({
+  model,
+  selected,
+  disabled,
+  summary,
+  onSelect,
+  t,
+}: SortableModelSummaryItemProps) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: model.id,
+    disabled,
+  });
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      className={isDragging ? 'opacity-80' : undefined}
+    >
+      <div
+        className={[
+          'flex items-start gap-3 rounded-2xl border px-4 py-3 transition-colors',
+          selected ? 'border-primary bg-primary/8' : 'border-border/70 bg-muted/30 hover:bg-muted/60',
+        ].join(' ')}
+      >
+        <button
+          type="button"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`${t('settings.dragModel')}:${model.name}`}
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          ::
+        </button>
+        <button type="button" className="grid flex-1 gap-1 text-left" onClick={onSelect}>
+          <span className="text-sm font-semibold">{model.name}</span>
+          <span className="text-xs text-muted-foreground">{summary}</span>
+        </button>
+      </div>
+    </li>
+  );
+};
+
+/** 语言模型面板，提供摘要列表、拖拽排序与单项编辑。 */
 export const LanguageModelsPanel = ({
   config,
   selectedModelId,
@@ -29,6 +95,16 @@ export const LanguageModelsPanel = ({
   onChange,
   t,
 }: LanguageModelsPanelProps) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
   const visibleModels = [...config.models]
     .filter((model) => model.deletedAt === null)
     .sort((left, right) => left.order - right.order);
@@ -72,6 +148,12 @@ export const LanguageModelsPanel = ({
       },
       models: syncModelOrders(models),
     });
+  };
+
+  /** 按当前可见顺序重排模型。 */
+  const reorderVisibleModels = (orderedVisibleModels: ModelConfig[]) => {
+    const deletedModels = config.models.filter((model) => model.deletedAt !== null);
+    updateModels([...orderedVisibleModels, ...deletedModels]);
   };
 
   const handleAddModel = () => {
@@ -135,9 +217,23 @@ export const LanguageModelsPanel = ({
     const reorderedVisible = [...visibleModels];
     const [moved] = reorderedVisible.splice(currentIndex, 1);
     reorderedVisible.splice(targetIndex, 0, moved);
-    const deletedModels = config.models.filter((model) => model.deletedAt !== null);
+    reorderVisibleModels(reorderedVisible);
+  };
 
-    updateModels([...reorderedVisible, ...deletedModels]);
+  /** 处理模型拖拽排序结束。 */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const currentIndex = visibleModels.findIndex((model) => model.id === active.id);
+    const targetIndex = visibleModels.findIndex((model) => model.id === over.id);
+    if (currentIndex < 0 || targetIndex < 0) {
+      return;
+    }
+
+    reorderVisibleModels(arrayMove(visibleModels, currentIndex, targetIndex));
   };
 
   return (
@@ -172,30 +268,23 @@ export const LanguageModelsPanel = ({
           </div>
 
           {visibleModels.length > 0 ? (
-            <ul className="grid gap-3">
-              {visibleModels.map((model) => {
-                const selected = model.id === activeModel?.id;
-                return (
-                  <li key={model.id}>
-                    <button
-                      type="button"
-                      className={[
-                        'grid w-full gap-1 rounded-2xl border px-4 py-3 text-left transition-colors',
-                        selected
-                          ? 'border-primary bg-primary/8'
-                          : 'border-border/70 bg-muted/30 hover:bg-muted/60',
-                      ].join(' ')}
-                      onClick={() => onSelectModel(model.id)}
-                    >
-                      <span className="text-sm font-semibold">{model.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {model.provider} / {model.model || model.deployment || '-'} / {model.enabled ? t('settings.enabled') : t('settings.disabled')}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={visibleModels.map((model) => model.id)} strategy={verticalListSortingStrategy}>
+                <ul className="grid gap-3">
+                  {visibleModels.map((model) => (
+                    <SortableModelSummaryItem
+                      key={model.id}
+                      model={model}
+                      selected={model.id === activeModel?.id}
+                      disabled={disabled}
+                      summary={`${model.provider} / ${model.model || model.deployment || '-'} / ${model.enabled ? t('settings.enabled') : t('settings.disabled')}`}
+                      onSelect={() => onSelectModel(model.id)}
+                      t={t}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
           ) : (
             <p className="m-0 text-sm text-muted-foreground">{t('settings.noModels')}</p>
           )}

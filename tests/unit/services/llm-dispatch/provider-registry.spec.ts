@@ -62,6 +62,7 @@ afterEach(() => {
   vi.doUnmock('@ai-sdk/anthropic');
 });
 
+// eslint-disable-next-line no-constant-condition
 if (false) {
   const wrongOpenAIFactory = vi.fn(() => vi.fn((modelId: string) => ({ modelId })));
 

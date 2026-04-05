@@ -75,6 +75,13 @@ describe('conversation-exporter', () => {
           updatedAt: 2,
         }),
       },
+      configRepository: {
+        getConfig: async () => ({
+          basic: {
+            systemPrompt: '你是一个严谨的助手',
+          },
+        }),
+      },
       now: () => new Date('2026-04-04T10:00:00.000Z'),
     });
 
@@ -88,6 +95,8 @@ describe('conversation-exporter', () => {
     expect(exported.payload.content).toContain('# Think Bot Conversation Export');
     expect(exported.payload.content).toContain('- 页面标题：Example Domain / Deep Dive');
     expect(exported.payload.content).toContain('- Prompt Tab：quick-summary');
+    expect(exported.payload.content).toContain('## System Prompt');
+    expect(exported.payload.content).toContain('你是一个严谨的助手');
     expect(exported.payload.content).toContain('## 1. 用户 | done');
     expect(exported.payload.content).toContain('## 2. 助手 | done');
     expect(exported.payload.content).toContain('### 分支 1 | 备用模型 | done');
@@ -126,6 +135,13 @@ describe('conversation-exporter', () => {
             summary: '',
           },
           updatedAt: 1,
+        }),
+      },
+      configRepository: {
+        getConfig: async () => ({
+          basic: {
+            systemPrompt: '',
+          },
         }),
       },
     });

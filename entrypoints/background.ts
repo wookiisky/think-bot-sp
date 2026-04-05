@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 /// <reference types="chrome" />
 
 import { streamText } from 'ai';
@@ -8,6 +7,7 @@ import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapt
 import { createConfigRepository } from '../src/repositories/config-repository';
 import { createConversationRepository } from '../src/repositories/conversation-repository';
 import { createPageRepository } from '../src/repositories/page-repository';
+import { createRecentErrorRepository } from '../src/repositories/recent-error-repository';
 import { createSyncRepository } from '../src/repositories/sync-repository';
 import { createBrowserEntryService } from '../src/services/browser-entry/browser-entry';
 import { createBrowserEntryPanelState } from '../src/services/browser-entry/browser-panel-state';
@@ -41,6 +41,7 @@ export default defineBackground(() => {
     pageRepository,
     conversationRepository,
   });
+  const recentErrorRepository = createRecentErrorRepository(storage);
   const syncService = createSyncService({
     getTestProvider: () =>
       (globalThis as typeof globalThis & {
@@ -100,8 +101,26 @@ export default defineBackground(() => {
   const handleConfigCommand = createConfigCommandHandler({
     configRepository,
     pageRepository,
+    recentErrorRepository,
     syncService,
   });
+  /** 记录最近一次错误，失败时只记日志，不影响原始响应。 */
+  const recordRecentError = (input: {
+    /** 错误来源。 */
+    source: 'sidebar' | 'conversations' | 'sync' | 'settings';
+    /** 出错操作。 */
+    operation: string;
+    /** 原始错误消息。 */
+    message: string;
+  }) => {
+    void recentErrorRepository.saveRecentError(input).catch((error: unknown) => {
+      logger.warn('recent_error.persist_failed', {
+        source: input.source,
+        operation: input.operation,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
   const bypassStore = new Map<string, number>();
   /** 生成当前标签页的黑名单放行 key。 */
   const toBypassKey = (browserTabId: number, normalizedUrl: string) => `${browserTabId}:${normalizedUrl}`;
@@ -199,6 +218,7 @@ export default defineBackground(() => {
   const conversationExporter = createConversationExporter({
     pageRepository,
     conversationRepository,
+    configRepository,
   });
   const handleSidebarCommand = createSidebarCommandHandler({
     logger,
@@ -406,12 +426,17 @@ export default defineBackground(() => {
       }
 
       if (message.type === 'RE_EXTRACT_CONTENT') {
-        void extractionService
-          .extractPage({
-            tabId: message.tabId,
-            pageUrl: message.pageUrl,
-            method: message.method as 'readability' | 'jina',
-          })
+        void configRepository
+          .getConfig()
+          .then((config) =>
+            extractionService.extractPage({
+              tabId: message.tabId,
+              pageUrl: message.pageUrl,
+              method: message.method as 'readability' | 'jina',
+              jinaApiKey: config.basic.jinaApiKey,
+              jinaResponseTemplate: config.basic.jinaResponseTemplate,
+            }),
+          )
           .then((result) => {
             logger.info('extraction.completed', {
               browserTabId: message.tabId,
@@ -434,6 +459,11 @@ export default defineBackground(() => {
             logger.error('extraction.failed', {
               browserTabId: message.tabId,
               reason,
+            });
+            recordRecentError({
+              source: 'sidebar',
+              operation: 'RE_EXTRACT_CONTENT',
+              message: reason,
             });
             sendResponse({ error: reason });
           });
@@ -472,10 +502,16 @@ export default defineBackground(() => {
         })
         .catch((error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
+          const isConversationsSender = isConversationsPageSender(senderInfo, runtimeId);
           logger.error('sidebar.command.failed', {
             type: message.type,
             browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
             reason,
+          });
+          recordRecentError({
+            source: isConversationsSender ? 'conversations' : 'sidebar',
+            operation: message.type,
+            message: reason,
           });
           sendResponse({ error: reason });
         });
@@ -497,6 +533,11 @@ export default defineBackground(() => {
         .catch((error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
           logger.error('conversations.command.failed', { type, reason });
+          recordRecentError({
+            source: 'conversations',
+            operation: type,
+            message: reason,
+          });
           sendResponse({ error: reason });
         });
       return true;
@@ -515,6 +556,11 @@ export default defineBackground(() => {
       .catch((error: unknown) => {
         const reason = error instanceof Error ? error.message : String(error);
         logger.error('配置命令处理失败', { type, reason });
+        recordRecentError({
+          source: type === 'SYNC_NOW' || type === 'TEST_SYNC_CONNECTION' ? 'sync' : 'settings',
+          operation: type,
+          message: reason,
+        });
         sendResponse({ error: reason });
       });
 

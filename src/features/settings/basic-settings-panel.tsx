@@ -1,11 +1,14 @@
-/* eslint-disable no-unused-vars */
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
-import { sanitizeBranchModelIds } from '../../domain/config/config-schema';
+import {
+  MAX_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_PANEL_HEIGHT,
+  sanitizeBranchModelIds,
+} from '../../domain/config/config-schema';
 
 type CacheStats = {
   /** 本地缓存条目数。 */
@@ -186,10 +189,57 @@ export const BasicSettingsPanel = ({
             </label>
 
             <label className="grid gap-2">
+              <span className="text-sm font-medium">{t('settings.extractionPanelHeight')}</span>
+              <Input
+                aria-label={t('settings.extractionPanelHeight')}
+                type="number"
+                min={MIN_EXTRACTION_PANEL_HEIGHT}
+                max={MAX_EXTRACTION_PANEL_HEIGHT}
+                step={1}
+                value={config.basic.extractionPanelHeight}
+                disabled={disabled}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (Number.isNaN(value)) {
+                    return;
+                  }
+
+                  updateBasic({
+                    extractionPanelHeight: Math.min(
+                      MAX_EXTRACTION_PANEL_HEIGHT,
+                      Math.max(MIN_EXTRACTION_PANEL_HEIGHT, value),
+                    ),
+                  });
+                }}
+              />
+            </label>
+
+            <label className="grid gap-2">
               <span className="text-sm font-medium">{t('settings.previewHint')}</span>
               <Input value={t('settings.previewDescription')} aria-label={t('settings.previewHint')} disabled />
             </label>
           </div>
+
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">{t('settings.jinaApiKey')}</span>
+            <Input
+              aria-label={t('settings.jinaApiKey')}
+              type="password"
+              value={config.basic.jinaApiKey}
+              disabled={disabled}
+              onChange={(event) => updateBasic({ jinaApiKey: event.target.value })}
+            />
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm font-medium">{t('settings.jinaResponseTemplate')}</span>
+            <Textarea
+              aria-label={t('settings.jinaResponseTemplate')}
+              value={config.basic.jinaResponseTemplate}
+              disabled={disabled}
+              onChange={(event) => updateBasic({ jinaResponseTemplate: event.target.value })}
+            />
+          </label>
 
           <label className="flex items-center gap-2 text-sm">
             <input

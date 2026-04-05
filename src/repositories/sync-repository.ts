@@ -1,6 +1,18 @@
+import { applySystemConfigSeeds, extensionConfigSchema } from '../domain/config/config-schema';
 import type { ExtensionConfig } from '../domain/config/config-schema';
 import { createDefaultSyncState, syncSnapshotSchema, syncStateSchema } from '../domain/sync/sync-snapshot-schema';
-import { SYNC_STATE_STORAGE_KEY } from '../shared/storage-keys';
+import type { SyncSnapshot, SyncState } from '../domain/sync/sync-snapshot-schema';
+import { assertBlacklistRulesPersistable } from '../services/blacklist/blacklist-service';
+import {
+  CONFIG_STORAGE_KEY,
+  CONVERSATION_STORAGE_PREFIX,
+  LOADING_STORAGE_PREFIX,
+  PAGE_STORAGE_PREFIX,
+  SYNC_STATE_STORAGE_KEY,
+  buildConversationStorageKey,
+  buildLoadingStorageKey,
+  buildPageStorageKey,
+} from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 
@@ -47,6 +59,8 @@ export const createSyncRepository = ({
   /** 当前时间。 */
   now?: () => number;
 }) => {
+  /** 读取完整存储，用于同步替换时计算增删集合。 */
+  const readAll = async () => storage.get<Record<string, unknown>>(null);
   /** 读取当前同步状态。 */
   const readSyncState = async () => {
     const result = await storage.get<Record<string, unknown>>([SYNC_STATE_STORAGE_KEY]);
@@ -55,7 +69,7 @@ export const createSyncRepository = ({
   };
 
   /** 写入同步状态。 */
-  const writeSyncState = async (state: ReturnType<typeof createDefaultSyncState>) => {
+  const writeSyncState = async (state: SyncState) => {
     const next = syncStateSchema.parse(state);
     await storage.set({ [SYNC_STATE_STORAGE_KEY]: next });
     return next;
@@ -130,6 +144,68 @@ export const createSyncRepository = ({
         conversations: visibleConversations,
         tombstones: syncState.tombstones,
         lastSyncAt: syncState.lastSyncAt,
+      });
+    },
+
+    /** 把合并后的完整快照回写到本地稳定存储。 */
+    async applyMergedSnapshot(snapshot: SyncSnapshot) {
+      const nextSnapshot = syncSnapshotSchema.parse(snapshot);
+      const currentState = await readSyncState();
+      const nextLastSyncAt = [currentState.lastSyncAt, nextSnapshot.lastSyncAt].reduce<number | null>(
+        (latest, value) => (value === null ? latest : Math.max(latest ?? 0, value)),
+        null,
+      );
+      const nextConfig = applySystemConfigSeeds(
+        extensionConfigSchema.parse({
+          ...nextSnapshot.config,
+          sync: {
+            ...nextSnapshot.config.sync,
+            lastSyncAt: nextLastSyncAt,
+          },
+        }),
+      );
+      assertBlacklistRulesPersistable(nextConfig.blacklist);
+
+      const all = await readAll();
+      const nextPageEntries = Object.fromEntries(
+        nextSnapshot.pages.map((page) => [buildPageStorageKey(page.normalizedUrl), page] as const),
+      );
+      const nextConversationEntries = Object.fromEntries(
+        nextSnapshot.conversations.map((conversation) => [
+          buildConversationStorageKey(conversation.normalizedUrl, conversation.promptTabId),
+          conversation,
+        ] as const),
+      );
+      const nextLoadingKeys = new Set(
+        nextSnapshot.conversations.map((conversation) => buildLoadingStorageKey(conversation.normalizedUrl, conversation.promptTabId)),
+      );
+      const removableKeys = Object.keys(all).filter((key) => {
+        if (key.startsWith(PAGE_STORAGE_PREFIX)) {
+          return !(key in nextPageEntries);
+        }
+        if (key.startsWith(CONVERSATION_STORAGE_PREFIX)) {
+          return !(key in nextConversationEntries);
+        }
+        if (key.startsWith(LOADING_STORAGE_PREFIX)) {
+          return !nextLoadingKeys.has(key);
+        }
+        return false;
+      });
+
+      if (removableKeys.length > 0) {
+        await storage.remove(removableKeys);
+      }
+
+      await storage.set({
+        [CONFIG_STORAGE_KEY]: nextConfig,
+        ...nextPageEntries,
+        ...nextConversationEntries,
+        [SYNC_STATE_STORAGE_KEY]: syncStateSchema.parse({
+          ...currentState,
+          snapshotVersion: Math.max(currentState.snapshotVersion, nextSnapshot.snapshotVersion),
+          tombstones: nextSnapshot.tombstones,
+          lastSyncAt: nextLastSyncAt,
+        }),
       });
     },
 

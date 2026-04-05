@@ -4,6 +4,7 @@ settings.basic: Basic Settings
 settings.language: Language
 settings.theme: Theme
 settings.save: Save
+settings.saveAndSync: Save And Sync
 settings.reset: Reset
 settings.import: Import Config
 settings.export: Export Config
@@ -30,7 +31,32 @@ settings.webdavUrl: WebDAV URL
 settings.webdavUsername: WebDAV Username
 settings.webdavPassword: WebDAV Password
 settings.blacklistSettings: Blacklist Settings
+settings.blacklistDescription: Manage default blocking rules for search pages and verify individual matching results.
+settings.blacklistBuiltIn: Built-in
+settings.blacklistResetDefaults: Restore Default Rules
+settings.noBlacklistRules: No blacklist rules configured
+settings.addBlacklistRule: Add Rule
+settings.deleteBlacklistRule: Delete Rule
+settings.blacklistRuleType: Rule Type
+settings.blacklistRuleType.domain: Domain
+settings.blacklistRuleType.urlPrefix: URL Prefix
+settings.blacklistRuleType.regex: Regular Expression
+settings.blacklistRulePattern: Pattern
+settings.blacklistRulePatternEmpty: Empty Pattern
+settings.blacklistRuleEnabled: Enable Rule
+settings.blacklistRuleTest: Test Match
+settings.blacklistRuleTestUrl: Test URL
+settings.blacklistRuleTestMatched: The current rule matches this URL
+settings.blacklistRuleTestNotMatched: The current rule does not match this URL
+settings.blacklistRuleTestInvalid: The current rule is invalid and cannot be tested
 settings.unsavedChanges: Unsaved changes
+settings.recentError: Latest Error
+settings.recentErrorEmpty: No recent error
+settings.recentErrorCapturedAt: Captured At
+settings.recentErrorSource.sidebar: Sidebar
+settings.recentErrorSource.conversations: History
+settings.recentErrorSource.sync: Sync
+settings.recentErrorSource.settings: Settings
 settings.basicDescription: Manage theme, language, default model, global branch models, and extraction defaults.
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
@@ -39,6 +65,9 @@ settings.branchModelsDescription: Configure default branch models for Chat and q
 settings.noBranchModels: No branch model available
 settings.branchModelsMissing: Some branch model references are unavailable and will be removed on save.
 settings.extractionMethod: Default Extraction Method
+settings.extractionPanelHeight: Default Extraction Panel Height
+settings.jinaApiKey: Jina API Key
+settings.jinaResponseTemplate: Jina Response Template
 settings.filterCot: Filter COT Content
 settings.includePageContentByDefault: Include Page Content By Default
 settings.previewHint: Instant Preview
@@ -52,14 +81,19 @@ settings.noModels: No model configured
 settings.addModel: Add Model
 settings.copyModel: Copy Model
 settings.deleteModel: Delete Model
+settings.dragModel: Drag Model
 settings.moveUp: Move Up
 settings.moveDown: Move Down
 settings.quickInputsDescription: Manage quick input templates.
 settings.noQuickInputs: No quick inputs configured
 settings.addQuickInput: Add Quick Input
+settings.importQuickInputTemplates: Import Remote Templates
+settings.importingQuickInputTemplates: Importing Templates
 settings.deleteQuickInput: Delete Quick Input
+settings.dragQuickInput: Drag Quick Input
 settings.quickInputName: Quick Input Name
 settings.quickInputPrompt: Quick Input Prompt
+settings.quickInputPromptEmpty: No prompt yet
 settings.quickInputAutoTrigger: Auto Trigger
 settings.quickInputModel: Dedicated Model
 settings.quickInputNoModel: No Dedicated Model
@@ -67,7 +101,6 @@ settings.quickInputModelMissing: The referenced model is unavailable. Please cho
 settings.quickInputBranchModels: Dedicated Branch Models
 settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global branch models.
 settings.quickInputBranchModelsMissing: Some dedicated branch model references are unavailable and will be removed on save.
-settings.blacklistPlaceholderDescription: Blacklist editing is out of scope for this round. The section remains reserved.
 workspace.chatTab: Chat
 workspace.model: Model
 workspace.selectModel: Select Model
@@ -88,10 +121,16 @@ workspace.editMessage: Edit
 workspace.editMessageInput: Edit Message Input
 workspace.saveAndResend: Save And Resend
 workspace.cancelEdit: Cancel
+workspace.retryUserMessage: Retry Question
+workspace.retryAssistantMessage: Retry Answer
 workspace.retryMessage: Retry
 workspace.expandBranches: Expand Branches
 workspace.stopBranch: Stop Branch
 workspace.deleteBranch: Delete Branch
+workspace.scrollToMessageTop: Scroll To Message Top
+workspace.scrollToMessageBottom: Scroll To Message Bottom
+workspace.copyPlainText: Copy Plain Text
+workspace.copyMarkdown: Copy Markdown
 workspace.role.user: You
 workspace.role.assistant: Assistant
 workspace.role.system: System
@@ -112,6 +151,10 @@ workspace.notice.retryFailed: Failed to retry. Please retry.
 workspace.notice.expandBranchFailed: Failed to add a branch. Please retry.
 workspace.notice.stopBranchFailed: Failed to stop the branch. Please retry.
 workspace.notice.deleteBranchFailed: Failed to delete the branch. Please retry.
+workspace.notice.copyPlainSuccess: Plain text copied
+workspace.notice.copyPlainFailed: Failed to copy plain text. Please retry.
+workspace.notice.copyMarkdownSuccess: Markdown copied
+workspace.notice.copyMarkdownFailed: Failed to copy Markdown. Please retry.
 workspace.notice.clearTabConfirm: Clear the current tab conversation? This only removes the current tab conversation and in-flight generations, and does not affect extraction content or other tabs.
 workspace.notice.clearTabSuccess: Current tab conversation cleared
 workspace.notice.clearTabFailed: Failed to clear the current tab conversation. Please retry.

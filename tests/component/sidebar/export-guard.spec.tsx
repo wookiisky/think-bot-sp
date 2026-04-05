@@ -33,6 +33,12 @@ describe('SidebarShell export guard', () => {
         config: createDefaultConfig(),
       }),
       sendChat: vi.fn(),
+      editUserMessage: vi.fn(),
+      retryUserMessage: vi.fn(),
+      retryMessage: vi.fn(),
+      expandMessageBranches: vi.fn(),
+      stopBranch: vi.fn(),
+      deleteBranch: vi.fn(),
       stopSession: vi.fn(),
       exportConversation: vi.fn(),
       connectStream: vi.fn(() => ({

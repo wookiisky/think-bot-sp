@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { normalizePageUrl } from '../../domain/page/page-schema';
 
 type ExtractionMethod = 'readability' | 'jina';
@@ -41,6 +40,10 @@ type ExtractionInput = {
   pageUrl: string;
   /** 当前提取方法。 */
   method: ExtractionMethod;
+  /** Jina 可选 API Key。 */
+  jinaApiKey: string;
+  /** Jina 响应模板。 */
+  jinaResponseTemplate: string;
 };
 
 type SavedExtractionResult = {
@@ -71,7 +74,7 @@ type ExtractionDependencies = {
   };
   /** Jina 客户端。 */
   jinaClient: {
-    extract: (...args: [string]) => Promise<string>;
+    extract: (...args: [string, { apiKey?: string; responseTemplate?: string }?]) => Promise<string>;
   };
   /** 页面仓储。 */
   pageRepository: {
@@ -122,7 +125,10 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
         tabId: input.tabId,
         normalizedUrl,
       });
-      const content = await jinaClient.extract(pageSource.url);
+      const content = await jinaClient.extract(pageSource.url, {
+        apiKey: input.jinaApiKey,
+        responseTemplate: input.jinaResponseTemplate,
+      });
       return pageRepository.saveExtractionResult({
         normalizedUrl,
         url: pageSource.url,

@@ -1,4 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import type { RecentErrorSummary } from '../../domain/error/recent-error-schema';
 
 type CacheStats = {
   /** 本地缓存条目数。 */
@@ -129,5 +130,13 @@ export const settingsApi = {
       type: 'CLEAR_LOCAL_CACHE',
     });
     return response.result;
+  },
+
+  /** 读取最近一次错误摘要。 */
+  async getRecentError() {
+    const response = await requestConfig<RuntimeResponse<{ recentError: RecentErrorSummary | null }>>({
+      type: 'GET_RECENT_ERROR',
+    });
+    return response.recentError;
   },
 };

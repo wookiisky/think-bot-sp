@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { expect, test } from './helpers/extension-fixture';
 import { openSettingsPage } from './helpers/settings-driver';
 

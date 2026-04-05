@@ -37,6 +37,13 @@ export const syncSnapshotSchema = syncStateSchema.extend({
   conversations: z.array(conversationRecordSchema),
 });
 
+/** 页面级墓碑类型。 */
+export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
+/** 本地同步状态类型。 */
+export type SyncState = z.infer<typeof syncStateSchema>;
+/** 完整同步快照类型。 */
+export type SyncSnapshot = z.infer<typeof syncSnapshotSchema>;
+
 /** 创建默认同步状态。 */
 export const createDefaultSyncState = () =>
   syncStateSchema.parse({

@@ -196,6 +196,13 @@ type BranchStreamSession = StreamSession & {
   branchId: string;
 };
 
+type RetryUserBranchStreamSession = BranchStreamSession & {
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
+};
+
 type ChatDispatchServiceDeps = {
   /** 配置仓储。 */
   configRepository: {
@@ -929,6 +936,224 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       return {
         sessionId,
         messageId: assistantMessageId,
+        cancel: () => {
+          abortController.abort();
+        },
+        done,
+      };
+    },
+
+    /** 重试目标用户消息，并把结果追加为既有助手消息的新分支。 */
+    async retryUserMessage(input: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 目标用户消息 id。 */
+      messageId: string;
+    }): Promise<RetryUserBranchStreamSession> {
+      const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
+      if (!conversation) {
+        throw new Error('conversation not found');
+      }
+
+      const targetIndex = conversation.messages.findIndex((message) => message.id === input.messageId && message.role === 'user');
+      if (targetIndex < 0) {
+        throw new Error(`user message not found: ${input.messageId}`);
+      }
+
+      const targetAssistant = conversation.messages
+        .slice(targetIndex + 1)
+        .find((message) => message.role === 'assistant') ?? null;
+      if (!targetAssistant) {
+        throw new Error(`assistant message not found after user message: ${input.messageId}`);
+      }
+      if (!targetAssistant.modelId) {
+        throw new Error(`assistant model not found: ${targetAssistant.id}`);
+      }
+
+      const model = await deps.configRepository.getModelById(targetAssistant.modelId);
+      if (!model) {
+        throw new Error(`model not found: ${targetAssistant.modelId}`);
+      }
+
+      const streamMessages = buildUserMessagesThroughUser(conversation, input.messageId);
+      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
+      const branchId = createMessageId();
+      const sessionId = createSessionId();
+      const abortController = new AbortController();
+      await deps.conversationRepository.appendAssistantBranch({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: targetAssistant.id,
+        branchId,
+        modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
+        now: now(),
+      });
+      await deps.conversationRepository.upsertBranchLoadingState({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        sessionId,
+        messageId: targetAssistant.id,
+        branchId,
+        modelId: model.id,
+        status: 'loading',
+        now: now(),
+      });
+
+      const done = (async (): Promise<ChatStreamResult> => {
+        let result: ChatStreamResult;
+        let hasLoggedFirstChunk = false;
+        try {
+          logger.info('branch.stream.started', {
+            normalizedUrl: input.normalizedUrl,
+            promptTab: input.promptTabId,
+            sessionId,
+            messageId: targetAssistant.id,
+            branchId,
+            provider: resolvedModel.providerId,
+            modelId: model.id,
+          });
+          publishToPromptTabSafely({
+            type: 'BRANCH_STREAM_STARTED',
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            sessionId,
+            messageId: targetAssistant.id,
+            branchId,
+            modelId: model.id,
+            modelLabel: resolvedModel.modelLabel,
+          });
+          const response = await deps.streamText({
+            model: resolvedModel.sdkModel,
+            messages: streamMessages,
+            abortSignal: abortController.signal,
+          });
+
+          for await (const chunk of response.textStream) {
+            if (!hasLoggedFirstChunk) {
+              hasLoggedFirstChunk = true;
+              logger.info('branch.stream.first_chunk', {
+                normalizedUrl: input.normalizedUrl,
+                promptTab: input.promptTabId,
+                sessionId,
+                messageId: targetAssistant.id,
+                branchId,
+              });
+            }
+            await deps.conversationRepository.appendAssistantBranchChunk({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              messageId: targetAssistant.id,
+              branchId,
+              chunk,
+              now: now(),
+            });
+            publishToPromptTabSafely({
+              type: 'BRANCH_STREAM_CHUNK',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: targetAssistant.id,
+              branchId,
+              chunk,
+            });
+          }
+
+          await deps.conversationRepository.finishAssistantBranch({
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            messageId: targetAssistant.id,
+            branchId,
+            now: now(),
+          });
+          publishToPromptTabSafely({
+            type: 'BRANCH_STREAM_FINISHED',
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            sessionId,
+            messageId: targetAssistant.id,
+            branchId,
+          });
+          logger.info('branch.stream.completed', {
+            normalizedUrl: input.normalizedUrl,
+            promptTab: input.promptTabId,
+            sessionId,
+            messageId: targetAssistant.id,
+            branchId,
+          });
+          result = {
+            sessionId,
+            messageId: targetAssistant.id,
+            status: 'done',
+            errorMessage: null,
+          };
+        } catch (error) {
+          const status = isAbortError(error) ? 'cancelled' : 'error';
+          const errorMessage = status === 'cancelled' ? 'branch stream cancelled' : getErrorMessage(error, 'branch dispatch failed');
+          await deps.conversationRepository.failAssistantBranch({
+            normalizedUrl: input.normalizedUrl,
+            promptTabId: input.promptTabId,
+            messageId: targetAssistant.id,
+            branchId,
+            errorMessage,
+            status,
+            now: now(),
+          });
+          if (status === 'cancelled') {
+            logger.info('branch.stream.cancelled', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: targetAssistant.id,
+              branchId,
+            });
+            publishToPromptTabSafely({
+              type: 'BRANCH_STREAM_CANCELLED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: targetAssistant.id,
+              branchId,
+            });
+          } else {
+            logger.error('branch.stream.failed', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: targetAssistant.id,
+              branchId,
+              reason: errorMessage,
+            });
+            publishToPromptTabSafely({
+              type: 'BRANCH_STREAM_FAILED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: targetAssistant.id,
+              branchId,
+              errorMessage,
+            });
+          }
+          result = {
+            sessionId,
+            messageId: targetAssistant.id,
+            status,
+            errorMessage,
+          };
+        }
+
+        await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, branchId);
+        return result;
+      })();
+
+      return {
+        branchId,
+        modelId: model.id,
+        modelLabel: resolvedModel.modelLabel,
+        sessionId,
+        messageId: targetAssistant.id,
         cancel: () => {
           abortController.abort();
         },

@@ -43,6 +43,7 @@ one-shot command：
   - `STOP_SESSION`
   - `STOP_BRANCH`
   - `DELETE_BRANCH`
+  - `RETRY_USER_MESSAGE`
   - `EXPORT_CONVERSATION`
   - `GET_CONFIG`
   - `SAVE_CONFIG`
@@ -83,7 +84,7 @@ long-lived port 事件：
 - 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
 - 已落地补充：`RE_EXTRACT_CONTENT` 成功后会在 background 内部触发自动触发去重编排；手动发送与自动触发共享同一套活跃会话注册表。
 - 未落地：对话管理页复用同一条流式订阅、快捷输入远端模板命令。
-- 已落地补充：对话管理页复用 `SEND_CHAT / STOP_SESSION / STOP_BRANCH / DELETE_BRANCH / EDIT_USER_MESSAGE / RETRY_MESSAGE / EXPAND_MESSAGE_BRANCHES / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 与同一条流式事件协议。
+- 已落地补充：对话管理页复用 `SEND_CHAT / STOP_SESSION / STOP_BRANCH / DELETE_BRANCH / EDIT_USER_MESSAGE / RETRY_USER_MESSAGE / RETRY_MESSAGE / EXPAND_MESSAGE_BRANCHES / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 与同一条流式事件协议。
 - 未落地：快捷输入远端模板命令。
 
 命令分组约束：
@@ -101,6 +102,7 @@ long-lived port 事件：
   - `STOP_BRANCH`
   - `DELETE_BRANCH`
   - `EDIT_USER_MESSAGE`
+  - `RETRY_USER_MESSAGE`
   - `RETRY_MESSAGE`
   - `EXPAND_MESSAGE_BRANCHES`
   - `CLEAR_TAB_CONVERSATION`
@@ -126,6 +128,7 @@ long-lived port 事件：
   - `STOP_BRANCH`
   - `DELETE_BRANCH`
   - `EDIT_USER_MESSAGE`
+  - `RETRY_USER_MESSAGE`
   - `RETRY_MESSAGE`
   - `EXPAND_MESSAGE_BRANCHES`
   - `CLEAR_TAB_CONVERSATION`
@@ -144,7 +147,7 @@ long-lived port 事件：
 - `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
 - 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。
-- `EDIT_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
+- `EDIT_USER_MESSAGE`、`RETRY_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CLEAR_PAGE_CONTEXT` 必须先取消当前页面活跃会话并等待其生命周期收敛，再删除页面记录，避免流式尾包把刚清空的页面重新写回。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。

@@ -7,37 +7,49 @@ import { SettingsShell } from '../../../src/features/settings/settings-shell';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
+  getRecentError: vi.fn(),
   saveConfig: vi.fn(),
   resetConfig: vi.fn(),
   getLocalCacheStats: vi.fn(),
   clearLocalCache: vi.fn(),
   exportConfig: vi.fn(),
   importConfig: vi.fn(),
+  testSyncConnection: vi.fn(),
+  syncNow: vi.fn(),
 }));
 
 vi.mock('../../../src/features/settings/settings-api', () => ({
   settingsApi: {
     getConfig: mocks.getConfig,
+    getRecentError: mocks.getRecentError,
     saveConfig: mocks.saveConfig,
     resetConfig: mocks.resetConfig,
     getLocalCacheStats: mocks.getLocalCacheStats,
     clearLocalCache: mocks.clearLocalCache,
     exportConfig: mocks.exportConfig,
     importConfig: mocks.importConfig,
+    testSyncConnection: mocks.testSyncConnection,
+    syncNow: mocks.syncNow,
   },
 }));
+
+mocks.getRecentError.mockResolvedValue(null);
 
 describe('SettingsShell', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     mocks.getConfig.mockReset();
+    mocks.getRecentError.mockReset();
     mocks.saveConfig.mockReset();
     mocks.resetConfig.mockReset();
     mocks.getLocalCacheStats.mockReset();
     mocks.clearLocalCache.mockReset();
     mocks.exportConfig.mockReset();
     mocks.importConfig.mockReset();
+    mocks.testSyncConnection.mockReset();
+    mocks.syncNow.mockReset();
+    mocks.getRecentError.mockResolvedValue(null);
   });
 
   /** 打开 shadcn Select 并选择目标选项。 */
@@ -50,6 +62,7 @@ describe('SettingsShell', () => {
 
   it('加载配置并展示缓存统计', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
@@ -61,8 +74,26 @@ describe('SettingsShell', () => {
     expect(mocks.getLocalCacheStats).toHaveBeenCalledTimes(1);
   });
 
+  it('会展示最近一次错误摘要', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce({
+      source: 'sync',
+      operation: 'SYNC_NOW',
+      message: '同步失败',
+      capturedAt: new Date('2026-04-05T00:00:00.000Z').getTime(),
+    });
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    expect(await screen.findByText('最近一次错误')).toBeInTheDocument();
+    expect(screen.getByText('同步失败')).toBeInTheDocument();
+    expect(screen.getByText(/同步 \/ SYNC_NOW/)).toBeInTheDocument();
+  });
+
   it('加载配置后渲染设置页顶部动作区与导航 chips', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
@@ -71,12 +102,14 @@ describe('SettingsShell', () => {
     expect(screen.getByTestId('settings-shell-actions')).toBeInTheDocument();
     expect(screen.getByTestId('settings-shell-nav')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存并同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导入配置' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导出配置' })).toBeInTheDocument();
   });
 
   it('设置页使用完整 tab 页面布局而不是弹窗式卡片壳层', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 3, bytes: 128 });
 
     render(<SettingsShell />);
@@ -88,6 +121,7 @@ describe('SettingsShell', () => {
 
   it('切换语言后即时预览标题变化', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
@@ -100,6 +134,7 @@ describe('SettingsShell', () => {
 
   it('切换主题后立即更新设置页预览并保留当前选择', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
@@ -114,6 +149,7 @@ describe('SettingsShell', () => {
 
   it('主题切换后保留 data-theme 并更新根节点主题 class', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
@@ -129,6 +165,7 @@ describe('SettingsShell', () => {
   it('触发保存时提交当前配置', async () => {
     const config = createDefaultConfig();
     mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
     mocks.saveConfig.mockResolvedValueOnce(config);
 
@@ -182,6 +219,7 @@ describe('SettingsShell', () => {
       ],
     });
     mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
     mocks.saveConfig.mockResolvedValueOnce(
       createDefaultConfig({
@@ -275,6 +313,7 @@ describe('SettingsShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存并同步' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: '语言' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: '主题' })).toBeDisabled();
     expect(screen.getByRole('combobox', { name: '默认模型' })).toBeDisabled();
@@ -442,7 +481,6 @@ describe('SettingsShell', () => {
   });
 
   it('导入失败后显示导入错误文案并保留当前页面状态', async () => {
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('{"version":"0.0.0"}');
     const config = createDefaultConfig({
       basic: {
         ...createDefaultConfig().basic,
@@ -456,11 +494,42 @@ describe('SettingsShell', () => {
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
-    fireEvent.click(screen.getByRole('button', { name: '导入配置' }));
+    const file = new File(['{"version":"0.0.0"}'], 'config.json', { type: 'application/json' });
+    fireEvent.change(screen.getByLabelText('导入配置'), {
+      target: {
+        files: [file],
+      },
+    });
 
-    expect(promptSpy).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole('alert')).toHaveTextContent('导入失败');
     expect(screen.getByLabelText('System Prompt')).toHaveValue('保留当前草稿');
+  });
+
+  it('导入文件成功后刷新设置页状态', async () => {
+    const importedConfig = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        systemPrompt: '导入后的 system prompt',
+      },
+    });
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getLocalCacheStats.mockResolvedValue({ entryCount: 1, bytes: 16 });
+    mocks.importConfig.mockResolvedValueOnce(importedConfig);
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    const file = new File([JSON.stringify(importedConfig)], 'config.json', { type: 'application/json' });
+    fireEvent.change(screen.getByLabelText('导入配置'), {
+      target: {
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(mocks.importConfig).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.getByLabelText('System Prompt')).toHaveValue('导入后的 system prompt');
   });
 
   it('切换模型后 API Key 立即恢复掩码', async () => {
@@ -515,7 +584,7 @@ describe('SettingsShell', () => {
     fireEvent.click(screen.getByRole('tab', { name: '语言模型' }));
     fireEvent.click(screen.getByRole('button', { name: '显示' }));
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'text');
-    fireEvent.click(screen.getByRole('button', { name: /模型二/ }));
+    fireEvent.click(screen.getByText('模型二').closest('button') as HTMLButtonElement);
 
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
   });
@@ -605,5 +674,53 @@ describe('SettingsShell', () => {
     });
     expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '语言' })).toHaveTextContent('中文');
+  });
+
+  it('保存并同步会先保存再同步，并回写反馈', async () => {
+    const current = createDefaultConfig({
+      basic: {
+        ...createDefaultConfig().basic,
+        systemPrompt: '保存并同步前的草稿',
+      },
+    });
+    const saved = createDefaultConfig({
+      ...current,
+      updatedAt: 200,
+    });
+    const synced = createDefaultConfig({
+      ...saved,
+      sync: {
+        ...saved.sync,
+        enabled: true,
+        provider: 'gist',
+        gistToken: 'token',
+        gistId: 'gist-id',
+        lastSyncAt: 300,
+      },
+    });
+    mocks.getConfig.mockResolvedValueOnce(current);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+    mocks.saveConfig.mockResolvedValueOnce(saved);
+    mocks.syncNow.mockResolvedValueOnce({
+      config: synced,
+      result: {
+        provider: 'gist',
+        lastSyncAt: 300,
+        snapshotBytes: 512,
+      },
+    });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('button', { name: '保存并同步' }));
+
+    await waitFor(() => {
+      expect(mocks.saveConfig).toHaveBeenCalledTimes(1);
+      expect(mocks.syncNow).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.syncNow).toHaveBeenCalledWith(saved);
+    fireEvent.click(screen.getByRole('tab', { name: '云同步' }));
+    expect(screen.getByText('已同步 512 B')).toBeInTheDocument();
   });
 });

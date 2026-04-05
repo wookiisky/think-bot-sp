@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createContentSource } from '../../../src/services/extraction/content-source';
 import { createExtractionService } from '../../../src/services/extraction/extraction-service';
+import { applyJinaResponseTemplate, createJinaClient } from '../../../src/services/extraction/jina-client';
 
 describe('extraction service', () => {
   it('Readability 成功时不走 Jina 回退', async () => {
@@ -36,6 +37,8 @@ describe('extraction service', () => {
       tabId: 7,
       pageUrl: 'https://example.com/article',
       method: 'readability',
+      jinaApiKey: '',
+      jinaResponseTemplate: '{{content}}',
     });
 
     expect(result).toMatchObject({
@@ -75,12 +78,17 @@ describe('extraction service', () => {
         tabId: 7,
         pageUrl: 'https://example.com/article',
         method: 'readability',
+        jinaApiKey: '',
+        jinaResponseTemplate: '{{content}}',
       }),
     ).resolves.toMatchObject({
       extractionMethod: 'jina',
       content: 'Jina body',
     });
-    expect(jinaClient.extract).toHaveBeenCalledWith('https://example.com/article');
+    expect(jinaClient.extract).toHaveBeenCalledWith('https://example.com/article', {
+      apiKey: '',
+      responseTemplate: '{{content}}',
+    });
   });
 
   it('空 HTML 直接失败，不向 Jina 发送空内容', async () => {
@@ -112,9 +120,39 @@ describe('extraction service', () => {
         tabId: 7,
         pageUrl: 'https://example.com/article',
         method: 'readability',
+        jinaApiKey: '',
+        jinaResponseTemplate: '{{content}}',
       }),
     ).rejects.toThrow(/empty html/i);
     expect(jinaClient.extract).not.toHaveBeenCalled();
+  });
+});
+
+describe('jina client', () => {
+  it('支持把原始响应套入模板', () => {
+    expect(applyJinaResponseTemplate('正文', '摘要开始\n{{content}}\n摘要结束')).toBe('摘要开始\n正文\n摘要结束');
+    expect(applyJinaResponseTemplate('正文', '前缀')).toBe('前缀\n\n正文');
+  });
+
+  it('配置了 API Key 时会带鉴权头并套用模板', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => '原始正文',
+    });
+    const client = createJinaClient({ fetcher });
+
+    await expect(
+      client.extract('https://example.com/article?foo=bar', {
+        apiKey: 'jina-key',
+        responseTemplate: '包装\n{{content}}',
+      }),
+    ).resolves.toBe('包装\n原始正文');
+
+    expect(fetcher).toHaveBeenCalledWith('https://r.jina.ai/http://example.com/article?foo=bar', {
+      headers: {
+        Authorization: 'Bearer jina-key',
+      },
+    });
   });
 });
 

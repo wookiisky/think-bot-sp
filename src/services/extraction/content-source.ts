@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 const RETRY_DELAY_MS = 200;
 const RETRY_AFTER_RELOAD_COUNT = 5;
 

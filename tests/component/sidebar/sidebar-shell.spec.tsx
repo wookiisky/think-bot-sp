@@ -63,6 +63,17 @@ const createSidebarApi = (overrides?: Record<string, unknown>) => ({
       sessionId: 'session-edit',
     },
   }),
+  retryUserMessage: vi.fn().mockResolvedValue({
+    type: 'RETRY_USER_MESSAGE_SUCCESS',
+    payload: {
+      retriedMessageId: 'user-1',
+      assistantMessageId: 'assistant-1',
+      branchId: 'branch-user-retry',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+      sessionId: 'session-user-retry',
+    },
+  }),
   retryMessage: vi.fn().mockResolvedValue({
     type: 'RETRY_MESSAGE_SUCCESS',
     payload: {
@@ -129,12 +140,24 @@ describe('SidebarShell', () => {
   });
 
   it('支持拖拽调整提取区高度', async () => {
-    const api = createSidebarApi();
+    const api = createSidebarApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            extractionPanelHeight: 280,
+          },
+        }),
+      }),
+    });
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
     const extractionPanel = await screen.findByTestId('sidebar-extraction-panel');
-    expect(extractionPanel).toHaveStyle({ height: '240px' });
+    await waitFor(() => {
+      expect(extractionPanel).toHaveStyle({ height: '280px' });
+    });
 
     fireEvent.pointerDown(screen.getByTestId('sidebar-extraction-resize-handle'), {
       clientY: 200,
@@ -144,7 +167,7 @@ describe('SidebarShell', () => {
     });
     fireEvent.pointerUp(window);
 
-    expect(extractionPanel).toHaveStyle({ height: '300px' });
+    expect(extractionPanel).toHaveStyle({ height: '340px' });
   });
 
   it('黑名单命中时先显示确认层，不自动提取', async () => {
@@ -259,7 +282,7 @@ describe('SidebarShell', () => {
       tabId: 7,
       pageUrl: 'https://example.com/article',
     });
-    expect(screen.getByText('还没有聊天记录')).toBeVisible();
+    expect(screen.getAllByText('还没有聊天记录').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留这段草稿');
     expect(screen.getByText('已清空当前页面数据')).toBeVisible();
     confirmSpy.mockRestore();
@@ -1006,9 +1029,9 @@ describe('SidebarShell', () => {
       messageId: 'assistant-edit',
     });
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '重试' })).toBeVisible());
+    await waitFor(() => expect(screen.getByRole('button', { name: '重试回答' })).toBeVisible());
 
-    await user.click(screen.getByRole('button', { name: '重试' }));
+    await user.click(screen.getByRole('button', { name: '重试回答' }));
     expect(api.retryMessage).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',

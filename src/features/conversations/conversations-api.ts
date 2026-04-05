@@ -1,6 +1,4 @@
-/* eslint-disable no-unused-vars */
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { EXTENSION_PAGES } from '../../shared/extension-pages';
 import type {
   SidebarConversationRecord,
   SidebarLoadingStateRecord,
@@ -94,6 +92,18 @@ type ConversationsApi = {
     payload: {
       editedMessageId: string;
       messageId: string;
+      sessionId: string;
+    };
+  }>;
+  /** 重试用户消息。 */
+  retryUserMessage: (input: { pageUrl: string; promptTabId: string; messageId: string }) => Promise<{
+    type: 'RETRY_USER_MESSAGE_SUCCESS';
+    payload: {
+      retriedMessageId: string;
+      assistantMessageId: string;
+      branchId: string;
+      modelId: string;
+      modelLabel: string;
       sessionId: string;
     };
   }>;
@@ -219,6 +229,13 @@ export const createConversationsApi = (): ConversationsApi => ({
   editUserMessage(input) {
     return chrome.runtime.sendMessage({
       type: 'EDIT_USER_MESSAGE',
+      tabId: CONVERSATIONS_TAB_ID,
+      ...input,
+    });
+  },
+  retryUserMessage(input) {
+    return chrome.runtime.sendMessage({
+      type: 'RETRY_USER_MESSAGE',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });

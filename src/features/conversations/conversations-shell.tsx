@@ -22,7 +22,6 @@ import {
   buildPromptTabs,
   buildRestoreMessageIdMap,
   getPromptTabStatusKind,
-  pickInitialPromptTabId,
   toModelOptions,
   toOptimisticUserContent,
   type ChatMessageState,
@@ -720,6 +719,44 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
   };
 
+  /** 重试用户消息，并把结果追加为原助手消息的新分支。 */
+  const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
+    if (!selectedPage) {
+      return;
+    }
+
+    try {
+      setPromptTabNotice(promptTabId, '');
+      const response = await api.retryUserMessage({
+        pageUrl: selectedPage.url,
+        promptTabId,
+        messageId,
+      });
+      setPromptTabMessages(promptTabId, (current) =>
+        upsertAssistantMessage(current, response.payload.assistantMessageId, (assistantMessage) => ({
+          id: response.payload.assistantMessageId,
+          role: 'assistant',
+          content: assistantMessage?.content ?? '',
+          status: assistantMessage?.status ?? 'done',
+          errorMessage: assistantMessage?.errorMessage ?? null,
+          branches: [
+            ...(assistantMessage?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
+            {
+              id: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+              content: '',
+              status: 'loading',
+              errorMessage: null,
+            },
+          ],
+        })),
+      );
+    } catch {
+      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+    }
+  };
+
   /** 重试助手消息。 */
   const handleRetryMessage = async (promptTabId: string, messageId: string) => {
     if (!selectedPage) {
@@ -1155,10 +1192,12 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 }}
                 onCancelEdit={() => setPromptTabEditing(promptTab.id, null)}
                 onSubmitEdit={(messageId) => handleEditUserMessage(promptTab.id, messageId, editingMap[promptTab.id]?.text ?? '')}
-                onRetryMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
+                onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
+                onRetryAssistantMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
                 onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
                 onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
                 onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
+                onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
               />
             </div>
           ))}

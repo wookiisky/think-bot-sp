@@ -78,6 +78,7 @@ export const ChatInput = ({
   onClear,
 }: ChatInputProps) => {
   const [composerHeight, setComposerHeight] = useState(DEFAULT_COMPOSER_HEIGHT);
+  const [isComposing, setIsComposing] = useState(false);
   const [resizeSession, setResizeSession] = useState<{
     /** 拖拽开始时的鼠标纵坐标。 */
     startY: number;
@@ -87,6 +88,22 @@ export const ChatInput = ({
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
   const supportsImages = selectedModel?.supportsImages ?? false;
   const isSendDisabled = disabled || sending || !selectedModelId;
+  /** 尝试提交当前输入。 */
+  const submitCurrentInput = () => {
+    if (text.trim().length === 0 && images.length === 0) {
+      return;
+    }
+    if (!selectedModelId || isSendDisabled) {
+      return;
+    }
+
+    void onSend({
+      text,
+      images,
+      modelId: selectedModelId,
+      includePageContent,
+    });
+  };
 
   useEffect(() => {
     if (!resizeSession) {
@@ -164,6 +181,19 @@ export const ChatInput = ({
           disabled={disabled}
           style={{ height: `${composerHeight}px` }}
           onChange={(event) => onTextChange(event.target.value)}
+          onCompositionStart={() => setIsComposing(true)}
+          onCompositionEnd={() => setIsComposing(false)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+              return;
+            }
+            if (isComposing || event.nativeEvent.isComposing) {
+              return;
+            }
+
+            event.preventDefault();
+            submitCurrentInput();
+          }}
         />
 
         {images.length > 0 ? (
@@ -235,21 +265,7 @@ export const ChatInput = ({
               aria-label={t('workspace.send')}
               title={t('workspace.send')}
               disabled={isSendDisabled}
-              onClick={() => {
-                if (text.trim().length === 0 && images.length === 0) {
-                  return;
-                }
-                if (!selectedModelId) {
-                  return;
-                }
-
-                void onSend({
-                  text,
-                  images,
-                  modelId: selectedModelId,
-                  includePageContent,
-                });
-              }}
+              onClick={submitCurrentInput}
             >
               {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
             </Button>

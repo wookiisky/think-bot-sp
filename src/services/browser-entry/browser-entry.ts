@@ -3,7 +3,6 @@ import { isRestrictedUrl, resolveWelcomeLocale } from '../../shared/browser-entr
 import { createBrowserEntryPanelState } from './browser-panel-state';
 
 const MENU_ID_CONVERSATIONS = 'open-conversations';
-/* eslint-disable-next-line no-unused-vars */
 type LoggerMethod = (..._input: [string, (Record<string, unknown> | undefined)?]) => void;
 
 type BrowserEntryLogger = {

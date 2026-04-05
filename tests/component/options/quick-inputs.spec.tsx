@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { QuickInputsPanel } from '../../../src/features/settings/quick-inputs-panel';
@@ -12,11 +12,15 @@ const t = (key: string) =>
     'settings.quickInputsDescription': '管理快捷输入模板。',
     'settings.noQuickInputs': '暂无快捷输入',
     'settings.addQuickInput': '新增快捷输入',
+    'settings.importQuickInputTemplates': '导入远端模板',
+    'settings.importingQuickInputTemplates': '正在导入模板',
     'settings.deleteQuickInput': '删除快捷输入',
+    'settings.dragQuickInput': '拖拽快捷输入',
     'settings.moveUp': '上移',
     'settings.moveDown': '下移',
     'settings.quickInputName': '快捷输入名称',
     'settings.quickInputPrompt': '快捷输入提示词',
+    'settings.quickInputPromptEmpty': '暂无提示词',
     'settings.quickInputAutoTrigger': '自动触发',
     'settings.quickInputModel': '专属模型',
     'settings.quickInputNoModel': '不指定模型',
@@ -56,7 +60,16 @@ const ControlledQuickInputsPanel = ({ config: initialConfig }: { config?: Return
       }),
   );
 
-  return <QuickInputsPanel config={config} disabled={false} onChange={setConfig} t={t} />;
+  return (
+    <QuickInputsPanel
+      config={config}
+      disabled={false}
+      importingTemplates={false}
+      onChange={setConfig}
+      onImportTemplates={() => undefined}
+      t={t}
+    />
+  );
 };
 
 describe('QuickInputsPanel', () => {
@@ -129,9 +142,9 @@ describe('QuickInputsPanel', () => {
 
     await user.click(screen.getByRole('button', { name: '删除快捷输入' }));
 
-    expect(screen.queryByRole('button', { name: /问题拆解/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /总结/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /翻译/ })).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('问题拆解')).not.toBeInTheDocument();
+    expect(screen.getByText('总结')).toBeInTheDocument();
+    expect(screen.getByText('翻译')).toBeInTheDocument();
   });
 
   it('引用失效模型时提示降级并允许重新选择', async () => {
@@ -182,5 +195,42 @@ describe('QuickInputsPanel', () => {
     await user.click(await screen.findByRole('option', { name: '不指定模型' }));
 
     expect(screen.queryByText('引用的模型已失效，建议重新选择。')).not.toBeInTheDocument();
+  });
+
+  it('支持折叠展开，并暴露远端模板导入入口', async () => {
+    const onImportTemplates = vi.fn();
+    render(
+      <QuickInputsPanel
+        config={createDefaultConfig({
+          quickInputs: [
+            {
+              id: 'quick-1',
+              name: '总结',
+              prompt: '请总结当前页面内容，保留重点结论。',
+              autoTrigger: false,
+              modelId: null,
+              branchModelIds: [],
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        })}
+        disabled={false}
+        importingTemplates={false}
+        onChange={() => undefined}
+        onImportTemplates={onImportTemplates}
+        t={t}
+      />,
+    );
+
+    const user = userEvent.setup();
+    expect(screen.getByLabelText('快捷输入提示词')).toHaveValue('请总结当前页面内容，保留重点结论。');
+    expect(screen.getByLabelText('快捷输入名称')).toBeInTheDocument();
+
+    await user.click(screen.getByText('总结'));
+    expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '导入远端模板' }));
+    expect(onImportTemplates).toHaveBeenCalledTimes(1);
   });
 });

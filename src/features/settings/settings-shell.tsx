@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { buildRecentErrorSummary, type RecentErrorSummary } from '../../domain/error/recent-error-schema';
 import {
   getEnabledCompleteModels,
   isModelConfigComplete,
@@ -11,9 +12,11 @@ import { createLocaleService } from '../../services/i18n/locale-service';
 import { createLogger } from '../../services/logger/logger';
 import { downloadTextFile } from '../../shared/download-file';
 import { Icon } from '../../ui/icon';
+import { BlacklistSettingsPanel } from './blacklist-settings-panel';
 import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
 import { LanguageModelsPanel } from './language-models-panel';
+import { appendQuickInputTemplates, fetchQuickInputTemplates } from './quick-input-template-service';
 import { QuickInputsPanel } from './quick-inputs-panel';
 import { settingsApi } from './settings-api';
 import { SettingsActions } from './settings-actions';
@@ -46,9 +49,11 @@ export const SettingsShell = () => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('basic');
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [importingQuickInputTemplates, setImportingQuickInputTemplates] = useState(false);
   const [testingSync, setTestingSync] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<SettingsViewError | null>(null);
+  const [recentError, setRecentError] = useState<RecentErrorSummary | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<SyncFeedback | null>(null);
 
   useEffect(() => {
@@ -58,10 +63,11 @@ export const SettingsShell = () => {
       logger.info('开始加载设置页');
 
       try {
-        const [nextConfig, nextCacheStats, nextLocaleResources] = await Promise.all([
+        const [nextConfig, nextCacheStats, nextLocaleResources, nextRecentError] = await Promise.all([
           settingsApi.getConfig(),
           settingsApi.getLocalCacheStats(),
           localeService.loadResources(),
+          settingsApi.getRecentError(),
         ]);
 
         if (!active) {
@@ -72,6 +78,7 @@ export const SettingsShell = () => {
         setDraftConfig(nextConfig);
         setCacheStats(nextCacheStats);
         setLocaleResources(nextLocaleResources);
+        setRecentError(nextRecentError);
         setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
         logger.info('设置页加载完成', {
           entryCount: nextCacheStats.entryCount,
@@ -116,30 +123,114 @@ export const SettingsShell = () => {
     setError({ title, message });
   };
 
+  /** 将当前页面可感知的失败同步成最近错误摘要。 */
+  const captureRecentError = (source: RecentErrorSummary['source'], operation: string, message: string) => {
+    setRecentError(
+      buildRecentErrorSummary({
+        source,
+        operation,
+        message,
+      }),
+    );
+  };
+
   const refreshCacheStats = async () => {
     const nextCacheStats = await settingsApi.getLocalCacheStats();
     setCacheStats(nextCacheStats);
     return nextCacheStats;
   };
 
-  const handleImport = async () => {
+  const validateDraftConfig = () => {
+    const nextDraftConfig = normalizeBranchModelSelections(draftConfig);
+    const defaultModel = nextDraftConfig.basic.defaultModelId
+      ? nextDraftConfig.models.find((item) => item.id === nextDraftConfig.basic.defaultModelId)
+      : null;
+
+    if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
+      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      logger.warn('默认模型不存在，阻止保存', { defaultModelId: nextDraftConfig.basic.defaultModelId });
+      return null;
+    }
+
+    if (defaultModel && !isModelConfigComplete(defaultModel)) {
+      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
+      logger.warn('默认模型配置不完整，阻止保存', { defaultModelId: defaultModel.id });
+      return null;
+    }
+
+    return nextDraftConfig;
+  };
+
+  const persistDraftConfig = async () => {
+    const nextDraftConfig = validateDraftConfig();
+    if (!nextDraftConfig) {
+      return null;
+    }
+
+    setSaving(true);
     try {
-      const payload = typeof window.prompt === 'function' ? window.prompt('粘贴配置内容') : null;
-      if (!payload) {
+      const nextConfig = await settingsApi.saveConfig(nextDraftConfig);
+      setSavedConfig(nextConfig);
+      setDraftConfig(nextConfig);
+      logger.info('保存设置成功', { language: nextConfig.basic.language });
+      setError(null);
+      return nextConfig;
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : 'unknown error';
+      logger.error('保存设置失败', { message });
+      captureRecentError('settings', 'SAVE_CONFIG', message);
+      setOperationError('保存失败', message);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runSync = async (configToSync: ExtensionConfig) => {
+    setSyncing(true);
+    try {
+      const response = await settingsApi.syncNow(configToSync);
+      setSavedConfig(response.config);
+      setDraftConfig(response.config);
+      setSyncFeedback({
+        tone: 'success',
+        message: `已同步 ${response.result.snapshotBytes} B`,
+      });
+      setError(null);
+      return response;
+    } catch (syncError) {
+      const message = syncError instanceof Error ? syncError.message : 'unknown error';
+      captureRecentError('sync', 'SYNC_NOW', message);
+      setSyncFeedback({
+        tone: 'error',
+        message,
+      });
+      setOperationError('同步失败', message);
+      return null;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    try {
+      const payload = await file.text();
+      if (!payload.trim()) {
         return;
       }
 
-        const nextConfig = await settingsApi.importConfig(payload);
-        setSavedConfig(nextConfig);
-        setDraftConfig(nextConfig);
-        setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
-        await refreshCacheStats();
+      const nextConfig = await settingsApi.importConfig(payload);
+      setSavedConfig(nextConfig);
+      setDraftConfig(nextConfig);
+      setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
+      await refreshCacheStats();
       logger.info('导入配置成功');
       setError(null);
       setSyncFeedback(null);
     } catch (importError) {
       const message = importError instanceof Error ? importError.message : 'unknown error';
       logger.error('导入配置失败', { message });
+      captureRecentError('settings', 'IMPORT_CONFIG', message);
       setOperationError('导入失败', message);
     }
   };
@@ -157,6 +248,7 @@ export const SettingsShell = () => {
     } catch (exportError) {
       const message = exportError instanceof Error ? exportError.message : 'unknown error';
       logger.error('导出配置失败', { message });
+      captureRecentError('settings', 'EXPORT_CONFIG', message);
       setOperationError('导出失败', message);
     }
   };
@@ -170,41 +262,46 @@ export const SettingsShell = () => {
     } catch (clearError) {
       const message = clearError instanceof Error ? clearError.message : 'unknown error';
       logger.error('清理本地缓存失败', { message });
+      captureRecentError('settings', 'CLEAR_LOCAL_CACHE', message);
       setOperationError('清理缓存失败', message);
     }
   };
 
   const handleSave = async () => {
-    const nextDraftConfig = normalizeBranchModelSelections(draftConfig);
-    const defaultModel = nextDraftConfig.basic.defaultModelId
-      ? nextDraftConfig.models.find((item) => item.id === nextDraftConfig.basic.defaultModelId)
-      : null;
-    if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
-      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型不存在，阻止保存', { defaultModelId: nextDraftConfig.basic.defaultModelId });
-      return;
-    }
+    await persistDraftConfig();
+  };
 
-    if (defaultModel && !isModelConfigComplete(defaultModel)) {
-      setOperationError('默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型配置不完整，阻止保存', { defaultModelId: defaultModel.id });
-      return;
-    }
-
-    setSaving(true);
+  const handleImportQuickInputTemplates = async () => {
+    setImportingQuickInputTemplates(true);
     try {
-      const nextConfig = await settingsApi.saveConfig(nextDraftConfig);
-      setSavedConfig(nextConfig);
-      setDraftConfig(nextConfig);
-      logger.info('保存设置成功', { language: nextConfig.basic.language });
+      const templates = await fetchQuickInputTemplates();
+      const result = appendQuickInputTemplates({
+        config: draftConfig,
+        templates,
+      });
+      setDraftConfig(result.config);
       setError(null);
-    } catch (saveError) {
-      const message = saveError instanceof Error ? saveError.message : 'unknown error';
-      logger.error('保存设置失败', { message });
-      setOperationError('保存失败', message);
+    } catch (importError) {
+      const message = importError instanceof Error ? importError.message : 'unknown error';
+      logger.error('导入远端快捷输入模板失败', { message });
+      captureRecentError('settings', 'IMPORT_QUICK_INPUT_TEMPLATES', message);
+      setOperationError('导入快捷输入模板失败', message);
     } finally {
-      setSaving(false);
+      setImportingQuickInputTemplates(false);
     }
+  };
+
+  const handleSaveAndSync = async () => {
+    if (saving || syncing) {
+      return;
+    }
+
+    const savedConfigAfterPersist = await persistDraftConfig();
+    if (!savedConfigAfterPersist) {
+      return;
+    }
+
+    await runSync(savedConfigAfterPersist);
   };
 
   const handleReset = async () => {
@@ -222,6 +319,7 @@ export const SettingsShell = () => {
     } catch (resetError) {
       const message = resetError instanceof Error ? resetError.message : 'unknown error';
       logger.error('恢复默认配置失败', { message });
+      captureRecentError('settings', 'RESET_CONFIG', message);
       setOperationError('恢复默认失败', message);
     } finally {
       setSaving(false);
@@ -239,6 +337,7 @@ export const SettingsShell = () => {
       setError(null);
     } catch (syncError) {
       const message = syncError instanceof Error ? syncError.message : 'unknown error';
+      captureRecentError('sync', 'TEST_SYNC_CONNECTION', message);
       setSyncFeedback({
         tone: 'error',
         message,
@@ -250,26 +349,7 @@ export const SettingsShell = () => {
   };
 
   const handleSyncNow = async () => {
-    setSyncing(true);
-    try {
-      const response = await settingsApi.syncNow(draftConfig);
-      setSavedConfig(response.config);
-      setDraftConfig(response.config);
-      setSyncFeedback({
-        tone: 'success',
-        message: `已同步 ${response.result.snapshotBytes} B`,
-      });
-      setError(null);
-    } catch (syncError) {
-      const message = syncError instanceof Error ? syncError.message : 'unknown error';
-      setSyncFeedback({
-        tone: 'error',
-        message,
-      });
-      setOperationError('同步失败', message);
-    } finally {
-      setSyncing(false);
-    }
+    await runSync(draftConfig);
   };
 
   return (
@@ -298,8 +378,9 @@ export const SettingsShell = () => {
 
             <SettingsActions
               hasUnsavedChanges={dirty}
-              disabled={saving}
+              disabled={saving || syncing}
               onSave={handleSave}
+              onSaveAndSync={handleSaveAndSync}
               onReset={handleReset}
               onImport={handleImport}
               onExport={handleExport}
@@ -318,6 +399,29 @@ export const SettingsShell = () => {
               </section>
             </section>
           ) : null}
+
+          <section className="lg:col-start-2">
+            <section className="grid gap-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="m-0 text-sm font-semibold">{t('settings.recentError')}</h2>
+                {recentError ? (
+                  <span className="text-xs text-muted-foreground">
+                    {t(`settings.recentErrorSource.${recentError.source}`)} / {recentError.operation}
+                  </span>
+                ) : null}
+              </div>
+              {recentError ? (
+                <>
+                  <p className="m-0 text-sm text-foreground">{recentError.message}</p>
+                  <p className="m-0 text-xs text-muted-foreground">
+                    {t('settings.recentErrorCapturedAt')}：{new Date(recentError.capturedAt).toLocaleString()}
+                  </p>
+                </>
+              ) : (
+                <p className="m-0 text-sm text-muted-foreground">{t('settings.recentErrorEmpty')}</p>
+              )}
+            </section>
+          </section>
 
           <section className="grid gap-6 lg:col-start-2">
             {activeSection === 'basic' ? (
@@ -339,7 +443,14 @@ export const SettingsShell = () => {
                 aria-labelledby="settings-tab-promptTabs"
                 className="grid gap-6"
               >
-                <QuickInputsPanel config={draftConfig} disabled={saving} onChange={updateDraftConfig} t={t} />
+                <QuickInputsPanel
+                  config={draftConfig}
+                  disabled={saving}
+                  importingTemplates={importingQuickInputTemplates}
+                  onChange={updateDraftConfig}
+                  onImportTemplates={handleImportQuickInputTemplates}
+                  t={t}
+                />
               </section>
             ) : null}
 
@@ -369,15 +480,7 @@ export const SettingsShell = () => {
             ) : null}
 
             {activeSection === 'blacklist' ? (
-              <section
-                id="settings-panel-blacklist"
-                role="tabpanel"
-                aria-labelledby="settings-tab-blacklist"
-                className="rounded-3xl border border-border/70 bg-card px-5 py-5 ring-1 ring-foreground/8"
-              >
-                <h2 className="m-0 text-base font-semibold">{t('settings.blacklistSettings')}</h2>
-                <p className="mb-0 mt-2 text-sm text-muted-foreground">{t('settings.blacklistPlaceholderDescription')}</p>
-              </section>
+              <BlacklistSettingsPanel config={draftConfig} disabled={saving || syncing} onChange={updateDraftConfig} t={t} />
             ) : null}
           </section>
         </section>

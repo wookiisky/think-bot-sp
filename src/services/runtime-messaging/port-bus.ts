@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { sidebarPortEventSchema, sidebarPortNameSchema, type SidebarPortEvent } from './sidebar-contract';
 
 type SidebarPort = chrome.runtime.Port;

@@ -1550,4 +1550,190 @@ describe('chat-dispatch-service session lifecycle', () => {
       ],
     });
   });
+
+  it('retryUserMessage 会把结果追加为原助手消息的新分支，并保留主回答', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    await conversationRepository.saveConversation({
+      id: 'https://example.com/article:chat',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: '原问题',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: null,
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '原回答',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-1',
+          branches: [],
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      lastAssistantState: {
+        messageId: 'assistant-1',
+        status: 'done',
+        summary: '原回答',
+      },
+      updatedAt: 2,
+    });
+
+    const publishToPromptTab = vi.fn();
+    const streamText = vi.fn().mockResolvedValue({
+      textStream: (async function* () {
+        yield '分支重试回答';
+      })(),
+    });
+    const service = createChatDispatchService({
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue({
+          version: '2.0.0',
+          updatedAt: 1,
+          basic: {
+            theme: 'system',
+            language: 'zh-CN',
+            defaultModelId: 'model-1',
+            branchModelIds: [],
+            systemPrompt: '',
+            filterCot: false,
+            extractionMethod: 'readability',
+            includePageContentByDefault: true,
+          },
+          models: [],
+          quickInputs: [],
+          sync: {
+            enabled: false,
+            provider: 'none',
+            gistToken: '',
+            gistId: '',
+            webdavUrl: '',
+            webdavUsername: '',
+            webdavPassword: '',
+            lastSyncAt: null,
+          },
+          blacklist: [],
+        }),
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-1',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText,
+      createSessionId: () => 'session-user-retry',
+      createMessageId: () => 'branch-user-retry',
+      now: (() => {
+        const values = [30, 31, 32, 33, 34];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.retryUserMessage({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'user-1',
+    });
+
+    expect(session.branchId).toBe('branch-user-retry');
+    expect(session.messageId).toBe('assistant-1');
+    await expect(session.done).resolves.toMatchObject({
+      sessionId: 'session-user-retry',
+      messageId: 'assistant-1',
+      status: 'done',
+    });
+    expect(streamText).toHaveBeenCalledWith({
+      model: { kind: 'sdk-model' },
+      messages: [
+        {
+          role: 'user',
+          content: '原问题',
+          images: [],
+        },
+      ],
+      abortSignal: expect.any(AbortSignal),
+    });
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toSatisfy((conversation) =>
+      conversation?.messages.some(
+        (message) =>
+          message.id === 'assistant-1' &&
+          message.role === 'assistant' &&
+          message.content === '原回答' &&
+          message.branches.some(
+            (branch) => branch.id === 'branch-user-retry' && branch.content === '分支重试回答' && branch.status === 'done',
+          ),
+      ) === true,
+    );
+    expect(collectPublishedEvents(publishToPromptTab)).toEqual([
+      {
+        type: 'BRANCH_STREAM_STARTED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-user-retry',
+        messageId: 'assistant-1',
+        branchId: 'branch-user-retry',
+        modelId: 'model-1',
+        modelLabel: '主模型',
+      },
+      {
+        type: 'BRANCH_STREAM_CHUNK',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-user-retry',
+        messageId: 'assistant-1',
+        branchId: 'branch-user-retry',
+        chunk: '分支重试回答',
+      },
+      {
+        type: 'BRANCH_STREAM_FINISHED',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-user-retry',
+        messageId: 'assistant-1',
+        branchId: 'branch-user-retry',
+      },
+    ]);
+  });
 });

@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { settingsApi } from '../../../src/features/settings/settings-api';

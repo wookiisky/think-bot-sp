@@ -139,6 +139,7 @@ const createConversationsApi = (overrides?: Record<string, unknown>) => ({
   }),
   sendChat: vi.fn(),
   editUserMessage: vi.fn(),
+  retryUserMessage: vi.fn(),
   retryMessage: vi.fn(),
   expandMessageBranches: vi.fn(),
   stopSession: vi.fn(),

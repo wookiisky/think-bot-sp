@@ -228,4 +228,130 @@ describe('ChatInput', () => {
 
     expect(textarea).toHaveStyle({ height: '184px' });
   });
+
+  it('按 Enter 会直接发送当前输入', () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatInput
+        disabled={false}
+        sending={false}
+        text="直接发送"
+        images={[]}
+        includePageContent={true}
+        selectedModelId="model-1"
+        models={[
+          {
+            id: 'model-1',
+            name: '主模型',
+            supportsImages: true,
+          },
+        ]}
+        t={t}
+        onSelectModel={vi.fn()}
+        onTextChange={vi.fn()}
+        onImagesChange={vi.fn()}
+        onIncludePageContentChange={vi.fn()}
+        onSend={onSend}
+        onStop={vi.fn()}
+        onClear={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByLabelText('聊天输入'), {
+      key: 'Enter',
+    });
+
+    expect(onSend).toHaveBeenCalledWith({
+      text: '直接发送',
+      images: [],
+      modelId: 'model-1',
+      includePageContent: true,
+    });
+  });
+
+  it('Shift+Enter 只换行，不会发送', () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatInput
+        disabled={false}
+        sending={false}
+        text="保留换行"
+        images={[]}
+        includePageContent={true}
+        selectedModelId="model-1"
+        models={[
+          {
+            id: 'model-1',
+            name: '主模型',
+            supportsImages: true,
+          },
+        ]}
+        t={t}
+        onSelectModel={vi.fn()}
+        onTextChange={vi.fn()}
+        onImagesChange={vi.fn()}
+        onIncludePageContentChange={vi.fn()}
+        onSend={onSend}
+        onStop={vi.fn()}
+        onClear={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByLabelText('聊天输入'), {
+      key: 'Enter',
+      shiftKey: true,
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('输入法组合期间按 Enter 不会发送', () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatInput
+        disabled={false}
+        sending={false}
+        text="拼音输入"
+        images={[]}
+        includePageContent={true}
+        selectedModelId="model-1"
+        models={[
+          {
+            id: 'model-1',
+            name: '主模型',
+            supportsImages: true,
+          },
+        ]}
+        t={t}
+        onSelectModel={vi.fn()}
+        onTextChange={vi.fn()}
+        onImagesChange={vi.fn()}
+        onIncludePageContentChange={vi.fn()}
+        onSend={onSend}
+        onStop={vi.fn()}
+        onClear={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    const textarea = screen.getByLabelText('聊天输入');
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, {
+      key: 'Enter',
+    });
+
+    expect(onSend).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(textarea);
+    fireEvent.keyDown(textarea, {
+      key: 'Enter',
+    });
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
 });

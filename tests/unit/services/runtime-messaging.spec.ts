@@ -29,6 +29,7 @@ describe('runtime-messaging', () => {
       'CLEAR_TAB_CONVERSATION',
       'SEND_CHAT',
       'EDIT_USER_MESSAGE',
+      'RETRY_USER_MESSAGE',
       'RETRY_MESSAGE',
       'EXPAND_MESSAGE_BRANCHES',
       'STOP_SESSION',
@@ -145,6 +146,21 @@ describe('runtime-messaging', () => {
       promptTabId: 'chat',
       messageId: 'user-1',
       text: '更新后的问题',
+    });
+    expect(
+      sidebarCommandSchema.parse({
+        type: 'RETRY_USER_MESSAGE',
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        messageId: 'user-1',
+      }),
+    ).toEqual({
+      type: 'RETRY_USER_MESSAGE',
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'user-1',
     });
     expect(
       sidebarCommandSchema.parse({
@@ -533,6 +549,10 @@ describe('runtime-messaging', () => {
       logger,
       chatDispatchService: {
         dispatchChat,
+        editUserMessage: vi.fn(),
+        retryUserMessage: vi.fn(),
+        retryMessage: vi.fn(),
+        expandBranches: vi.fn(),
       },
     });
 
@@ -660,6 +680,9 @@ describe('runtime-messaging', () => {
       logger,
       chatDispatchService: {
         dispatchChat: vi.fn(),
+        editUserMessage: vi.fn(),
+        retryUserMessage: vi.fn(),
+        retryMessage: vi.fn(),
         expandBranches,
       },
     });
@@ -787,6 +810,20 @@ describe('runtime-messaging', () => {
         errorMessage: null,
       }),
     });
+    const retryUserMessage = vi.fn().mockResolvedValue({
+      sessionId: 'session-user-retry',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+      cancel: vi.fn(),
+      done: Promise.resolve({
+        sessionId: 'session-user-retry',
+        messageId: 'assistant-1',
+        status: 'done',
+        errorMessage: null,
+      }),
+    });
     const retryMessage = vi.fn().mockResolvedValue({
       sessionId: 'session-retry',
       messageId: 'assistant-retry',
@@ -815,6 +852,7 @@ describe('runtime-messaging', () => {
       chatDispatchService: {
         dispatchChat: vi.fn(),
         editUserMessage,
+        retryUserMessage,
         retryMessage,
         expandBranches: vi.fn(),
       },
@@ -849,6 +887,34 @@ describe('runtime-messaging', () => {
     await expect(
       handler(
         {
+          type: 'RETRY_USER_MESSAGE',
+          tabId: 7,
+          pageUrl: 'https://example.com/article',
+          promptTabId: 'chat',
+          messageId: 'user-1',
+        },
+        {
+          sender: {
+            id: 'ext-id',
+            url: 'chrome-extension://ext-id/sidebar.html',
+          },
+        },
+      ),
+    ).resolves.toEqual({
+      type: 'RETRY_USER_MESSAGE_SUCCESS',
+      payload: {
+        retriedMessageId: 'user-1',
+        assistantMessageId: 'assistant-1',
+        branchId: 'branch-1',
+        modelId: 'model-1',
+        modelLabel: '主模型',
+        sessionId: 'session-user-retry',
+      },
+    });
+
+    await expect(
+      handler(
+        {
           type: 'RETRY_MESSAGE',
           tabId: 7,
           pageUrl: 'https://example.com/article',
@@ -876,6 +942,11 @@ describe('runtime-messaging', () => {
       promptTabId: 'chat',
       messageId: 'user-1',
       content: '编辑后的问题',
+    });
+    expect(retryUserMessage).toHaveBeenCalledWith({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      messageId: 'user-1',
     });
     expect(retryMessage).toHaveBeenCalledWith({
       normalizedUrl: 'https://example.com/article',
@@ -925,6 +996,10 @@ describe('runtime-messaging', () => {
           }),
           done: activeSessionDone,
         }),
+        editUserMessage: vi.fn(),
+        retryUserMessage: vi.fn(),
+        retryMessage: vi.fn(),
+        expandBranches: vi.fn(),
       },
     });
 
@@ -1025,6 +1100,10 @@ describe('runtime-messaging', () => {
             cancel: quickCancel,
             done: quickDone,
           }),
+        editUserMessage: vi.fn(),
+        retryUserMessage: vi.fn(),
+        retryMessage: vi.fn(),
+        expandBranches: vi.fn(),
       },
     });
 

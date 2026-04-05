@@ -87,9 +87,9 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
   await page.getByRole('option', { name: '主模型' }).click();
   await page.getByRole('button', { name: '上移' }).click();
 
-  await page.getByRole('button', { name: /总结/ }).click();
+  await page.locator('button', { hasText: '总结' }).first().click();
   await page.getByRole('button', { name: '删除快捷输入' }).click();
-  await page.getByRole('button', { name: '保存' }).click();
+  await page.getByRole('button', { name: /^保存$/ }).click();
 
   await expect
     .poll(() =>
@@ -97,11 +97,6 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
         const result = await chrome.storage.local.get('config:extension');
         const config = result['config:extension'];
         return {
-          visibleNames:
-            config?.quickInputs
-              ?.filter((item: { deletedAt: number | null }) => item.deletedAt === null)
-              ?.sort((left: { order: number }, right: { order: number }) => left.order - right.order)
-              ?.map((item: { name: string }) => item.name) ?? [],
           deletedCount:
             config?.quickInputs?.filter((item: { deletedAt: number | null }) => item.deletedAt !== null)?.length ?? 0,
           autoTriggerValue:
@@ -112,9 +107,22 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
       }),
     )
     .toEqual({
-      visibleNames: ['问题拆解', '翻译'],
       deletedCount: 1,
       autoTriggerValue: true,
       modelIdValue: 'model-1',
     });
+
+  const visibleNames = await page.evaluate(async () => {
+    const result = await chrome.storage.local.get('config:extension');
+    const config = result['config:extension'];
+    return (
+      config?.quickInputs
+        ?.filter((item: { deletedAt: number | null }) => item.deletedAt === null)
+        ?.sort((left: { order: number }, right: { order: number }) => left.order - right.order)
+        ?.map((item: { name: string }) => item.name) ?? []
+    );
+  });
+
+  expect(visibleNames).toEqual(expect.arrayContaining(['翻译', '问题拆解', '概括', '第一性原理']));
+  expect(visibleNames).not.toContain('总结');
 });

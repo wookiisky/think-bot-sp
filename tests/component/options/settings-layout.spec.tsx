@@ -7,37 +7,49 @@ import { SettingsShell } from '../../../src/features/settings/settings-shell';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
+  getRecentError: vi.fn(),
   saveConfig: vi.fn(),
   resetConfig: vi.fn(),
   getLocalCacheStats: vi.fn(),
   clearLocalCache: vi.fn(),
   exportConfig: vi.fn(),
   importConfig: vi.fn(),
+  testSyncConnection: vi.fn(),
+  syncNow: vi.fn(),
 }));
 
 vi.mock('../../../src/features/settings/settings-api', () => ({
   settingsApi: {
     getConfig: mocks.getConfig,
+    getRecentError: mocks.getRecentError,
     saveConfig: mocks.saveConfig,
     resetConfig: mocks.resetConfig,
     getLocalCacheStats: mocks.getLocalCacheStats,
     clearLocalCache: mocks.clearLocalCache,
     exportConfig: mocks.exportConfig,
     importConfig: mocks.importConfig,
+    testSyncConnection: mocks.testSyncConnection,
+    syncNow: mocks.syncNow,
   },
 }));
+
+mocks.getRecentError.mockResolvedValue(null);
 
 describe('SettingsLayout', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     mocks.getConfig.mockReset();
+    mocks.getRecentError.mockReset();
     mocks.saveConfig.mockReset();
     mocks.resetConfig.mockReset();
     mocks.getLocalCacheStats.mockReset();
     mocks.clearLocalCache.mockReset();
     mocks.exportConfig.mockReset();
     mocks.importConfig.mockReset();
+    mocks.testSyncConnection.mockReset();
+    mocks.syncNow.mockReset();
+    mocks.getRecentError.mockResolvedValue(null);
   });
 
   it('左侧导航固定为五个栏目并展示顶部动作区', async () => {
@@ -55,6 +67,7 @@ describe('SettingsLayout', () => {
     expect(screen.getByRole('tab', { name: '黑名单设置' })).toBeInTheDocument();
     expect(screen.getByTestId('settings-shell-actions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '保存并同步' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '恢复默认' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导入配置' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '导出配置' })).toBeInTheDocument();

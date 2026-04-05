@@ -1,5 +1,11 @@
-import { createDefaultConfig, extensionConfigSchema, getEnabledCompleteModels } from '../domain/config/config-schema';
+import {
+  applySystemConfigSeeds,
+  createDefaultConfig,
+  extensionConfigSchema,
+  getEnabledCompleteModels,
+} from '../domain/config/config-schema';
 import type { ExtensionConfig } from '../domain/config/config-schema';
+import { assertBlacklistRulesPersistable } from '../services/blacklist/blacklist-service';
 import { CONFIG_SCHEMA_VERSION } from '../shared/schema-version';
 import { CONFIG_STORAGE_KEY } from '../shared/storage-keys';
 
@@ -10,7 +16,7 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
   const readConfig = async () => {
     const result = await storage.get<Record<string, unknown>>([CONFIG_STORAGE_KEY]);
     const saved = result[CONFIG_STORAGE_KEY];
-    return saved ? extensionConfigSchema.parse(saved) : createDefaultConfig();
+    return saved ? applySystemConfigSeeds(extensionConfigSchema.parse(saved)) : createDefaultConfig();
   };
 
   return {
@@ -26,6 +32,7 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
         version: CONFIG_SCHEMA_VERSION,
         updatedAt: Date.now(),
       });
+      assertBlacklistRulesPersistable(next.blacklist);
       await storage.set({ [CONFIG_STORAGE_KEY]: next });
       return next;
     },
@@ -53,8 +60,10 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
         ...parsed,
         updatedAt: Date.now(),
       });
-      await storage.set({ [CONFIG_STORAGE_KEY]: next });
-      return next;
+      const seededConfig = applySystemConfigSeeds(next);
+      assertBlacklistRulesPersistable(seededConfig.blacklist);
+      await storage.set({ [CONFIG_STORAGE_KEY]: seededConfig });
+      return seededConfig;
     },
 
     /** 写回最近同步时间。 */
@@ -62,7 +71,6 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
       const current = await readConfig();
       const next = extensionConfigSchema.parse({
         ...current,
-        updatedAt: Date.now(),
         sync: {
           ...current.sync,
           lastSyncAt,

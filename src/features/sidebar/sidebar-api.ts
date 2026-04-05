@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import { EXTENSION_PAGES } from '../../shared/extension-pages';
 import type {
@@ -83,6 +82,26 @@ type EditUserMessageResponse = {
     editedMessageId: string;
     /** 新助手消息 id。 */
     messageId: string;
+    /** 新建流式会话 id。 */
+    sessionId: string;
+  };
+};
+
+type RetryUserMessageResponse = {
+  /** 响应类型。 */
+  type: 'RETRY_USER_MESSAGE_SUCCESS';
+  /** 响应载荷。 */
+  payload: {
+    /** 被重试的用户消息 id。 */
+    retriedMessageId: string;
+    /** 目标助手消息 id。 */
+    assistantMessageId: string;
+    /** 新建分支 id。 */
+    branchId: string;
+    /** 分支模型 id。 */
+    modelId: string;
+    /** 分支模型展示名。 */
+    modelLabel: string;
     /** 新建流式会话 id。 */
     sessionId: string;
   };
@@ -226,6 +245,10 @@ type SidebarApi = {
   editUserMessage: (
     ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; text: string }]
   ) => Promise<EditUserMessageResponse>;
+  /** 重试目标用户消息，追加为既有助手分支。 */
+  retryUserMessage: (
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
+  ) => Promise<RetryUserMessageResponse>;
   /** 重试目标助手消息，并替换旧结果。 */
   retryMessage: (
     ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
@@ -314,6 +337,12 @@ export const createSidebarApi = (): SidebarApi => ({
   editUserMessage(input) {
     return chrome.runtime.sendMessage({
       type: 'EDIT_USER_MESSAGE',
+      ...input,
+    });
+  },
+  retryUserMessage(input) {
+    return chrome.runtime.sendMessage({
+      type: 'RETRY_USER_MESSAGE',
       ...input,
     });
   },

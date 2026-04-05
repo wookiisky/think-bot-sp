@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { cn } from '../../lib/utils';
 import { Icon } from '../../ui/icon';
 import { settingsSections, type SettingsSection } from './settings-shell-state';

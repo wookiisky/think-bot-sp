@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { normalizePageUrl } from '../../domain/page/page-schema';
 import {
   sidebarBootstrapCommandSchema,
@@ -11,6 +10,7 @@ import {
   sidebarCommandTypeValues,
   sidebarExportConversationCommandSchema,
   sidebarRetryMessageCommandSchema,
+  sidebarRetryUserMessageCommandSchema,
   sidebarSendChatCommandSchema,
   sidebarStopBranchCommandSchema,
   sidebarStopSessionCommandSchema,
@@ -136,6 +136,24 @@ type ChatDispatchService = {
     /** 编辑后的用户文本。 */
     content: string;
   }) => Promise<ChatSession>;
+  /** 重试目标用户消息，追加为既有助手消息的新分支。 */
+  retryUserMessage: (input: {
+    /** 归一化页面 URL。 */
+    normalizedUrl: string;
+    /** promptTab 稳定 id。 */
+    promptTabId: string;
+    /** 目标用户消息 id。 */
+    messageId: string;
+  }) => Promise<
+    ChatSession & {
+      /** 新建分支 id。 */
+      branchId: string;
+      /** 分支模型 id。 */
+      modelId: string;
+      /** 分支模型展示名。 */
+      modelLabel: string;
+    }
+  >;
   /** 重试目标助手消息，并替换旧结果。 */
   retryMessage: (input: {
     /** 归一化页面 URL。 */
@@ -376,6 +394,45 @@ export const createSidebarCommandHandler = ({
           payload: {
             editedMessageId: command.messageId,
             messageId: session.messageId,
+            sessionId: session.sessionId,
+          },
+        };
+      }
+      case 'RETRY_USER_MESSAGE': {
+        const command = sidebarRetryUserMessageCommandSchema.parse(input);
+        assertPageSender(context.sender, runtime.id);
+        if (!chatDispatchService) {
+          throw new Error('unsupported command: RETRY_USER_MESSAGE');
+        }
+
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const session = await chatDispatchService.retryUserMessage({
+          normalizedUrl,
+          promptTabId: command.promptTabId,
+          messageId: command.messageId,
+        });
+        sessionRegistry.register(session, {
+          normalizedUrl,
+          promptTabId: command.promptTabId,
+          branchId: session.branchId,
+        });
+        commandLogger.info('chat.user_retry.accepted', {
+          browserTabId: command.tabId,
+          normalizedUrl,
+          promptTab: command.promptTabId,
+          targetMessageId: command.messageId,
+          assistantMessageId: session.messageId,
+          branchId: session.branchId,
+          sessionId: session.sessionId,
+        });
+        return {
+          type: 'RETRY_USER_MESSAGE_SUCCESS' as const,
+          payload: {
+            retriedMessageId: command.messageId,
+            assistantMessageId: session.messageId,
+            branchId: session.branchId,
+            modelId: session.modelId,
+            modelLabel: session.modelLabel,
             sessionId: session.sessionId,
           },
         };

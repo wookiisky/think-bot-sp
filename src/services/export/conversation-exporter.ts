@@ -11,6 +11,16 @@ type ConversationExporterDeps = {
     /** 读取单个会话。 */
     getConversation: (_normalizedUrl: string, _promptTabId: string) => Promise<SidebarConversationRecord | null>;
   };
+  /** 配置仓储。 */
+  configRepository: {
+    /** 读取完整配置。 */
+    getConfig: () => Promise<{
+      basic: {
+        /** 当前 system prompt。 */
+        systemPrompt: string;
+      };
+    }>;
+  };
   /** 当前时间。 */
   now?: () => Date;
 };
@@ -50,6 +60,9 @@ const renderMessages = (messages: SidebarConversationRecord['messages']): string
     })
     .join('\n\n');
 
+/** 渲染 system prompt 段落。 */
+const renderSystemPrompt = (systemPrompt: string) => ['## System Prompt', '', systemPrompt.trim() || '（空）', ''].join('\n');
+
 /** 创建会话导出器。 */
 export const createConversationExporter = (deps: ConversationExporterDeps) => {
   const now = deps.now ?? (() => new Date());
@@ -57,9 +70,10 @@ export const createConversationExporter = (deps: ConversationExporterDeps) => {
   return {
     /** 导出单个 promptTab 会话为 Markdown。 */
     async exportConversation(input: { normalizedUrl: string; promptTabId: string }) {
-      const [page, conversation] = await Promise.all([
+      const [page, conversation, config] = await Promise.all([
         deps.pageRepository.getPage(input.normalizedUrl),
         deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId),
+        deps.configRepository.getConfig(),
       ]);
       if (!conversation) {
         throw new Error('conversation not found');
@@ -94,7 +108,7 @@ export const createConversationExporter = (deps: ConversationExporterDeps) => {
         type: 'EXPORT_CONVERSATION_SUCCESS' as const,
         payload: {
           filename,
-          content: `${header}${renderMessages(conversation.messages)}`.trim(),
+          content: `${header}${renderSystemPrompt(config.basic.systemPrompt)}${renderMessages(conversation.messages)}`.trim(),
           mimeType: 'text/markdown;charset=utf-8' as const,
         },
       };

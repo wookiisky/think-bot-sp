@@ -15,6 +15,11 @@ import {
   PAGE_STORAGE_PREFIX,
 } from '../../../src/shared/storage-keys';
 import {
+  DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  DEFAULT_JINA_RESPONSE_TEMPLATE,
+  DEFAULT_BLACKLIST_RULES,
+  DEFAULT_QUICK_INPUTS,
+  applySystemConfigSeeds,
   createDefaultConfig,
   extensionConfigSchema,
   getEnabledCompleteModels,
@@ -36,12 +41,15 @@ describe('config schema', () => {
     expect(config.updatedAt).toBe(123);
     expect(config.basic.defaultModelId).toBeNull();
     expect(config.basic.branchModelIds).toEqual([]);
+    expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+    expect(config.basic.jinaApiKey).toBe('');
+    expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.models).toEqual([]);
-    expect(config.quickInputs).toEqual([]);
-    expect(config.blacklist).toEqual([]);
+    expect(config.quickInputs.map((item) => item.id)).toEqual(DEFAULT_QUICK_INPUTS.map((item) => item.id));
+    expect(config.blacklist.map((item) => item.id)).toEqual(DEFAULT_BLACKLIST_RULES.map((item) => item.id));
   });
 
-  it('旧配置缺少 branchModelIds 时 parse 后默认补空数组', () => {
+  it('旧配置缺少 branchModelIds 和提取参数时 parse 后自动补默认值', () => {
     const config = extensionConfigSchema.parse({
       ...createDefaultConfig(),
       basic: {
@@ -61,7 +69,35 @@ describe('config schema', () => {
     });
 
     expect(config.basic.branchModelIds).toEqual([]);
+    expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+    expect(config.basic.jinaApiKey).toBe('');
+    expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.quickInputs[0]?.branchModelIds).toEqual([]);
+  });
+
+  it('会给旧配置补齐缺失的系统快捷输入和黑名单规则，但不覆盖已有项', () => {
+    const seededConfig = applySystemConfigSeeds(
+      createDefaultConfig({
+        quickInputs: [
+          {
+            ...DEFAULT_QUICK_INPUTS[0],
+            name: '我自己的概括',
+            order: 0,
+          },
+        ],
+        blacklist: [
+          {
+            ...DEFAULT_BLACKLIST_RULES[0],
+            enabled: false,
+          },
+        ],
+      }),
+    );
+
+    expect(seededConfig.quickInputs).toHaveLength(DEFAULT_QUICK_INPUTS.length);
+    expect(seededConfig.quickInputs[0]?.name).toBe('我自己的概括');
+    expect(seededConfig.blacklist).toHaveLength(DEFAULT_BLACKLIST_RULES.length);
+    expect(seededConfig.blacklist[0]?.enabled).toBe(false);
   });
 
   it('过滤软删除和不完整模型', () => {

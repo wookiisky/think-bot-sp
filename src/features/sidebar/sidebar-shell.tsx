@@ -14,7 +14,12 @@ import {
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { getEnabledCompleteModels } from '../../domain/config/config-schema';
+import {
+  DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  MAX_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_PANEL_HEIGHT,
+  getEnabledCompleteModels,
+} from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import {
   CHAT_PROMPT_TAB_ID,
@@ -65,13 +70,6 @@ type SidebarShellProps = {
   /** 当前页面 URL。 */
   pageUrl: string;
 };
-
-/** 提取区最小高度。 */
-const MIN_EXTRACTION_PANEL_HEIGHT = 160;
-/** 提取区默认高度。 */
-const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
-/** 提取区最大高度。 */
-const MAX_EXTRACTION_PANEL_HEIGHT = 420;
 
 /** 限制提取区高度范围。 */
 const clampExtractionPanelHeight = (height: number) =>
@@ -599,6 +597,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setEditingMap(Object.fromEntries(nextPromptTabs.map((promptTab) => [promptTab.id, null])));
         setActivePromptTabId(pickInitialPromptTabId(nextPromptTabs, bootstrap.loadingStates));
         setIncludePageContent(bootstrap.page?.includePageContent ?? configResponse.config.basic.includePageContentByDefault);
+        setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
 
         if (bootstrap.blockedByBlacklist) {
           setState('blocked');
@@ -780,6 +779,41 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.editFailed'));
+    }
+  };
+
+  /** 重试用户消息，并把结果追加为原助手消息的新分支。 */
+  const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
+    try {
+      setPromptTabNotice(promptTabId, '');
+      const response = await api.retryUserMessage({
+        tabId,
+        pageUrl,
+        promptTabId,
+        messageId,
+      });
+      setPromptTabMessages(promptTabId, (current) =>
+        upsertAssistantMessage(current, response.payload.assistantMessageId, (assistantMessage) => ({
+          id: response.payload.assistantMessageId,
+          role: 'assistant',
+          content: assistantMessage?.content ?? '',
+          status: assistantMessage?.status ?? 'done',
+          errorMessage: assistantMessage?.errorMessage ?? null,
+          branches: [
+            ...(assistantMessage?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
+            {
+              id: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+              content: '',
+              status: 'loading',
+              errorMessage: null,
+            },
+          ],
+        })),
+      );
+    } catch {
+      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
     }
   };
 
@@ -1174,10 +1208,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               }}
               onCancelEdit={() => setPromptTabEditing(promptTab.id, null)}
               onSubmitEdit={(messageId) => handleEditUserMessage(promptTab.id, messageId, editingMap[promptTab.id]?.text ?? '')}
-              onRetryMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
+              onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
+              onRetryAssistantMessage={(messageId) => handleRetryMessage(promptTab.id, messageId)}
               onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
               onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
+              onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
             />
           </div>
         ))}

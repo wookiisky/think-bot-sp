@@ -1,4 +1,3 @@
-/* eslint-disable no-unused-vars */
 import { z } from 'zod';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
@@ -6,6 +5,7 @@ import { extensionConfigSchema } from '../../domain/config/config-schema';
 
 type SupportedCommandType =
   | 'GET_CONFIG'
+  | 'GET_RECENT_ERROR'
   | 'SAVE_CONFIG'
   | 'RESET_CONFIG'
   | 'IMPORT_CONFIG'
@@ -17,6 +17,7 @@ type SupportedCommandType =
 
 export const supportedCommandTypes = new Set<SupportedCommandType>([
   'GET_CONFIG',
+  'GET_RECENT_ERROR',
   'SAVE_CONFIG',
   'RESET_CONFIG',
   'IMPORT_CONFIG',
@@ -81,6 +82,11 @@ type PageRepositories = {
   clearCache: () => Promise<{ removedKeys: number }>;
 };
 
+type RecentErrorRepository = {
+  /** 读取最近一次错误。 */
+  getRecentError: () => Promise<unknown | null>;
+};
+
 type SyncService = {
   /** 测试同步连接。 */
   testConnection: (sync: ExtensionConfig['sync']) => Promise<unknown>;
@@ -92,10 +98,12 @@ type SyncService = {
 export const createConfigCommandHandler = ({
   configRepository,
   pageRepository,
+  recentErrorRepository,
   syncService,
 }: {
   configRepository: ConfigRepositories;
   pageRepository: PageRepositories;
+  recentErrorRepository: RecentErrorRepository;
   syncService: SyncService;
 }) => {
   return async (input: unknown) => {
@@ -110,6 +118,11 @@ export const createConfigCommandHandler = ({
         return {
           type: 'GET_CONFIG_SUCCESS',
           config: await configRepository.getConfig(),
+        };
+      case 'GET_RECENT_ERROR':
+        return {
+          type: 'GET_RECENT_ERROR_SUCCESS',
+          recentError: await recentErrorRepository.getRecentError(),
         };
       case 'SAVE_CONFIG': {
         const command = saveConfigCommandSchema.parse(input);

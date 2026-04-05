@@ -11,6 +11,7 @@ describe('config-commands', () => {
   it('暴露统一的命令识别能力', () => {
     expect(Array.from(supportedCommandTypes)).toEqual([
       'GET_CONFIG',
+      'GET_RECENT_ERROR',
       'SAVE_CONFIG',
       'RESET_CONFIG',
       'IMPORT_CONFIG',
@@ -45,6 +46,14 @@ describe('config-commands', () => {
       getCacheStats: vi.fn().mockResolvedValue({ entryCount: 2, bytes: 128 }),
       clearCache: vi.fn().mockResolvedValue({ removedKeys: 2 }),
     };
+    const recentErrorRepository = {
+      getRecentError: vi.fn().mockResolvedValue({
+        source: 'sync',
+        operation: 'SYNC_NOW',
+        message: '同步失败',
+        capturedAt: 321,
+      }),
+    };
     const syncService = {
       testConnection: vi.fn().mockResolvedValue({ provider: 'gist', ok: true, message: 'ok' }),
       syncNow: vi.fn().mockResolvedValue({ provider: 'gist', lastSyncAt: 123, snapshotBytes: 512 }),
@@ -52,6 +61,7 @@ describe('config-commands', () => {
     const handler = createConfigCommandHandler({
       configRepository,
       pageRepository,
+      recentErrorRepository,
       syncService,
     });
 
@@ -66,6 +76,18 @@ describe('config-commands', () => {
     expect(configRepository.exportConfig).not.toHaveBeenCalled();
     expect(pageRepository.getCacheStats).not.toHaveBeenCalled();
     expect(pageRepository.clearCache).not.toHaveBeenCalled();
+    expect(recentErrorRepository.getRecentError).not.toHaveBeenCalled();
+
+    await expect(handler({ type: 'GET_RECENT_ERROR' })).resolves.toEqual({
+      type: 'GET_RECENT_ERROR_SUCCESS',
+      recentError: {
+        source: 'sync',
+        operation: 'SYNC_NOW',
+        message: '同步失败',
+        capturedAt: 321,
+      },
+    });
+    expect(recentErrorRepository.getRecentError).toHaveBeenCalledTimes(1);
 
     await expect(handler({ type: 'SAVE_CONFIG', config })).resolves.toEqual({
       type: 'SAVE_CONFIG_SUCCESS',
@@ -134,6 +156,9 @@ describe('config-commands', () => {
       pageRepository: {
         getCacheStats: vi.fn(),
         clearCache: vi.fn(),
+      },
+      recentErrorRepository: {
+        getRecentError: vi.fn(),
       },
       syncService: {
         testConnection: vi.fn(),

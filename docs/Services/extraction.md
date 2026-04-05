@@ -18,6 +18,7 @@
 - 通过 content script 获取 HTML 和页面元数据。
 - 使用 Readability 提取正文。
 - 按需回退到 Jina。
+- 消费基础设置中的 Jina API Key、Jina 响应模板和默认提取方法。
 - 更新页面记录中的内容、方法和时间戳。
 
 不负责：
@@ -45,6 +46,10 @@
 - 初始化时优先读取缓存。
 - 需要新提取时先尝试 Readability。
 - Readability 失败且允许回退时再调用 Jina。
+- 调用 Jina 时会带上用户配置的可选 API Key。
+- Jina 返回正文后会按 `jinaResponseTemplate` 生成最终文本：
+  - 模板包含 `{{content}}` 时做占位替换。
+  - 模板不包含 `{{content}}` 时把原始正文追加到模板尾部。
 - 成功后写入 `PageRecord`。
 - content script 未连接时，background 先尝试按需注入 `content-scripts/content.js`，仍未连上时再自动刷新当前页面并有限次重试；只有自动恢复失败后才把错误抛给 UI。
 
@@ -58,12 +63,16 @@
   - 直接失败，不发送空内容到 Jina。
 - Jina 失败：
   - 保留旧缓存并上报错误。
+- Jina 模板为空：
+  - 退化为直接使用原始 Reader 响应。
 
 ## 7. 数据与状态
 
 - 读：
   - `PageRecord`
-  - `ExtensionConfig.basic.extraction`
+  - `ExtensionConfig.basic.extractionMethod`
+  - `ExtensionConfig.basic.jinaApiKey`
+  - `ExtensionConfig.basic.jinaResponseTemplate`
 - 写：
   - `PageRecord.content`
   - `PageRecord.extractionMethod`
@@ -80,11 +89,12 @@
 - 不在 content script 发起跨域 Jina 请求。
 - 不因一次提取失败清空已有有效缓存。
 - 不把提取方法做成全局共享状态。
+- 不在提取服务里持久化提取区高度；该值只作为侧边栏默认 UI 状态由设置配置消费。
 - `GET_SIDEBAR_BOOTSTRAP` 不触发提取，提取只由 `RE_EXTRACT_CONTENT` 显式启动。
 
 ## 10. 测试要求
 
-- 职责测试：Readability 提取、Jina 回退、方法切换。
+- 职责测试：Readability 提取、Jina 回退、方法切换、Jina API Key 与响应模板生效。
 - 边界测试：空正文、极短正文、复杂 DOM。
 - 错误流测试：content script 未连接、Jina 失败。
 - 异常流测试：自动刷新重试、手动重试提取、切换方法后刷新。

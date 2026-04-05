@@ -14,6 +14,7 @@ export const sidebarCommandTypeValues = [
   'CLEAR_TAB_CONVERSATION',
   'SEND_CHAT',
   'EDIT_USER_MESSAGE',
+  'RETRY_USER_MESSAGE',
   'RETRY_MESSAGE',
   'EXPAND_MESSAGE_BRANCHES',
   'STOP_SESSION',
@@ -100,6 +101,16 @@ export const sidebarEditUserMessageCommandSchema = sidebarCommandBaseSchema.exte
   text: z.string().min(1),
 });
 
+/** 重试目标用户消息，并把结果追加为既有助手消息的新分支。 */
+export const sidebarRetryUserMessageCommandSchema = sidebarCommandBaseSchema.extend({
+  /** 命令类型。 */
+  type: z.literal('RETRY_USER_MESSAGE'),
+  /** 当前 promptTab 稳定 id。 */
+  promptTabId: z.string().min(1),
+  /** 目标用户消息 id。 */
+  messageId: z.string().min(1),
+});
+
 /** 重试目标助手消息，并用新的主回答替换旧结果。 */
 export const sidebarRetryMessageCommandSchema = sidebarCommandBaseSchema.extend({
   /** 命令类型。 */
@@ -184,6 +195,7 @@ export const sidebarCommandSchema = z.discriminatedUnion('type', [
   sidebarClearTabConversationCommandSchema,
   sidebarSendChatCommandSchema,
   sidebarEditUserMessageCommandSchema,
+  sidebarRetryUserMessageCommandSchema,
   sidebarRetryMessageCommandSchema,
   sidebarExpandMessageBranchesCommandSchema,
   sidebarStopSessionCommandSchema,

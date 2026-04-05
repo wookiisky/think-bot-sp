@@ -1,9 +1,14 @@
 import { cleanup, render, screen } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createDefaultConfig } from '../../../src/domain/config/config-schema';
+import {
+  MAX_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_PANEL_HEIGHT,
+  createDefaultConfig,
+} from '../../../src/domain/config/config-schema';
 import { BasicSettingsPanel } from '../../../src/features/settings/basic-settings-panel';
 
 const t = (key: string) =>
@@ -19,6 +24,9 @@ const t = (key: string) =>
     'settings.noBranchModels': '暂无可用分支模型',
     'settings.branchModelsMissing': '部分分支模型引用已失效，保存时会自动清理。',
     'settings.extractionMethod': '默认提取方式',
+    'settings.extractionPanelHeight': '默认提取区高度',
+    'settings.jinaApiKey': 'Jina API Key',
+    'settings.jinaResponseTemplate': 'Jina 响应模板',
     'settings.previewHint': '即时预览',
     'settings.previewDescription': '切换语言和主题后立即预览。',
     'settings.filterCot': '过滤 COT 内容',
@@ -130,5 +138,27 @@ describe('BasicSettingsPanel', () => {
     );
 
     expect(screen.getByText('部分分支模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
+  });
+
+  it('支持编辑提取默认参数并限制高度范围', async () => {
+    render(<ControlledBasicSettingsPanel />);
+
+    const user = userEvent.setup();
+    const heightInput = screen.getByRole('spinbutton', { name: '默认提取区高度' });
+    const jinaApiKeyInput = screen.getByLabelText('Jina API Key');
+    const jinaTemplateInput = screen.getByLabelText('Jina 响应模板');
+
+    fireEvent.change(heightInput, { target: { value: '999' } });
+    await user.clear(jinaApiKeyInput);
+    await user.type(jinaApiKeyInput, 'jina-secret');
+    fireEvent.change(jinaTemplateInput, { target: { value: '包装{{content}}' } });
+
+    expect(heightInput).toHaveValue(MAX_EXTRACTION_PANEL_HEIGHT);
+    expect(jinaApiKeyInput).toHaveValue('jina-secret');
+    expect(jinaTemplateInput).toHaveValue('包装{{content}}');
+
+    fireEvent.change(heightInput, { target: { value: '1' } });
+
+    expect(heightInput).toHaveValue(MIN_EXTRACTION_PANEL_HEIGHT);
   });
 });

@@ -64,7 +64,7 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await selectOption(options, /Theme|主题/, 'Dark');
   await expect(options.getByTestId('settings-shell')).toHaveAttribute('data-theme', 'dark');
 
-  await options.getByRole('button', { name: /保存|Save/ }).click();
+  await options.getByRole('button', { name: /^(保存|Save)$/ }).click();
   await expect.poll(() => handledCommandTypes).toContain('SAVE_CONFIG');
 
   await options.reload();

@@ -38,6 +38,7 @@
   - `expandBranches(input): BranchStreamSession[]`
 - `stopSession(sessionId)`
 - `stopBranch(request)`
+- `retryUserMessage(request)`
 - `retryMessage(request)`
 - `editUserMessage(request)`
 - `expandBranches(request)`
@@ -85,6 +86,10 @@ Provider 适配规则：
   - 保留原用户消息。
   - 用新的助手消息替换旧助手消息及其后续结果。
   - 新助手消息写入 `retryFromMessageId`，用于标记替换来源。
+- `retryUserMessage`：
+  - 仅接受用户消息作为目标。
+  - 查找该用户消息后的第一条助手消息。
+  - 保留原助手主回答，把新结果追加为该助手消息的新分支。
 - `expandBranches`：
   - 只对目标助手消息追加新的分支请求。
   - 不覆盖现有分支。

@@ -12,6 +12,8 @@ export const LOADING_STORAGE_PREFIX = 'loading:';
 
 /** 同步状态存储 key。 */
 export const SYNC_STATE_STORAGE_KEY = 'sync:state';
+/** 最近一次错误摘要存储 key。 */
+export const RECENT_ERROR_STORAGE_KEY = 'error:recent';
 
 const normalizePromptTabId = (promptTabId: string): string => {
   if (promptTabId.includes(':')) {

@@ -1,0 +1,308 @@
+import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ChatThread } from '../../../src/features/sidebar/chat-thread';
+
+const translations: Record<string, string> = {
+  'workspace.emptyMessages': '还没有聊天记录',
+  'workspace.role.user': '你',
+  'workspace.role.assistant': '助手',
+  'workspace.role.system': '系统',
+  'workspace.status.loading': '生成中',
+  'workspace.status.done': '已完成',
+  'workspace.status.error': '失败',
+  'workspace.status.cancelled': '已停止',
+  'workspace.status.restore': '恢复生成中',
+  'workspace.status.branch': '分支',
+  'workspace.editMessage': '编辑',
+  'workspace.editMessageInput': '编辑消息输入',
+  'workspace.saveAndResend': '保存并重发',
+  'workspace.cancelEdit': '取消',
+  'workspace.retryUserMessage': '重试问题',
+  'workspace.retryAssistantMessage': '重试回答',
+  'workspace.expandBranches': '继续新增分支',
+  'workspace.stopBranch': '停止分支',
+  'workspace.deleteBranch': '删除分支',
+  'workspace.scrollToMessageTop': '定位到消息顶部',
+  'workspace.scrollToMessageBottom': '定位到消息底部',
+  'workspace.copyPlainText': '复制纯文本',
+  'workspace.copyMarkdown': '复制 Markdown',
+  'workspace.notice.copyPlainSuccess': '已复制纯文本',
+  'workspace.notice.copyPlainFailed': '复制纯文本失败，请重试',
+  'workspace.notice.copyMarkdownSuccess': '已复制 Markdown',
+  'workspace.notice.copyMarkdownFailed': '复制 Markdown 失败，请重试',
+};
+
+const t = (key: string) => translations[key] ?? key;
+let clipboardWriteText: ReturnType<typeof vi.fn>;
+let scrollIntoViewSpy: ReturnType<typeof vi.fn>;
+let matchMediaMatches = false;
+
+afterEach(() => {
+  cleanup();
+});
+
+beforeEach(() => {
+  clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+  const nextNavigator = Object.create(globalThis.navigator);
+  Object.defineProperty(nextNavigator, 'clipboard', {
+    value: {
+      writeText: clipboardWriteText,
+    },
+    configurable: true,
+    writable: true,
+  });
+  Object.defineProperty(globalThis, 'navigator', {
+    value: nextNavigator,
+    configurable: true,
+  });
+  Object.defineProperty(window, 'matchMedia', {
+    value: vi.fn().mockImplementation(() => ({
+      matches: matchMediaMatches,
+      media: '(max-width: 960px)',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+    configurable: true,
+    writable: true,
+  });
+  scrollIntoViewSpy = vi.fn();
+  HTMLElement.prototype.scrollIntoView = scrollIntoViewSpy;
+  matchMediaMatches = false;
+});
+
+describe('ChatThread', () => {
+  it('会把主消息和分支按 Markdown 渲染出来', () => {
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '**主回答** [链接](https://example.com)',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-2',
+                modelLabel: '分支模型',
+                content: '- 分支结果',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('主回答').tagName).toBe('STRONG');
+    expect(screen.getByRole('link', { name: '链接' })).toHaveAttribute('href', 'https://example.com');
+    expect(screen.getByText('分支结果')).toBeVisible();
+  });
+
+  it('会展示复制纯文本和 Markdown 操作按钮', () => {
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: '**用户问题**',
+            status: 'done',
+            errorMessage: null,
+            branches: [],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    const messageCard = screen.getByTestId('chat-message-user-1');
+    expect(within(messageCard).getByRole('button', { name: '复制纯文本' })).toBeVisible();
+    expect(within(messageCard).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
+  });
+
+  it('支持用户重试和助手消息滚动定位', async () => {
+    const user = userEvent.setup();
+    const onRetryUserMessage = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'user-1',
+            role: 'user',
+            content: '旧问题',
+            status: 'done',
+            errorMessage: null,
+            branches: [],
+          },
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '旧回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={onRetryUserMessage}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    await user.click(within(screen.getByTestId('chat-message-user-1')).getByRole('button', { name: '重试问题' }));
+    expect(onRetryUserMessage).toHaveBeenCalledWith('user-1');
+
+    await user.click(within(screen.getByTestId('chat-message-assistant-1')).getByRole('button', { name: '定位到消息顶部' }));
+    expect(scrollIntoViewSpy).toHaveBeenCalled();
+  });
+
+  it('分支较多时会切换到横向阅读列', () => {
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                content: '分支一',
+                status: 'done',
+                errorMessage: null,
+              },
+              {
+                id: 'branch-2',
+                modelId: 'model-2',
+                modelLabel: '模型二',
+                content: '分支二',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    const branchRail = screen.getByTestId('branch-rail-assistant-1');
+    expect(branchRail).toHaveAttribute('data-reading-layout', 'horizontal');
+    expect(branchRail.className).toContain('overflow-x-auto');
+  });
+
+  it('窄屏时分支阅读列回落为纵向布局', () => {
+    matchMediaMatches = true;
+
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                content: '分支一',
+                status: 'done',
+                errorMessage: null,
+              },
+              {
+                id: 'branch-2',
+                modelId: 'model-2',
+                modelLabel: '模型二',
+                content: '分支二',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onExpandBranches={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    const branchRail = screen.getByTestId('branch-rail-assistant-1');
+    expect(branchRail).toHaveAttribute('data-reading-layout', 'vertical');
+    expect(branchRail.className).not.toContain('overflow-x-auto');
+  });
+});
