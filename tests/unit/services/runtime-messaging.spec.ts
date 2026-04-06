@@ -665,6 +665,8 @@ describe('runtime-messaging', () => {
         sessionId: 'branch-session-1',
         messageId: 'assistant-1',
         branchId: 'branch-1',
+        modelId: 'model-2',
+        modelLabel: '分支模型',
         cancel: cancelBranch,
         done: branchDone,
       },
@@ -717,7 +719,13 @@ describe('runtime-messaging', () => {
       type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS',
       payload: {
         messageId: 'assistant-1',
-        branchIds: ['branch-1'],
+        branches: [
+          {
+            branchId: 'branch-1',
+            modelId: 'model-2',
+            modelLabel: '分支模型',
+          },
+        ],
       },
     });
 

@@ -81,6 +81,7 @@ Provider 适配规则：
 8. 最后清理 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
 9. 继续新增分支时，先解析“全局分支模型 + 当前 `promptTab` 分支模型”的合并结果，再过滤掉主回答已使用的模型。
 10. 每个分支独立写入分支占位、分支 chunk 和分支终态；单分支失败不会影响其他分支和主回答。
+11. `expandBranches` 返回值除 `branchId` 外还要带上 `modelId` 和 `modelLabel`，供 UI 在收到命令成功响应后立刻插入 loading 分支占位，不能把“新增分支后的首屏反馈”完全依赖于后续流事件。
 
 自动触发补充约束：
 
@@ -110,6 +111,7 @@ Provider 适配规则：
   - 只对目标助手消息追加新的分支请求。
   - 不覆盖现有分支。
   - 当前分支模型来源是 `basic.branchModelIds + currentPromptTab.branchModelIds` 的合并结果。
+  - 命令成功返回后，前端必须先用返回的分支摘要渲染 loading 分支，再继续消费 `BRANCH_STREAM_*` 事件。
 - `stopBranch` / `deleteBranch`：
   - 仅影响目标 `branchId`。
   - 主回答和其他分支继续执行。

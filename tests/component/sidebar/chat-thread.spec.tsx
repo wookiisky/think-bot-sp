@@ -25,7 +25,6 @@ const translations: Record<string, string> = {
   'workspace.stopBranch': '停止分支',
   'workspace.deleteBranch': '删除分支',
   'workspace.selectPrimaryBranch': '设为后续主分支',
-  'workspace.useAsPrimary': '当前用于后续对话',
   'workspace.scrollToMessageTop': '定位到消息顶部',
   'workspace.scrollToMessageBottom': '定位到消息底部',
   'workspace.copyPlainText': '复制纯文本',
@@ -109,6 +108,7 @@ describe('ChatThread', () => {
     expect(screen.getByRole('link', { name: '链接' })).toHaveAttribute('href', 'https://example.com');
     expect(screen.getByText('分支结果')).toBeVisible();
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-muted/55');
+    expect(screen.queryByText('当前用于后续对话')).toBeNull();
   });
 
   it('消息卡片不再显示角色行，hover 后才显示操作按钮', async () => {
@@ -328,6 +328,62 @@ describe('ChatThread', () => {
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
     expect(branchRail).toHaveAttribute('data-reading-layout', 'grid');
     expect(branchRail.getAttribute('style')).toContain('minmax(350px, 1fr)');
+  });
+
+  it('分支操作按钮挂在各自分支卡片右侧悬浮区', async () => {
+    const user = userEvent.setup();
+    const onRetryAssistantMessage = vi.fn().mockResolvedValue(undefined);
+    const onSelectAssistantBranch = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: false,
+                content: '分支一',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: null,
+          },
+        ]}
+        restoreMessageId={null}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={onRetryAssistantMessage}
+        onSelectAssistantBranch={onSelectAssistantBranch}
+        onExpandBranches={vi.fn()}
+        onStop={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    const branchCard = screen.getByTestId('branch-branch-1');
+    await user.hover(branchCard);
+    await user.click(within(branchCard).getByRole('button', { name: '重试回答' }));
+    await user.click(within(branchCard).getByRole('button', { name: '设为后续主分支' }));
+
+    expect(onRetryAssistantMessage).toHaveBeenCalledWith('assistant-1', 'branch-1');
+    expect(onSelectAssistantBranch).toHaveBeenCalledWith('assistant-1', 'branch-1');
   });
 
   it('窄屏测试下仍保持 grid 布局，由浏览器自行换列', () => {

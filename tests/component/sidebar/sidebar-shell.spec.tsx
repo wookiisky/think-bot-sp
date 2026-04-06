@@ -92,7 +92,13 @@ const createSidebarApi = (overrides?: Record<string, unknown>) => ({
     type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS',
     payload: {
       messageId: 'assistant-1',
-      branchIds: ['branch-1'],
+      branches: [
+        {
+          branchId: 'branch-1',
+          modelId: 'model-2',
+          modelLabel: '分支模型',
+        },
+      ],
     },
   }),
   stopSession: vi.fn(),
@@ -1095,16 +1101,7 @@ describe('SidebarShell', () => {
       messageId: 'assistant-1',
     });
 
-    portMessageListener?.({
-      type: 'BRANCH_STREAM_STARTED',
-      normalizedUrl: 'https://example.com/article',
-      promptTabId: 'chat',
-      sessionId: 'branch-session-1',
-      messageId: 'assistant-1',
-      branchId: 'branch-1',
-      modelId: 'model-2',
-      modelLabel: '分支模型',
-    });
+    await waitFor(() => expect(screen.getByTestId('branch-branch-1')).toBeVisible());
     portMessageListener?.({
       type: 'BRANCH_STREAM_CHUNK',
       normalizedUrl: 'https://example.com/article',
@@ -1120,6 +1117,7 @@ describe('SidebarShell', () => {
     expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支模型');
     expect(screen.getByText('分支内容')).toBeVisible();
 
+    await user.hover(screen.getByTestId('branch-branch-1'));
     await user.click(screen.getByRole('button', { name: '停止分支' }));
     expect(api.stopBranch).toHaveBeenCalledWith({
       tabId: 7,
@@ -1128,6 +1126,7 @@ describe('SidebarShell', () => {
       branchId: 'branch-1',
     });
 
+    await user.hover(screen.getByTestId('branch-branch-1'));
     await user.click(screen.getByRole('button', { name: '删除分支' }));
     await user.click(within(screen.getByTestId('delete-branch-confirm-branch-1')).getByRole('button', { name: '删除分支' }));
     expect(api.deleteBranch).toHaveBeenCalledWith({
@@ -1249,6 +1248,7 @@ describe('SidebarShell', () => {
 
     await user.hover(await screen.findByTestId('chat-message-assistant-edit'));
     const branchCard = await screen.findByTestId('branch-branch-edit-primary');
+    await user.hover(branchCard);
     await waitFor(() => expect(within(branchCard).getByRole('button', { name: '重试回答' })).toBeVisible());
 
     await user.click(within(branchCard).getByRole('button', { name: '重试回答' }));

@@ -23,6 +23,7 @@ import { cn } from '../../lib/utils';
 import { downloadTextFile } from '../../shared/download-file';
 import {
   CHAT_PROMPT_TAB_ID,
+  appendAssistantBranches,
   buildActiveSessionIdMap,
   buildComposerStateMap,
   buildMessageStateMap,
@@ -999,11 +1000,23 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
 
     try {
-      await api.expandMessageBranches({
+      setPromptTabNotice(promptTabId, '');
+      const response = await api.expandMessageBranches({
         pageUrl: selectedPage.url,
         promptTabId,
         messageId,
       });
+      setPromptTabMessages(promptTabId, (current) =>
+        appendAssistantBranches(
+          current,
+          messageId,
+          response.payload.branches.map((branch) => ({
+            id: branch.branchId,
+            modelId: branch.modelId,
+            modelLabel: branch.modelLabel,
+          })),
+        ),
+      );
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.expandBranchFailed'));
     }

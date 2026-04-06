@@ -240,6 +240,10 @@ type StreamSession = {
 type BranchStreamSession = StreamSession & {
   /** 分支稳定 id。 */
   branchId: string;
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
 };
 
 type ChatDispatchServiceDeps = {
@@ -1788,6 +1792,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             branchId,
             sessionId,
             messageId: input.messageId,
+            modelId,
+            modelLabel: resolvedModel.modelLabel,
             cancel: () => {
               abortController.abort();
             },

@@ -5,7 +5,7 @@ test('settings layout keeps unsaved edits across section switches', async ({ con
   const page = await openSettingsPage({ context, extensionId });
 
   await expect(page.getByRole('tab', { name: '基础设置' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: '标签页' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: '快捷输入' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '语言模型' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '云同步' })).toBeVisible();
   await expect(page.getByRole('tab', { name: '黑名单设置' })).toBeVisible();

@@ -4,6 +4,9 @@ import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
 import { buildConversationStorageKey, CONFIG_STORAGE_KEY } from '../../src/shared/storage-keys';
 import { expect, test } from './helpers/extension-fixture';
 
+const CHAT_TAB_LABEL = /Chat|聊天/;
+const READABILITY_EXCERPT = 'This domain is for use in documentation examples';
+
 test('side panel 可以发送消息、收到首包流式并在完成后写入历史', async ({ context, extensionId }) => {
   const serviceWorker = context.serviceWorkers()[0];
   if (!serviceWorker) {
@@ -190,7 +193,7 @@ test('includePageContent=true 时会把页面正文注入真实模型上下文',
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
   await sidepanel.getByLabel('聊天输入').fill('请总结当前页面');
   await sidepanel.getByRole('button', { name: '发送' }).click();
   await expect(sidepanel.getByText('已收到页面上下文')).toBeVisible();
@@ -215,7 +218,7 @@ test('includePageContent=true 时会把页面正文注入真实模型上下文',
     }).__THINK_BOT_TEST_LAST_STREAM_MESSAGES__ ?? [],
   );
   expect(streamedMessages[0]?.content).toContain('页面内容：');
-  expect(streamedMessages[0]?.content).toContain('Example Domain');
+  expect(streamedMessages[0]?.content).toContain(READABILITY_EXCERPT);
   expect(streamedMessages[0]?.content).toContain('用户消息：请总结当前页面');
 });
 
@@ -338,7 +341,7 @@ test('side panel 支持 quickInputs 多标签切换，并隔离草稿与会话',
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByRole('tab', { name: /Chat|聊天/ })).toBeVisible();
+  await expect(sidepanel.getByRole('tab', { name: CHAT_TAB_LABEL })).toBeVisible();
   await expect(sidepanel.getByRole('tab', { name: /总结/ })).toBeVisible();
   await expect(sidepanel.getByRole('tab', { name: /翻译/ })).toBeVisible();
 
@@ -351,7 +354,7 @@ test('side panel 支持 quickInputs 多标签切换，并隔离草稿与会话',
   await sidepanel.getByRole('button', { name: '发送' }).click();
   await expect(sidepanel.getByRole('tabpanel', { name: /总结/ }).getByText('快捷标签响应').last()).toBeVisible();
 
-  await sidepanel.getByRole('tab', { name: /Chat|聊天/ }).click();
+  await sidepanel.getByRole('tab', { name: CHAT_TAB_LABEL }).click();
   await expect(sidepanel.getByLabel('聊天输入')).toHaveValue('保留这段 chat 草稿');
 
   await sidepanel.getByRole('tab', { name: /翻译/ }).click();
@@ -481,8 +484,8 @@ test('页面首次提取成功后会自动触发 quickInput，且重开 side pan
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
-  await expect(sidepanel.getByRole('tab', { name: /Chat|聊天/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
+  await expect(sidepanel.getByRole('tab', { name: CHAT_TAB_LABEL })).toHaveAttribute('aria-selected', 'true');
   await sidepanel.getByRole('tab', { name: /总结/ }).click();
   await expect(sidepanel.getByText('自动触发回答')).toBeVisible();
 
@@ -600,7 +603,7 @@ test('页面级清空会同时清理提取内容和当前页面历史，但不�
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
   await sidepanel.getByLabel('聊天输入').fill('先生成一条历史');
   await sidepanel.getByRole('button', { name: '发送' }).click();
   await expect(sidepanel.getByText('页面历史回答')).toBeVisible();
@@ -609,7 +612,7 @@ test('页面级清空会同时清理提取内容和当前页面历史，但不�
   await sidepanel.getByRole('button', { name: '清空当前页面数据' }).click();
   await sidepanel.getByTestId('clear-page-confirm').getByRole('button', { name: '清空当前页面数据' }).click();
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).not.toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).not.toContainText(READABILITY_EXCERPT);
   await expect(sidepanel.getByText('还没有聊天记录').first()).toBeVisible();
   await expect(sidepanel.getByLabel('聊天输入')).toHaveValue('这段草稿要保留');
 
@@ -716,7 +719,7 @@ test('标签级清空只移除当前 promptTab 历史，保留页面正文和其
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
 
   await sidepanel.getByLabel('聊天输入').fill('先生成 chat 历史');
   await sidepanel.getByRole('button', { name: '发送' }).click();
@@ -732,10 +735,10 @@ test('标签级清空只移除当前 promptTab 历史，保留页面正文和其
 
   await expect(sidepanel.getByText('已清空当前标签聊天记录')).toBeVisible();
   await expect(sidepanel.getByRole('tabpanel', { name: /总结/ }).getByText('还没有聊天记录').first()).toBeVisible();
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
 
-  await sidepanel.getByRole('tab', { name: /Chat|聊天/ }).click();
-  await expect(sidepanel.getByRole('tabpanel', { name: /Chat|聊天/ }).getByText('标签清空测试响应')).toBeVisible();
+  await sidepanel.getByRole('tab', { name: CHAT_TAB_LABEL }).click();
+  await expect(sidepanel.getByRole('tabpanel', { name: CHAT_TAB_LABEL }).getByText('标签清空测试响应')).toBeVisible();
 
   await expect
     .poll(async () =>
@@ -861,10 +864,12 @@ test('助手消息支持继续新增分支，并展示分支结果', async ({ co
   await sidepanel.getByRole('button', { name: '发送' }).click();
   await expect(sidepanel.getByText('分支测试响应')).toBeVisible();
 
+  await sidepanel.locator('[data-testid^="chat-message-"]').filter({ hasText: '分支测试响应' }).first().hover();
   await sidepanel.getByRole('button', { name: '继续新增分支' }).click();
   const branchCard = sidepanel.locator('[data-testid^="branch-"]').filter({ hasText: '分支模型' }).first();
   await expect(branchCard).toBeVisible({ timeout: 20_000 });
   await expect(branchCard).toContainText('分支模型');
+  await branchCard.hover();
   await expect(sidepanel.getByRole('button', { name: '删除分支' })).toBeVisible({ timeout: 20_000 });
 });
 
@@ -962,6 +967,7 @@ test('用户消息支持编辑重发，助手消息支持重试并替换旧结�
     }).__THINK_BOT_TEST_STREAM__ = ['编辑后回答'];
   });
 
+  await sidepanel.locator('[data-testid^="chat-message-"]').filter({ hasText: '旧问题' }).first().hover();
   await sidepanel.getByRole('button', { name: '编辑' }).click();
   await sidepanel.getByLabel('编辑消息输入').fill('新问题');
   await sidepanel.getByRole('button', { name: '保存并重发' }).click();
@@ -1005,6 +1011,7 @@ test('用户消息支持编辑重发，助手消息支持重试并替换旧结�
     }).__THINK_BOT_TEST_STREAM__ = ['重试后回答'];
   });
 
+  await sidepanel.locator('[data-testid^="branch-"]').filter({ hasText: '编辑后回答' }).first().hover();
   await sidepanel.getByRole('button', { name: '重试回答' }).click();
   await expect(sidepanel.getByText('重试后回答')).toBeVisible();
 
@@ -1022,9 +1029,16 @@ test('用户消息支持编辑重发，助手消息支持重试并替换旧结�
           content: '新问题',
         }),
         expect.objectContaining({
+          id: previousAssistantId,
           role: 'assistant',
           content: '重试后回答',
-          retryFromMessageId: previousAssistantId,
+          retryFromMessageId: null,
+          branches: expect.arrayContaining([
+            expect.objectContaining({
+              content: '重试后回答',
+              status: 'done',
+            }),
+          ]),
         }),
       ],
     });
@@ -1037,7 +1051,9 @@ test('用户消息支持编辑重发，助手消息支持重试并替换旧结�
     }).__THINK_BOT_TEST_STREAM__ = ['用户重试分支回答'];
   });
 
-  await sidepanel.getByRole('button', { name: '重试问题' }).click();
+  const retriedUserMessage = sidepanel.locator('[data-testid^="chat-message-"]').filter({ hasText: '新问题' }).first();
+  await retriedUserMessage.hover();
+  await retriedUserMessage.getByRole('button', { name: '重试问题' }).click();
   await expect(sidepanel.getByText('用户重试分支回答')).toBeVisible();
 
   await expect
@@ -1063,7 +1079,7 @@ test('用户消息支持编辑重发，助手消息支持重试并替换旧结�
         messages: expect.arrayContaining([
           expect.objectContaining({
             role: 'assistant',
-            content: '重试后回答',
+            content: '用户重试分支回答',
             branches: expect.arrayContaining([
               expect.objectContaining({
                 content: '用户重试分支回答',
@@ -1164,7 +1180,7 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
     `chrome-extension://${extensionId}/${EXTENSION_PAGES.sidePanel}?tabId=${tab.id}&pageUrl=${encodeURIComponent(tab.url)}`,
   );
 
-  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('Example Domain');
+  await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText(READABILITY_EXCERPT);
   await sidepanel.getByLabel('添加图片').setInputFiles({
     name: 'dot.png',
     mimeType: 'image/png',
@@ -1185,7 +1201,9 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
   await sidepanel.mouse.move(extractionHandleBox.x + extractionHandleBox.width / 2, extractionHandleBox.y + extractionHandleBox.height / 2 + 40);
   await sidepanel.mouse.up();
 
-  const composerHeightBefore = await sidepanel.getByLabel('聊天输入').evaluate((element) => element.getBoundingClientRect().height);
+  const composerHeightBefore = await sidepanel
+    .getByTestId('chat-input-panel')
+    .evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight));
   const composerHandleBox = await sidepanel.getByTestId('chat-input-resize-handle').boundingBox();
   if (!composerHandleBox) {
     throw new Error('未找到输入区拖拽手柄');
@@ -1199,7 +1217,7 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
     .poll(async () => sidepanel.getByTestId('sidebar-extraction-panel').evaluate((element) => element.getBoundingClientRect().height))
     .toBeGreaterThan(extractionHeightBefore + 20);
   await expect
-    .poll(async () => sidepanel.getByLabel('聊天输入').evaluate((element) => element.getBoundingClientRect().height))
+    .poll(async () => sidepanel.getByTestId('chat-input-panel').evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight)))
     .toBeGreaterThan(composerHeightBefore + 20);
 
   await sidepanel.getByRole('button', { name: '移除图片 1' }).click();

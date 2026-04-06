@@ -56,7 +56,7 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await expect.poll(() => handledCommandTypes).toContain('GET_CONFIG');
   await expect.poll(() => handledCommandTypes).toContain('GET_LOCAL_CACHE_STATS');
   await expect(options.locator('h1')).toContainText('设置');
-  await expect(options.getByTestId('cache-entry-count')).toContainText('3');
+  await expect(options.getByTestId('cache-page-count')).toContainText('1');
   await expect(options.getByTestId('cache-bytes')).toContainText(/B/);
 
   await selectOption(options, /语言|Language/, 'English');
@@ -73,7 +73,7 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await expect(options.getByRole('combobox', { name: /Theme|主题/ })).toContainText('Dark');
   await expect(options.getByTestId('settings-shell')).toHaveAttribute('data-theme', 'dark');
   await expect(options.getByRole('heading', { name: /本地缓存|Local Cache/ })).toBeVisible();
-  await expect(options.getByTestId('cache-entry-count')).toContainText('3');
+  await expect(options.getByTestId('cache-page-count')).toContainText('1');
   await expect(options.getByTestId('cache-bytes')).toContainText(/B/);
 
   await options.getByRole('button', { name: /恢复默认|Reset/ }).click();

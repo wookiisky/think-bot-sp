@@ -152,8 +152,15 @@ type ExpandMessageBranchesResponse = {
   payload: {
     /** 目标助手消息 id。 */
     messageId: string;
-    /** 新增分支 id 列表。 */
-    branchIds: string[];
+    /** 新增分支摘要。 */
+    branches: Array<{
+      /** 分支 id。 */
+      branchId: string;
+      /** 分支模型 id。 */
+      modelId: string;
+      /** 分支模型展示名。 */
+      modelLabel: string;
+    }>;
   };
 };
 

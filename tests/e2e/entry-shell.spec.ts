@@ -8,5 +8,5 @@ test('opens side panel shell route directly', async ({ context, extensionId }) =
   await expect(sidepanel).toHaveURL(new RegExp(`${EXTENSION_PAGES.sidePanel}$`));
   await expect(sidepanel.getByTestId('sidebar-shell')).toBeVisible();
   await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toBeVisible();
-  await expect(sidepanel.getByRole('tab', { name: 'Chat' })).toBeVisible();
+  await expect(sidepanel.getByRole('tab', { name: /Chat|聊天/ })).toBeVisible();
 });

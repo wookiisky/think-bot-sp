@@ -555,20 +555,30 @@ export const createSidebarCommandHandler = ({
             branchId: 'branchId' in session ? session.branchId : undefined,
           });
         }
-        const branchIds = sessions.flatMap((session) => ('branchId' in session ? [session.branchId] : []));
+        const branches = sessions.flatMap((session) =>
+          'branchId' in session
+            ? [
+                {
+                  branchId: session.branchId,
+                  modelId: session.modelId,
+                  modelLabel: session.modelLabel,
+                },
+              ]
+            : [],
+        );
         commandLogger.info('branch.expand.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
           promptTab: command.promptTabId,
           messageId: command.messageId,
-          branchCount: branchIds.length,
+          branchCount: branches.length,
         });
 
         return {
           type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS' as const,
           payload: {
             messageId: command.messageId,
-            branchIds,
+            branches,
           },
         };
       }

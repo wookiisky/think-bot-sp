@@ -18,7 +18,6 @@ const translations: Record<string, string> = {
   'workspace.exportConversation': '导出',
   'workspace.model': '模型',
   'workspace.noModels': '暂无可用模型',
-  'workspace.currentModelNoImage': '当前模型不支持图片输入',
   'workspace.notice.clearTabConfirm': '确认清空当前标签',
 };
 
@@ -109,6 +108,7 @@ describe('ChatInput', () => {
     expect(onTextChange).toHaveBeenCalled();
     expect(onIncludePageContentChange).toHaveBeenCalledWith(false);
     expect(onSelectModel).toHaveBeenCalledWith('model-2');
+    expect(screen.queryByText('当前模型不支持图片输入')).toBeNull();
   });
 
   it('清空按钮会先弹出确认，再回调到当前标签动作', async () => {

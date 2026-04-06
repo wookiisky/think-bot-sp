@@ -147,8 +147,8 @@ export const ChatThread = ({
   };
 
   return (
-    <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-4 py-3">
-      <div className="divide-y divide-border/80">
+    <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-3 py-2">
+      <div>
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
           const messageIndex = messages.findIndex((current) => current.id === message.id);
@@ -165,7 +165,7 @@ export const ChatThread = ({
               }}
               data-testid={`chat-message-${message.id}`}
               data-message-role={message.role}
-              className="group/message relative py-3"
+              className="group/message relative py-2"
               onMouseEnter={() => setHoveredMessageId(message.id)}
               onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
               onFocus={() => setHoveredMessageId(message.id)}
@@ -240,7 +240,7 @@ export const ChatThread = ({
                   <div
                     data-testid={`branch-rail-${message.id}`}
                     data-reading-layout="grid"
-                    className="mt-3 grid gap-3 border-t border-border/70 pt-3"
+                    className="mt-2 grid gap-2"
                     style={{
                       gridTemplateColumns: `repeat(auto-fit, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`,
                     }}
@@ -250,27 +250,21 @@ export const ChatThread = ({
                         key={branch.id}
                         data-testid={`branch-${branch.id}`}
                         className={cn(
-                          'border border-border/80 bg-background/70 px-3 py-2',
+                          'group/branch relative border border-border/80 bg-background/70 px-3 py-2 pr-12',
                           message.selectedBranchId === branch.id && 'border-primary bg-primary/5',
                         )}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline">{t(branch.isPrimary ? 'workspace.status.primaryBranch' : 'workspace.status.branch')}</Badge>
-                              <span>{branch.modelLabel}</span>
-                              {message.selectedBranchId === branch.id ? <Badge variant="secondary">{t('workspace.useAsPrimary')}</Badge> : null}
-                              <WorkspaceStatusGlyph
-                                label={resolveStatusLabel(branch.status, t)}
-                                status={toVisualStatus(branch.status)}
-                                className="size-3.5"
-                              />
-                            </div>
-                            <div className="mt-2">
-                              <ChatMarkdown content={branch.content} />
-                            </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
+                        <div className="min-w-0">
+                          <div
+                            className={cn(
+                              'absolute right-2 top-2 z-10 flex flex-col rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm transition-opacity',
+                              'pointer-events-none invisible opacity-0',
+                              'group-hover/message:pointer-events-auto group-hover/message:visible group-hover/message:opacity-100',
+                              'group-focus-within/message:pointer-events-auto group-focus-within/message:visible group-focus-within/message:opacity-100',
+                              'group-hover/branch:pointer-events-auto group-hover/branch:visible group-hover/branch:opacity-100',
+                              'group-focus-within/branch:pointer-events-auto group-focus-within/branch:visible group-focus-within/branch:opacity-100',
+                            )}
+                          >
                             {branch.status === 'loading' ? (
                               <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
                                 <Button
@@ -325,6 +319,21 @@ export const ChatThread = ({
                               </MiniConfirm>
                             ) : null}
                           </div>
+
+                          <div className="flex items-start gap-3">
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline">{t(branch.isPrimary ? 'workspace.status.primaryBranch' : 'workspace.status.branch')}</Badge>
+                              <span>{branch.modelLabel}</span>
+                              <WorkspaceStatusGlyph
+                                label={resolveStatusLabel(branch.status, t)}
+                                status={toVisualStatus(branch.status)}
+                                className="size-3.5"
+                              />
+                            </div>
+                          </div>
+                          <div className="mt-1.5">
+                            <ChatMarkdown content={branch.content} />
+                          </div>
                         </div>
                         {branch.status === 'error' ? <p className="mt-2 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
                         {branch.status === 'cancelled' ? (
@@ -339,8 +348,8 @@ export const ChatThread = ({
                   <div
                     data-testid={`chat-message-actions-${message.id}`}
                     className={cn(
-                      'absolute right-0 top-0 transition-opacity',
-                      hoveredMessageId === message.id ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+                      'absolute right-0 top-0 z-10 transition-opacity',
+                      hoveredMessageId === message.id ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
                       message.role === 'assistant'
                         ? 'flex flex-col rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm'
                         : 'flex flex-row rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm',
@@ -500,7 +509,7 @@ const resolveStatusLabel = (status: 'loading' | 'done' | 'error' | 'cancelled', 
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative px-1 py-1 pr-12 transition-colors',
+    'relative px-0.5 py-0.5 pr-12 transition-colors',
     role === 'assistant' && 'bg-muted/55 text-foreground',
     role === 'user' && 'text-foreground',
     role === 'system' && 'text-amber-900',

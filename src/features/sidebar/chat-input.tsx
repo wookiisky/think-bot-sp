@@ -293,8 +293,6 @@ export const ChatInput = ({
             </Tooltip>
           </div>
         </div>
-
-        {!supportsImages && selectedModelId ? <p className="m-0 text-xs text-muted-foreground">{t('workspace.currentModelNoImage')}</p> : null}
       </div>
     </section>
   );

@@ -1252,6 +1252,18 @@ describe('chat-dispatch-service session lifecycle', () => {
       promptTabId: 'quick-summary',
       messageId: 'assistant-1',
     });
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        branchId: 'branch-a',
+        modelId: 'model-branch-a',
+        modelLabel: '分支模型A',
+      }),
+      expect.objectContaining({
+        branchId: 'branch-b',
+        modelId: 'model-branch-b',
+        modelLabel: '分支模型B',
+      }),
+    ]);
     const results = await Promise.all(sessions.map((session) => session.done));
 
     expect(results).toEqual([

@@ -143,7 +143,11 @@ type ConversationsApi = {
     type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS';
     payload: {
       messageId: string;
-      branchIds: string[];
+      branches: Array<{
+        branchId: string;
+        modelId: string;
+        modelLabel: string;
+      }>;
     };
   }>;
   /** 停止主会话。 */

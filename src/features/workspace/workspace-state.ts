@@ -145,6 +145,51 @@ export const upsertAssistantBranch = (
     });
   });
 
+/** 为目标助手消息追加或更新分支占位，优先用于本地乐观反馈。 */
+export const appendAssistantBranches = (
+  messages: ChatMessageState[],
+  messageId: string,
+  branches: Array<{
+    /** 分支 id。 */
+    id: string;
+    /** 分支模型 id。 */
+    modelId: string;
+    /** 分支模型展示名。 */
+    modelLabel: string;
+    /** 是否为主分支。 */
+    isPrimary?: boolean;
+  }>,
+) =>
+  messages.map((message) => {
+    if (message.id !== messageId || message.role !== 'assistant') {
+      return message;
+    }
+
+    const nextBranches = [...message.branches];
+    for (const branch of branches) {
+      const currentIndex = nextBranches.findIndex((item) => item.id === branch.id);
+      const nextBranch: BranchMessageState = {
+        id: branch.id,
+        modelId: branch.modelId,
+        modelLabel: branch.modelLabel,
+        isPrimary: currentIndex >= 0 ? nextBranches[currentIndex]?.isPrimary ?? false : branch.isPrimary ?? false,
+        content: currentIndex >= 0 ? nextBranches[currentIndex]?.content ?? '' : '',
+        status: 'loading',
+        errorMessage: null,
+      };
+      if (currentIndex >= 0) {
+        nextBranches[currentIndex] = nextBranch;
+      } else {
+        nextBranches.push(nextBranch);
+      }
+    }
+
+    return syncAssistantMessageState({
+      ...message,
+      branches: nextBranches,
+    });
+  });
+
 /** 生成本地乐观用户消息内容。 */
 export const toOptimisticUserContent = (text: string, images: string[]) => (text.trim().length > 0 ? text : images.length > 0 ? '[图片]' : '');
 

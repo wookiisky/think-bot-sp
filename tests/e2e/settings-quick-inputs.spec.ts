@@ -77,7 +77,7 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
   });
 
   const page = await openSettingsPage({ context, extensionId });
-  await page.getByRole('tab', { name: '标签页' }).click();
+  await page.getByRole('tab', { name: '快捷输入' }).click();
 
   await page.getByRole('button', { name: '新增快捷输入' }).click();
   await page.getByLabel('快捷输入名称').fill('问题拆解');

@@ -25,6 +25,7 @@ import {
 import { cn } from '../../lib/utils';
 import {
   CHAT_PROMPT_TAB_ID,
+  appendAssistantBranches,
   buildActiveSessionIdMap,
   buildComposerStateMap,
   buildMessageStateMap,
@@ -1195,12 +1196,23 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const handleExpandBranches = async (promptTabId: string, messageId: string) => {
     try {
       setPromptTabNotice(promptTabId, '');
-      await api.expandMessageBranches({
+      const response = await api.expandMessageBranches({
         tabId,
         pageUrl,
         promptTabId,
         messageId,
       });
+      setPromptTabMessages(promptTabId, (current) =>
+        appendAssistantBranches(
+          current,
+          messageId,
+          response.payload.branches.map((branch) => ({
+            id: branch.branchId,
+            modelId: branch.modelId,
+            modelLabel: branch.modelLabel,
+          })),
+        ),
+      );
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.expandBranchFailed'));
     }
