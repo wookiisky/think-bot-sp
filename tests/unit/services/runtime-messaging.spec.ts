@@ -125,6 +125,7 @@ describe('runtime-messaging', () => {
         pageUrl: 'https://example.com/article',
         promptTabId: 'chat',
         messageId: 'assistant-1',
+        modelId: 'model-2',
       }),
     ).toEqual({
       type: 'EXPAND_MESSAGE_BRANCHES',
@@ -132,6 +133,7 @@ describe('runtime-messaging', () => {
       pageUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      modelId: 'model-2',
     });
     expect(
       sidebarCommandSchema.parse({
@@ -590,6 +592,7 @@ describe('runtime-messaging', () => {
         branchId: '',
         modelId: 'model-1',
         modelLabel: '',
+        branches: [],
       },
     });
     expect(pageRepository.setIncludePageContent).toHaveBeenCalledWith({
@@ -707,6 +710,7 @@ describe('runtime-messaging', () => {
           pageUrl: 'https://example.com/article',
           promptTabId: 'chat',
           messageId: 'assistant-1',
+          modelId: 'model-2',
         },
         {
           sender: {
@@ -783,6 +787,7 @@ describe('runtime-messaging', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      modelId: 'model-2',
     });
     expect(logger.info).toHaveBeenCalledWith('branch.expand.accepted', {
       browserTabId: 7,
@@ -906,6 +911,13 @@ describe('runtime-messaging', () => {
         modelId: 'model-1',
         modelLabel: '主模型',
         sessionId: 'session-edit',
+        branches: [
+          {
+            branchId: 'assistant-edit:primary',
+            modelId: 'model-1',
+            modelLabel: '主模型',
+          },
+        ],
       },
     });
 
@@ -934,6 +946,13 @@ describe('runtime-messaging', () => {
         modelId: 'model-1',
         modelLabel: '主模型',
         sessionId: 'session-user-retry',
+        branches: [
+          {
+            branchId: 'branch-1',
+            modelId: 'model-1',
+            modelLabel: '主模型',
+          },
+        ],
       },
     });
 

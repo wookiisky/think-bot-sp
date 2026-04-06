@@ -8,7 +8,7 @@ import type { ModelConfig } from '../../domain/config/config-schema';
 import {
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
-  sanitizeBranchModelIds,
+  sanitizeParallelModelIds,
 } from '../../domain/config/config-schema';
 
 type CacheStats = {
@@ -62,8 +62,8 @@ export const BasicSettingsPanel = ({
   onClearCache,
   t,
 }: BasicSettingsPanelProps) => {
-  const branchModelIds = sanitizeBranchModelIds(config, config.basic.branchModelIds);
-  const hasMissingBranchModels = branchModelIds.length !== config.basic.branchModelIds.length;
+  const parallelModelIds = sanitizeParallelModelIds(config, config.basic.parallelModelIds);
+  const hasMissingParallelModels = parallelModelIds.length !== config.basic.parallelModelIds.length;
   const pageCount = cacheStats.pageCount ?? cacheStats.entryCount;
 
   const updateBasic = (patch: Partial<ExtensionConfig['basic']>) => {
@@ -157,12 +157,12 @@ export const BasicSettingsPanel = ({
                 value: model.id,
                 label: model.name,
               }))}
-              values={branchModelIds}
+              values={parallelModelIds}
               emptyText={t('settings.noBranchModels')}
               disabled={disabled}
-              onChange={(nextValues) => updateBasic({ branchModelIds: nextValues })}
+              onChange={(nextValues) => updateBasic({ parallelModelIds: nextValues })}
             />
-            {hasMissingBranchModels ? <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.branchModelsMissing')}</p> : null}
+            {hasMissingParallelModels ? <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.branchModelsMissing')}</p> : null}
           </label>
 
           <label className="grid gap-2">

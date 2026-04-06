@@ -139,7 +139,22 @@ type ChatDispatchService = {
     pageContent: string;
     /** 失败时是否回滚本轮新增消息。 */
     rollbackOnFailure?: boolean;
-  }) => Promise<ChatSession>;
+  }) => Promise<ChatSession & {
+    /** 本轮初始化创建的分支摘要。 */
+    branches: Array<{
+      /** 分支 id。 */
+      branchId: string;
+      /** 分支模型 id。 */
+      modelId: string;
+      /** 分支模型展示名。 */
+      modelLabel: string;
+    }>;
+    /** 并行分支会话。 */
+    branchSessions: Array<ChatSession & {
+      /** 分支 id。 */
+      branchId: string;
+    }>;
+  }>;
   /** 编辑目标用户消息并重发。 */
   editUserMessage: (input: {
     /** 归一化页面 URL。 */
@@ -150,7 +165,22 @@ type ChatDispatchService = {
     messageId: string;
     /** 编辑后的用户文本。 */
     content: string;
-  }) => Promise<ChatSession>;
+  }) => Promise<ChatSession & {
+    /** 本轮初始化创建的分支摘要。 */
+    branches: Array<{
+      /** 分支 id。 */
+      branchId: string;
+      /** 分支模型 id。 */
+      modelId: string;
+      /** 分支模型展示名。 */
+      modelLabel: string;
+    }>;
+    /** 并行分支会话。 */
+    branchSessions: Array<ChatSession & {
+      /** 分支 id。 */
+      branchId: string;
+    }>;
+  }>;
   /** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
   retryUserMessage: (input: {
     /** 归一化页面 URL。 */
@@ -159,7 +189,22 @@ type ChatDispatchService = {
     promptTabId: string;
     /** 目标用户消息 id。 */
     messageId: string;
-  }) => Promise<ChatSession>;
+  }) => Promise<ChatSession & {
+    /** 本轮初始化创建的分支摘要。 */
+    branches: Array<{
+      /** 分支 id。 */
+      branchId: string;
+      /** 分支模型 id。 */
+      modelId: string;
+      /** 分支模型展示名。 */
+      modelLabel: string;
+    }>;
+    /** 并行分支会话。 */
+    branchSessions: Array<ChatSession & {
+      /** 分支 id。 */
+      branchId: string;
+    }>;
+  }>;
   /** 重试目标助手分支。 */
   retryMessage: (input: {
     /** 归一化页面 URL。 */
@@ -179,6 +224,8 @@ type ChatDispatchService = {
     promptTabId: string;
     /** 目标助手消息 id。 */
     messageId: string;
+    /** 用户选中的模型 id。 */
+    modelId: string;
   }) => Promise<ChatSession[]>;
 };
 
@@ -352,6 +399,24 @@ export const createSidebarCommandHandler = ({
           normalizedUrl,
           promptTabId: command.promptTabId,
         });
+        for (const branchSession of session.branchSessions ?? []) {
+          sessionRegistry.register(branchSession, {
+            normalizedUrl,
+            promptTabId: command.promptTabId,
+            branchId: branchSession.branchId,
+          });
+        }
+        const branches =
+          session.branches
+          ?? (session.branchId && session.modelId && session.modelLabel
+            ? [
+                {
+                  branchId: session.branchId,
+                  modelId: session.modelId,
+                  modelLabel: session.modelLabel,
+                },
+              ]
+            : []);
         commandLogger.info('chat.send.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -369,6 +434,7 @@ export const createSidebarCommandHandler = ({
             branchId: session.branchId ?? '',
             modelId: session.modelId ?? command.modelId,
             modelLabel: session.modelLabel ?? '',
+            branches,
           },
         };
       }
@@ -394,6 +460,24 @@ export const createSidebarCommandHandler = ({
           normalizedUrl,
           promptTabId: command.promptTabId,
         });
+        for (const branchSession of session.branchSessions ?? []) {
+          sessionRegistry.register(branchSession, {
+            normalizedUrl,
+            promptTabId: command.promptTabId,
+            branchId: branchSession.branchId,
+          });
+        }
+        const branches =
+          session.branches
+          ?? (session.branchId && session.modelId && session.modelLabel
+            ? [
+                {
+                  branchId: session.branchId,
+                  modelId: session.modelId,
+                  modelLabel: session.modelLabel,
+                },
+              ]
+            : []);
         commandLogger.info('chat.edit.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -411,6 +495,7 @@ export const createSidebarCommandHandler = ({
             modelId: session.modelId ?? '',
             modelLabel: session.modelLabel ?? '',
             sessionId: session.sessionId,
+            branches,
           },
         };
       }
@@ -431,6 +516,24 @@ export const createSidebarCommandHandler = ({
           normalizedUrl,
           promptTabId: command.promptTabId,
         });
+        for (const branchSession of session.branchSessions ?? []) {
+          sessionRegistry.register(branchSession, {
+            normalizedUrl,
+            promptTabId: command.promptTabId,
+            branchId: branchSession.branchId,
+          });
+        }
+        const branches =
+          session.branches
+          ?? (session.branchId && session.modelId && session.modelLabel
+            ? [
+                {
+                  branchId: session.branchId,
+                  modelId: session.modelId,
+                  modelLabel: session.modelLabel,
+                },
+              ]
+            : []);
         commandLogger.info('chat.user_retry.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -449,6 +552,7 @@ export const createSidebarCommandHandler = ({
             modelId: session.modelId ?? '',
             modelLabel: session.modelLabel ?? '',
             sessionId: session.sessionId,
+            branches,
           },
         };
       }
@@ -547,6 +651,7 @@ export const createSidebarCommandHandler = ({
           normalizedUrl,
           promptTabId: command.promptTabId,
           messageId: command.messageId,
+          modelId: command.modelId,
         });
         for (const session of sessions) {
           sessionRegistry.register(session, {

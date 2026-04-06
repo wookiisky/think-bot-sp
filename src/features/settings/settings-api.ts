@@ -1,6 +1,7 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import type { RecentErrorSummary } from '../../domain/error/recent-error-schema';
+import { requestRuntimeMessage } from '../../shared/runtime-request';
 
 type CacheStats = {
   /** 本地缓存页面数。 */
@@ -15,38 +16,10 @@ type RuntimeResponse<T> = {
   type: string;
 } & T;
 
-type RuntimeErrorResponse = {
-  /** background 返回的错误信息。 */
-  error?: string;
-};
-
-const sendMessage = <TResponse,>(message: unknown): Promise<TResponse> => {
-  if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
-    throw new Error('chrome.runtime.sendMessage is unavailable');
-  }
-
-  return new Promise<TResponse>((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response: TResponse) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-
-      resolve(response);
-    });
-  });
-};
-
 const requestConfig = async <TResponse extends RuntimeResponse<Record<string, unknown>>>(
   message: unknown,
 ) => {
-  const response = await sendMessage<TResponse | RuntimeErrorResponse>(message);
-  if (typeof response === 'object' && response !== null && 'error' in response && typeof response.error === 'string') {
-    throw new Error(response.error);
-  }
-
-  return response;
+  return requestRuntimeMessage<TResponse>(message);
 };
 
 /** 设置页 API，统一收口 options 对 background 配置命令的调用。 */

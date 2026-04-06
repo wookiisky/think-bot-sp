@@ -26,11 +26,12 @@ const t = (key: string) =>
     'settings.quickInputModel': '专属模型',
     'settings.quickInputNoModel': '不指定模型',
     'settings.quickInputModelMissing': '引用的模型已失效，建议重新选择。',
-    'settings.quickInputBranchModels': '分支模型',
+    'settings.quickInputBranchModels': '并行模型',
     'settings.multiSelectPlaceholder': '请选择',
     'settings.multiSelectSummary': '{count} 个已选',
-    'settings.quickInputBranchModelsMissing': '部分专属分支模型引用已失效，保存时会自动清理。',
-    'settings.noBranchModels': '暂无可用分支模型',
+    'settings.quickInputBranchModelsDescription': '当前快捷输入会在全局并行模型基础上追加这些模型。',
+    'settings.quickInputBranchModelsMissing': '部分快捷输入并行模型引用已失效，保存时会自动清理。',
+    'settings.noBranchModels': '暂无可用并行模型',
   })[key] ?? key;
 
 /** 用受控壳层模拟设置页草稿配置。 */
@@ -105,7 +106,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面',
               autoTrigger: false,
               modelId: null,
-              branchModelIds: [],
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -115,7 +116,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请翻译当前页面',
               autoTrigger: false,
               modelId: null,
-              branchModelIds: [],
+              parallelModelIds: [],
               order: 1,
               deletedAt: null,
             },
@@ -132,8 +133,8 @@ describe('QuickInputsPanel', () => {
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '主模型' }));
-    await user.click(screen.getByRole('button', { name: '分支模型' }));
-    await user.click(screen.getByRole('checkbox', { name: '分支模型:主模型' }));
+    await user.click(screen.getByRole('button', { name: '并行模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '并行模型:主模型' }));
 
     const newQuickInputItem = screen
       .getAllByTestId(/quick-input-item-quick-/)
@@ -189,7 +190,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面',
               autoTrigger: false,
               modelId: 'missing-model',
-              branchModelIds: ['missing-branch-model'],
+              parallelModelIds: ['missing-branch-model'],
               order: 0,
               deletedAt: null,
             },
@@ -202,7 +203,7 @@ describe('QuickInputsPanel', () => {
     await user.click(screen.getByTestId('quick-input-summary-quick-1'));
 
     expect(screen.getByText('引用的模型已失效，建议重新选择。')).toBeInTheDocument();
-    expect(screen.getByText('部分专属分支模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
+    expect(screen.getByText('部分快捷输入并行模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('combobox', { name: '专属模型' }));
     await user.click(await screen.findByRole('option', { name: '不指定模型' }));
@@ -222,7 +223,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面内容，保留重点结论。',
               autoTrigger: false,
               modelId: null,
-              branchModelIds: [],
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -239,7 +240,7 @@ describe('QuickInputsPanel', () => {
     const user = userEvent.setup();
     expect(screen.queryByLabelText('快捷输入提示词')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
-    expect(screen.queryByText('当前快捷输入会在全局分支模型基础上叠加这些模型。')).not.toBeInTheDocument();
+    expect(screen.queryByText('当前快捷输入会在全局并行模型基础上追加这些模型。')).not.toBeInTheDocument();
 
     await user.click(screen.getByTestId('quick-input-summary-quick-1'));
     expect(screen.getByLabelText('快捷输入提示词')).toHaveValue('请总结当前页面内容，保留重点结论。');
@@ -263,7 +264,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请总结当前页面内容，保留重点结论。',
               autoTrigger: false,
               modelId: null,
-              branchModelIds: [],
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -273,7 +274,7 @@ describe('QuickInputsPanel', () => {
               prompt: '请翻译当前页面内容。',
               autoTrigger: true,
               modelId: null,
-              branchModelIds: [],
+              parallelModelIds: [],
               order: 1,
               deletedAt: null,
             },

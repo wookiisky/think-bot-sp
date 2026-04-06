@@ -148,6 +148,8 @@ export const sidebarExpandMessageBranchesCommandSchema = sidebarCommandBaseSchem
   promptTabId: z.string().min(1),
   /** 目标助手消息 id。 */
   messageId: z.string().min(1),
+  /** 用户选中的模型 id。 */
+  modelId: z.string().min(1),
 });
 
 /** 清空当前页面缓存、会话与 loading。 */
@@ -450,7 +452,7 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     /** 本次流式会话 id。 */
     sessionId: z.string().min(1),
     /** 当前 loading 状态。 */
-    status: z.enum(['loading', 'cancelled', 'error']),
+    status: z.enum(['loading', 'done', 'cancelled', 'error']),
   }),
   z.object({
     /** 事件类型。 */

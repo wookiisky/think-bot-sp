@@ -5,7 +5,7 @@ import type { ExtensionConfig } from '../../domain/config/config-schema';
 import {
   getEnabledCompleteModels,
   isModelConfigComplete,
-  normalizeBranchModelSelections,
+  normalizeParallelModelSelections,
 } from '../../domain/config/config-schema';
 import { createLocaleService } from '../../services/i18n/locale-service';
 import { createLogger } from '../../services/logger/logger';
@@ -162,7 +162,7 @@ export const SettingsShell = () => {
   };
 
   const validateDraftConfig = () => {
-    const nextDraftConfig = normalizeBranchModelSelections(draftConfig);
+    const nextDraftConfig = normalizeParallelModelSelections(draftConfig);
     const defaultModel = nextDraftConfig.basic.defaultModelId
       ? nextDraftConfig.models.find((item) => item.id === nextDraftConfig.basic.defaultModelId)
       : null;

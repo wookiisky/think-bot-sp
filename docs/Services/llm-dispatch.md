@@ -2,7 +2,7 @@
 
 ## 1. 模块定位
 
-模型调度服务负责统一封装 Vercel AI SDK 调用、助手分支并发、图片能力校验、流式事件分发和取消。当前已落地“所有助手消息统一建模为分支结果集合”的流式闭环、自动触发复用 `dispatchChat`、分支并发扩展，以及消息编辑与重试的重放链路。
+模型调度服务负责统一封装 Vercel AI SDK 调用、助手分支并发、图片能力校验、流式事件分发和取消。当前已落地“所有助手消息统一建模为分支结果集合”的流式闭环、快捷输入首轮 `主模型 + 并行模型` 并发生成、手动选模型单分支扩展，以及消息编辑与重试的重放链路。
 
 ## 2. 核心抽象
 
@@ -34,8 +34,8 @@
 ## 4. 对外接口
 
 - 当前接口：
-  - `dispatchChat(input): StreamSession`
-  - `expandBranches(input): BranchStreamSession[]`
+  - `dispatchChat(input): MultiBranchStreamSession`
+  - `expandBranches(input): BranchStreamSession`
 - `stopSession(sessionId)`
 - `stopBranch(request)`
 - `retryUserMessage(request)`
@@ -73,20 +73,24 @@ Provider 适配规则：
 1. 读取模型配置和页面上下文。
 2. 校验模型可用性与图片能力；如果图片能力不匹配，则在任何持久化和网络请求之前直接失败。
 3. 若本次请求附带页面正文，则把 `PageRecord.content` 与用户消息拼成同一次用户输入；若缓存缺失或开关关闭，则退化为仅发送用户消息。
-4. 先写用户消息、带首个主分支的助手占位消息和 loading state。
-5. 调用 AI SDK `streamText` 输出当前轮首个主分支。
-6. 每个 chunk 先写会话，再推送 `CHAT_STREAM_CHUNK` 事件。
-7. 流结束后把目标分支收敛到 `done`、`error` 或 `cancelled`，并同步助手消息镜像。
+4. 先写用户消息、带全部首轮分支摘要的助手占位消息和 loading state。
+5. 根据当前 `promptTab` 解析首轮执行计划：
+   - `chat` 只跑当前主模型。
+   - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
+6. 主分支与并行分支分别建立流式会话；每个 chunk 都先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
+7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
 7.1. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
-8. 最后清理 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
-9. 继续新增分支时，先解析“全局分支模型 + 当前 `promptTab` 分支模型”的合并结果，再过滤掉主回答已使用的模型。
-10. 每个分支独立写入分支占位、分支 chunk 和分支终态；单分支失败不会影响其他分支和主回答。
-11. `expandBranches` 返回值除 `branchId` 外还要带上 `modelId` 和 `modelLabel`，供 UI 在收到命令成功响应后立刻插入 loading 分支占位，不能把“新增分支后的首屏反馈”完全依赖于后续流事件。
+8. 所有首轮分支都收敛后，统一通过 `LOADING_STATE_UPDATE` 结束该轮 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
+9. 继续新增分支时，前端必须先让用户选择 `modelId`，后台只为这一个模型追加单分支请求。
+10. 手动新增分支的候选模型固定来自“所有启用且配置完整的模型”，包含当前主模型。
+11. 同一助手消息允许重复选择同一模型；UI 必须用 `模型名 #1/#2/...` 区分同模型多分支。
+12. `expandBranches` 返回值除 `branchId` 外还要带上 `modelId` 和 `modelLabel`，供 UI 在收到命令成功响应后立刻插入 loading 分支占位，不能把“新增分支后的首屏反馈”完全依赖于后续流事件。
 
 自动触发补充约束：
 
 - 自动触发不走独立调度器，直接复用 `dispatchChat`。
 - 自动触发当前统一以请求级 `pageContent` 注入页面正文，不改写页面级 `includePageContent`。
+- 快捷输入首轮自动触发会按“主模型 + 并行模型”并发生成同一条助手消息的分支集合。
 - 自动触发会话必须进入与手动发送同一套活跃会话注册表，保证 `STOP_SESSION`、页面级清空与恢复行为一致。
 - 自动触发首轮失败时启用 `rollbackOnFailure`，不持久化用户消息、助手错误态和 `auto-error` 标签状态。
 
@@ -108,9 +112,9 @@ Provider 适配规则：
   - 仅允许切换当前轮最后一条助手消息。
   - 后续继续对话时，历史上下文统一取 `selectedBranchId` 对应分支内容。
 - `expandBranches`：
-  - 只对目标助手消息追加新的分支请求。
-  - 不覆盖现有分支。
-  - 当前分支模型来源是 `basic.branchModelIds + currentPromptTab.branchModelIds` 的合并结果。
+  - 只对目标助手消息追加一个新的分支请求。
+  - 必须显式传入用户选中的 `modelId`。
+  - 不覆盖现有分支，且允许重复选择同一模型。
   - 命令成功返回后，前端必须先用返回的分支摘要渲染 loading 分支，再继续消费 `BRANCH_STREAM_*` 事件。
 - `stopBranch` / `deleteBranch`：
   - 仅影响目标 `branchId`。

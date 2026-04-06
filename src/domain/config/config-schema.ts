@@ -29,6 +29,22 @@ export const REASONING_EFFORT_VALUES = ['low', 'medium', 'high', 'max'] as const
 const modelProviderSchema = z.enum(MODEL_PROVIDER_VALUES);
 const reasoningEffortSchema = z.enum(REASONING_EFFORT_VALUES);
 
+/** 兼容旧字段 branchModelIds，统一迁移到 parallelModelIds。 */
+const migrateLegacyParallelModelIds = <T extends { parallelModelIds?: string[]; branchModelIds?: string[] }>(value: T): T => {
+  if (Array.isArray(value.parallelModelIds)) {
+    return value;
+  }
+
+  if (Array.isArray(value.branchModelIds)) {
+    return {
+      ...value,
+      parallelModelIds: value.branchModelIds,
+    };
+  }
+
+  return value;
+};
+
 /** 获取 provider 默认 Base URL。 */
 export const getDefaultModelBaseUrl = (provider: z.infer<typeof modelProviderSchema>): string => {
   switch (provider) {
@@ -111,16 +127,19 @@ export const modelConfigSchema = z
     }
   });
 
-const quickInputSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  prompt: z.string().min(1),
-  autoTrigger: z.boolean(),
-  modelId: z.string().nullable(),
-  branchModelIds: z.array(z.string().min(1)).default([]),
-  order: z.number().int().nonnegative(),
-  deletedAt: z.number().int().nonnegative().nullable(),
-});
+const quickInputSchema = z.preprocess(
+  (value) => (typeof value === 'object' && value !== null ? migrateLegacyParallelModelIds(value as { parallelModelIds?: string[]; branchModelIds?: string[] }) : value),
+  z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    prompt: z.string().min(1),
+    autoTrigger: z.boolean(),
+    modelId: z.string().nullable(),
+    parallelModelIds: z.array(z.string().min(1)).default([]),
+    order: z.number().int().nonnegative(),
+    deletedAt: z.number().int().nonnegative().nullable(),
+  }),
+);
 
 const blacklistRuleSchema = z.object({
   id: z.string().min(1),
@@ -151,7 +170,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请概括当前页面的核心观点、关键事实和结论，并给出一段简短总结。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-compress',
@@ -159,7 +178,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请把当前页面内容压缩成一段更短、更密集的摘要，保留关键结论和必要上下文。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-refactor',
@@ -167,7 +186,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请重构当前内容的结构与表达，使其更清晰、更易维护，并指出主要改进点。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-counterintuitive',
@@ -175,7 +194,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请从反直觉角度审视当前内容，指出最容易被忽略、但最值得重新思考的部分。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-audit',
@@ -183,7 +202,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请审计当前内容中的事实、假设、风险和可能的漏洞，并按优先级给出问题清单。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-first-principles',
@@ -191,7 +210,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请用第一性原理拆解当前问题，区分事实、假设和推导，再给出结论。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
   {
     id: 'builtin-intent-analysis',
@@ -199,7 +218,7 @@ const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'
     prompt: '请分析当前内容背后的真实意图、目标受众、显性诉求和隐含诉求。',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
   },
 ];
 
@@ -278,32 +297,55 @@ export const applySystemConfigSeeds = (config: ExtensionConfig): ExtensionConfig
 });
 
 export const extensionConfigSchema = z
-  .object({
-    version: z.literal(CONFIG_SCHEMA_VERSION),
-    updatedAt: z.number().int().nonnegative(),
-    basic: z.object({
-      theme: z.enum(['system', 'light', 'dark']),
-      language: z.enum(['zh-CN', 'en']),
-      defaultModelId: z.string().min(1).nullable(),
-      branchModelIds: z.array(z.string().min(1)).default([]),
-      systemPrompt: z.string(),
-      filterCot: z.boolean(),
-      extractionMethod: z.enum(['readability', 'jina']),
-      extractionPanelHeight: z
-        .number()
-        .int()
-        .min(MIN_EXTRACTION_PANEL_HEIGHT)
-        .max(MAX_EXTRACTION_PANEL_HEIGHT)
-        .default(DEFAULT_EXTRACTION_PANEL_HEIGHT),
-      jinaApiKey: z.string().default(''),
-      jinaResponseTemplate: z.string().default(DEFAULT_JINA_RESPONSE_TEMPLATE),
-      includePageContentByDefault: z.boolean(),
+  .preprocess(
+    (value) => {
+      if (typeof value !== 'object' || value === null) {
+        return value;
+      }
+
+      const input = value as {
+        basic?: { parallelModelIds?: string[]; branchModelIds?: string[] };
+        quickInputs?: Array<{ parallelModelIds?: string[]; branchModelIds?: string[] }>;
+      };
+
+      return {
+        ...input,
+        basic:
+          typeof input.basic === 'object' && input.basic !== null
+            ? migrateLegacyParallelModelIds(input.basic)
+            : input.basic,
+        quickInputs: Array.isArray(input.quickInputs)
+          ? input.quickInputs.map((quickInput) => migrateLegacyParallelModelIds(quickInput))
+          : input.quickInputs,
+      };
+    },
+    z.object({
+      version: z.literal(CONFIG_SCHEMA_VERSION),
+      updatedAt: z.number().int().nonnegative(),
+      basic: z.object({
+        theme: z.enum(['system', 'light', 'dark']),
+        language: z.enum(['zh-CN', 'en']),
+        defaultModelId: z.string().min(1).nullable(),
+        parallelModelIds: z.array(z.string().min(1)).default([]),
+        systemPrompt: z.string(),
+        filterCot: z.boolean(),
+        extractionMethod: z.enum(['readability', 'jina']),
+        extractionPanelHeight: z
+          .number()
+          .int()
+          .min(MIN_EXTRACTION_PANEL_HEIGHT)
+          .max(MAX_EXTRACTION_PANEL_HEIGHT)
+          .default(DEFAULT_EXTRACTION_PANEL_HEIGHT),
+        jinaApiKey: z.string().default(''),
+        jinaResponseTemplate: z.string().default(DEFAULT_JINA_RESPONSE_TEMPLATE),
+        includePageContentByDefault: z.boolean(),
+      }),
+      models: z.array(modelConfigSchema),
+      quickInputs: z.array(quickInputSchema),
+      sync: syncConfigSchema,
+      blacklist: z.array(blacklistRuleSchema),
     }),
-    models: z.array(modelConfigSchema),
-    quickInputs: z.array(quickInputSchema),
-    sync: syncConfigSchema,
-    blacklist: z.array(blacklistRuleSchema),
-  })
+  )
   .superRefine((value, ctx) => {
     const idGroups = [
       ['models', value.models.map((item) => item.id)],
@@ -337,12 +379,12 @@ export const isModelConfigComplete = (model: ModelConfig): boolean =>
 export const getEnabledCompleteModels = (config: ExtensionConfig): ModelConfig[] =>
   config.models.filter((model) => isModelConfigComplete(model));
 
-/** 过滤无效分支模型引用，保留原顺序并去重。 */
-export const sanitizeBranchModelIds = (config: ExtensionConfig, branchModelIds: string[]): string[] => {
+/** 过滤无效并行模型引用，保留原顺序并去重。 */
+export const sanitizeParallelModelIds = (config: ExtensionConfig, parallelModelIds: string[] = []): string[] => {
   const enabledModelIds = new Set(getEnabledCompleteModels(config).map((model) => model.id));
   const seen = new Set<string>();
 
-  return branchModelIds.filter((modelId) => {
+  return parallelModelIds.filter((modelId) => {
     if (!enabledModelIds.has(modelId) || seen.has(modelId)) {
       return false;
     }
@@ -351,32 +393,32 @@ export const sanitizeBranchModelIds = (config: ExtensionConfig, branchModelIds: 
   });
 };
 
-/** 归一化配置中的分支模型引用。 */
-export const normalizeBranchModelSelections = (config: ExtensionConfig): ExtensionConfig => ({
+/** 归一化配置中的并行模型引用。 */
+export const normalizeParallelModelSelections = (config: ExtensionConfig): ExtensionConfig => ({
   ...config,
   basic: {
     ...config.basic,
-    branchModelIds: sanitizeBranchModelIds(config, config.basic.branchModelIds),
+    parallelModelIds: sanitizeParallelModelIds(config, config.basic.parallelModelIds),
   },
   quickInputs: config.quickInputs.map((quickInput) => ({
     ...quickInput,
-    branchModelIds: sanitizeBranchModelIds(config, quickInput.branchModelIds),
+    parallelModelIds: sanitizeParallelModelIds(config, quickInput.parallelModelIds),
   })),
 });
 
-/** 解析当前 promptTab 应使用的分支模型，规则为全局配置与当前配置合并。 */
-export const resolvePromptTabBranchModelIds = (config: ExtensionConfig, promptTabId: string): string[] => {
-  const globalBranchModelIds = sanitizeBranchModelIds(config, config.basic.branchModelIds);
+/** 解析当前快捷输入 promptTab 应使用的并行模型，规则为全局配置与当前配置合并。 */
+export const resolvePromptTabParallelModelIds = (config: ExtensionConfig, promptTabId: string): string[] => {
+  const globalParallelModelIds = sanitizeParallelModelIds(config, config.basic.parallelModelIds);
   if (promptTabId === 'chat') {
-    return globalBranchModelIds;
+    return [];
   }
 
   const quickInput = config.quickInputs.find((item) => item.id === promptTabId && item.deletedAt === null);
   if (!quickInput) {
-    return globalBranchModelIds;
+    return globalParallelModelIds;
   }
 
-  return sanitizeBranchModelIds(config, [...globalBranchModelIds, ...quickInput.branchModelIds]);
+  return sanitizeParallelModelIds(config, [...globalParallelModelIds, ...quickInput.parallelModelIds]);
 };
 
 /** 生成默认配置。 */
@@ -388,7 +430,7 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
       theme: 'system',
       language: 'zh-CN',
       defaultModelId: null,
-      branchModelIds: [],
+      parallelModelIds: [],
       systemPrompt: '',
       filterCot: false,
       extractionMethod: 'readability',
@@ -400,7 +442,7 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
     },
     models: overrides.models ?? [],
     quickInputs: (overrides.quickInputs ?? DEFAULT_QUICK_INPUTS).map((quickInput) => ({
-      branchModelIds: [],
+      parallelModelIds: [],
       ...quickInput,
     })),
     sync: {

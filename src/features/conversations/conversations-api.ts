@@ -1,4 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { requestRuntimeMessage } from '../../shared/runtime-request';
 import type {
   SidebarConversationRecord,
   SidebarLoadingStateRecord,
@@ -62,6 +63,15 @@ type GetConfigResponse = {
   config: ExtensionConfig;
 };
 
+type BranchDescriptor = {
+  /** 分支 id。 */
+  branchId: string;
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
+};
+
 type ConversationsStreamPort = chrome.runtime.Port;
 
 type ConversationsApi = {
@@ -95,6 +105,7 @@ type ConversationsApi = {
       branchId: string;
       modelId: string;
       modelLabel: string;
+      branches: BranchDescriptor[];
     };
   }>;
   /** 编辑用户消息。 */
@@ -107,6 +118,7 @@ type ConversationsApi = {
       modelId: string;
       modelLabel: string;
       sessionId: string;
+      branches: BranchDescriptor[];
     };
   }>;
   /** 重试用户消息。 */
@@ -119,6 +131,7 @@ type ConversationsApi = {
       modelId: string;
       modelLabel: string;
       sessionId: string;
+      branches: BranchDescriptor[];
     };
   }>;
   /** 重试助手消息。 */
@@ -139,15 +152,11 @@ type ConversationsApi = {
     };
   }>;
   /** 新增分支。 */
-  expandMessageBranches: (input: { pageUrl: string; promptTabId: string; messageId: string }) => Promise<{
+  expandMessageBranches: (input: { pageUrl: string; promptTabId: string; messageId: string; modelId: string }) => Promise<{
     type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS';
     payload: {
       messageId: string;
-      branches: Array<{
-        branchId: string;
-        modelId: string;
-        modelLabel: string;
-      }>;
+      branches: BranchDescriptor[];
     };
   }>;
   /** 停止主会话。 */
@@ -212,111 +221,111 @@ const openTab = async (url: string) => {
 /** 创建 conversations 页 API。 */
 export const createConversationsApi = (): ConversationsApi => ({
   listPages() {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'LIST_PAGES',
     });
   },
   searchPages(query) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SEARCH_PAGES',
       query,
     });
   },
   getPageDetail(normalizedUrl) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'GET_PAGE_DETAIL',
       normalizedUrl,
     });
   },
   updatePageTitle(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'UPDATE_PAGE_TITLE',
       ...input,
     });
   },
   deletePage(normalizedUrl) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'DELETE_PAGE',
       normalizedUrl,
     });
   },
   getConfig() {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'GET_CONFIG',
     });
   },
   sendChat(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SEND_CHAT',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   editUserMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EDIT_USER_MESSAGE',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   retryUserMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'RETRY_USER_MESSAGE',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   retryMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'RETRY_MESSAGE',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   selectAssistantBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SELECT_ASSISTANT_BRANCH',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   expandMessageBranches(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EXPAND_MESSAGE_BRANCHES',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   stopSession(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'STOP_SESSION',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   stopBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'STOP_BRANCH',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   deleteBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'DELETE_BRANCH',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   clearTabConversation(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'CLEAR_TAB_CONVERSATION',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,
     });
   },
   exportConversation(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EXPORT_CONVERSATION',
       tabId: CONVERSATIONS_TAB_ID,
       ...input,

@@ -58,13 +58,13 @@ settings.recentErrorSource.sidebar: 侧边栏
 settings.recentErrorSource.conversations: 历史页
 settings.recentErrorSource.sync: 同步
 settings.recentErrorSource.settings: 设置页
-settings.basicDescription: 管理主题、语言、默认模型、分支模型和提取默认行为。
+settings.basicDescription: 管理主题、语言、默认模型、并行模型和提取默认行为。
 settings.defaultModel: 默认模型
 settings.noDefaultModel: 不设置默认模型
-settings.branchModels: 分支模型
-settings.branchModelsDescription: 为 Chat 和未单独覆盖的快捷输入配置默认分支模型。
-settings.noBranchModels: 暂无可用分支模型
-settings.branchModelsMissing: 部分分支模型引用已失效，保存时会自动清理。
+settings.branchModels: 并行模型
+settings.branchModelsDescription: 为全部快捷输入配置默认并行模型，触发时会与主模型一起执行。
+settings.noBranchModels: 暂无可用并行模型
+settings.branchModelsMissing: 部分并行模型引用已失效，保存时会自动清理。
 settings.multiSelectPlaceholder: 请选择
 settings.multiSelectSummary: "已选 {count} 项"
 settings.extractionMethod: 默认提取方式
@@ -104,9 +104,9 @@ settings.quickInputAutoTrigger: 自动触发
 settings.quickInputModel: 专属模型
 settings.quickInputNoModel: 不指定模型
 settings.quickInputModelMissing: 引用的模型已失效，建议重新选择。
-settings.quickInputBranchModels: 分支模型
-settings.quickInputBranchModelsDescription: 当前快捷输入会在全局分支模型基础上叠加这些模型。
-settings.quickInputBranchModelsMissing: 部分专属分支模型引用已失效，保存时会自动清理。
+settings.quickInputBranchModels: 并行模型
+settings.quickInputBranchModelsDescription: 当前快捷输入会在全局并行模型基础上追加这些模型。
+settings.quickInputBranchModelsMissing: 部分快捷输入并行模型引用已失效，保存时会自动清理。
 workspace.chatTab: 聊天
 workspace.model: 模型
 workspace.selectModel: 选择模型
@@ -131,6 +131,8 @@ workspace.retryUserMessage: 重试问题
 workspace.retryAssistantMessage: 重试回答
 workspace.retryMessage: 重试
 workspace.expandBranches: 继续新增分支
+workspace.selectBranchModel: 选择模型
+workspace.noAvailableBranchModels: 暂无可用模型
 workspace.stopBranch: 停止分支
 workspace.deleteBranch: 删除分支
 workspace.selectPrimaryBranch: 设为后续主分支

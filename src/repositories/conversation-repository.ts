@@ -15,6 +15,16 @@ type LoadingStateRecord = z.infer<typeof loadingStateRecordSchema>;
 type AssistantMessageRecord = Extract<ConversationRecord['messages'][number], { role: 'assistant' }>;
 type UserMessageRecord = Extract<ConversationRecord['messages'][number], { role: 'user' }>;
 type BranchRecord = AssistantMessageRecord['branches'][number];
+type InitialBranchSeed = {
+  /** 分支稳定 id。 */
+  id: string;
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
+  /** 是否为主分支。 */
+  isPrimary: boolean;
+};
 
 /** 规范化用户消息展示文本，避免把与真实内容相同的值重复落库。 */
 const toDisplayContentPatch = (content: string, displayContent?: string) =>
@@ -59,51 +69,53 @@ const createEmptyConversation = (
 /** 创建 loading 中的助手消息占位。 */
 const createLoadingAssistantMessage = ({
   messageId,
-  primaryBranchId,
-  modelId,
-  modelLabel,
+  branches,
+  selectedBranchId,
   retryFromMessageId,
   now,
 }: {
   /** 新助手消息 id。 */
   messageId: string;
-  /** 首个主分支 id。 */
-  primaryBranchId: string;
-  /** 使用的模型 id。 */
-  modelId: string;
-  /** 使用的模型展示名。 */
-  modelLabel: string;
+  /** 初始分支列表。 */
+  branches: InitialBranchSeed[];
+  /** 当前选中的分支 id。 */
+  selectedBranchId: string;
   /** 被替换的旧助手消息 id。 */
   retryFromMessageId: string | null;
   /** 当前时间。 */
   now: number;
-}): AssistantMessageRecord => ({
-  id: messageId,
-  role: 'assistant',
-  content: '',
-  images: [],
-  status: 'loading',
-  modelId,
-  branches: [
-    {
-      id: primaryBranchId,
-      modelId,
-      modelLabel,
-      isPrimary: true,
+}): AssistantMessageRecord => {
+  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? branches[0];
+  if (!selectedBranch) {
+    throw new Error(`selected branch is required: ${messageId}`);
+  }
+
+  return {
+    id: messageId,
+    role: 'assistant',
+    content: '',
+    images: [],
+    status: 'loading',
+    modelId: selectedBranch.modelId,
+    branches: branches.map((branch) => ({
+      id: branch.id,
+      modelId: branch.modelId,
+      modelLabel: branch.modelLabel,
+      isPrimary: branch.isPrimary,
       content: '',
       status: 'loading',
       errorMessage: null,
       createdAt: now,
       updatedAt: now,
-    },
-  ],
-  selectedBranchId: primaryBranchId,
-  retryFromMessageId,
-  editedAt: null,
-  errorMessage: null,
-  createdAt: now,
-  updatedAt: now,
-});
+    })),
+    selectedBranchId: selectedBranch.id,
+    retryFromMessageId,
+    editedAt: null,
+    errorMessage: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+};
 
 /** 解析 assistant 当前选中的主分支。 */
 const getSelectedBranch = (assistantMessage: AssistantMessageRecord): BranchRecord | null => {
@@ -291,9 +303,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId,
       content,
       newAssistantMessageId,
-      newPrimaryBranchId,
-      modelId,
-      modelLabel,
+      initialBranches,
+      selectedBranchId,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -306,12 +317,10 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       content: string;
       /** 新助手消息 id。 */
       newAssistantMessageId: string;
-      /** 新主分支 id。 */
-      newPrimaryBranchId: string;
-      /** 重新生成时使用的模型 id。 */
-      modelId: string;
-      /** 重新生成时使用的模型展示名。 */
-      modelLabel: string;
+      /** 新助手消息的初始分支。 */
+      initialBranches: InitialBranchSeed[];
+      /** 当前选中的主分支。 */
+      selectedBranchId: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -336,9 +345,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...preservedMessages,
           createLoadingAssistantMessage({
             messageId: newAssistantMessageId,
-            primaryBranchId: newPrimaryBranchId,
-            modelId,
-            modelLabel,
+            branches: initialBranches,
+            selectedBranchId,
             retryFromMessageId: null,
             now,
           }),
@@ -392,9 +400,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId,
       messageId,
       newAssistantMessageId,
-      newPrimaryBranchId,
-      modelId,
-      modelLabel,
+      initialBranches,
+      selectedBranchId,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -405,12 +412,10 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId: string;
       /** 新助手消息 id。 */
       newAssistantMessageId: string;
-      /** 新主分支 id。 */
-      newPrimaryBranchId: string;
-      /** 重试时使用的模型 id。 */
-      modelId: string;
-      /** 重试时使用的模型展示名。 */
-      modelLabel: string;
+      /** 新助手消息的初始分支。 */
+      initialBranches: InitialBranchSeed[];
+      /** 当前选中的主分支。 */
+      selectedBranchId: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -423,9 +428,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
           ...preservedMessages,
           createLoadingAssistantMessage({
             messageId: newAssistantMessageId,
-            primaryBranchId: newPrimaryBranchId,
-            modelId,
-            modelLabel,
+            branches: initialBranches,
+            selectedBranchId,
             retryFromMessageId: messageId,
             now,
           }),
@@ -554,9 +558,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       normalizedUrl,
       promptTabId,
       messageId,
-      primaryBranchId,
-      modelId,
-      modelLabel,
+      initialBranches,
+      selectedBranchId,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -565,12 +568,10 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId: string;
       /** 新消息 id。 */
       messageId: string;
-      /** 当前主分支 id。 */
-      primaryBranchId: string;
-      /** 使用的模型 id。 */
-      modelId: string;
-      /** 使用的模型展示名。 */
-      modelLabel: string;
+      /** 初始分支列表。 */
+      initialBranches: InitialBranchSeed[];
+      /** 当前选中的主分支。 */
+      selectedBranchId: string;
       /** 当前时间。 */
       now: number;
     }) {
@@ -583,9 +584,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
             {
               ...createLoadingAssistantMessage({
                 messageId,
-                primaryBranchId,
-                modelId,
-                modelLabel,
+                branches: initialBranches,
+                selectedBranchId,
                 retryFromMessageId: null,
                 now,
               }),

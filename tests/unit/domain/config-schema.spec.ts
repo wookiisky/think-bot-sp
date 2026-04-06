@@ -24,9 +24,9 @@ import {
   extensionConfigSchema,
   getEnabledCompleteModels,
   isModelConfigComplete,
-  normalizeBranchModelSelections,
-  resolvePromptTabBranchModelIds,
-  sanitizeBranchModelIds,
+  normalizeParallelModelSelections,
+  resolvePromptTabParallelModelIds,
+  sanitizeParallelModelIds,
 } from '../../../src/domain/config/config-schema';
 
 describe('config schema', () => {
@@ -40,7 +40,7 @@ describe('config schema', () => {
     expect(config.version).toBe(CONFIG_SCHEMA_VERSION);
     expect(config.updatedAt).toBe(123);
     expect(config.basic.defaultModelId).toBeNull();
-    expect(config.basic.branchModelIds).toEqual([]);
+    expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
@@ -49,7 +49,7 @@ describe('config schema', () => {
     expect(config.blacklist.map((item) => item.id)).toEqual(DEFAULT_BLACKLIST_RULES.map((item) => item.id));
   });
 
-  it('旧配置缺少 branchModelIds 和提取参数时 parse 后自动补默认值', () => {
+  it('旧配置缺少 parallelModelIds 和提取参数时 parse 后自动补默认值', () => {
     const config = extensionConfigSchema.parse({
       ...createDefaultConfig(),
       basic: {
@@ -68,11 +68,11 @@ describe('config schema', () => {
       ],
     });
 
-    expect(config.basic.branchModelIds).toEqual([]);
+    expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
-    expect(config.quickInputs[0]?.branchModelIds).toEqual([]);
+    expect(config.quickInputs[0]?.parallelModelIds).toEqual([]);
   });
 
   it('会给旧配置补齐缺失的系统快捷输入和黑名单规则，但不覆盖已有项', () => {
@@ -358,11 +358,11 @@ describe('config schema', () => {
     ).toBe(false);
   });
 
-  it('会过滤失效或重复的分支模型引用，并按当前 promptTab 合并全局与专属配置', () => {
+  it('会过滤失效或重复的并行模型引用，并按快捷输入合并全局与专属配置', () => {
     const config = createDefaultConfig({
       basic: {
         ...createDefaultConfig().basic,
-        branchModelIds: ['model-1', 'model-2', 'model-1', 'missing-model'],
+        parallelModelIds: ['model-1', 'model-2', 'model-1', 'missing-model'],
       },
       models: [
         {
@@ -424,18 +424,18 @@ describe('config schema', () => {
           prompt: '请总结当前页面',
           autoTrigger: false,
           modelId: null,
-          branchModelIds: ['model-3', 'model-2', 'missing-model'],
+          parallelModelIds: ['model-3', 'model-2', 'missing-model'],
           order: 0,
           deletedAt: null,
         },
       ],
     });
 
-    expect(sanitizeBranchModelIds(config, ['model-1', 'missing-model', 'model-1', 'model-2'])).toEqual(['model-1', 'model-2']);
-    expect(normalizeBranchModelSelections(config).basic.branchModelIds).toEqual(['model-1', 'model-2']);
-    expect(normalizeBranchModelSelections(config).quickInputs[0]?.branchModelIds).toEqual(['model-3', 'model-2']);
-    expect(resolvePromptTabBranchModelIds(config, 'chat')).toEqual(['model-1', 'model-2']);
-    expect(resolvePromptTabBranchModelIds(config, 'quick-1')).toEqual(['model-1', 'model-2', 'model-3']);
+    expect(sanitizeParallelModelIds(config, ['model-1', 'missing-model', 'model-1', 'model-2'])).toEqual(['model-1', 'model-2']);
+    expect(normalizeParallelModelSelections(config).basic.parallelModelIds).toEqual(['model-1', 'model-2']);
+    expect(normalizeParallelModelSelections(config).quickInputs[0]?.parallelModelIds).toEqual(['model-3', 'model-2']);
+    expect(resolvePromptTabParallelModelIds(config, 'chat')).toEqual([]);
+    expect(resolvePromptTabParallelModelIds(config, 'quick-1')).toEqual(['model-1', 'model-2', 'model-3']);
   });
 
   it('构造稳定 storage key', () => {

@@ -1,19 +1,36 @@
 import { z } from 'zod';
 
-import { getEnabledCompleteModels, sanitizeBranchModelIds } from '../../domain/config/config-schema';
+import { getEnabledCompleteModels, sanitizeParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 
 /** 默认远端快捷输入模板地址。 */
 export const DEFAULT_QUICK_INPUT_TEMPLATE_URL =
   'https://raw.githubusercontent.com/wookiisky/think-bot-sp/main/quick_input_tabs.json';
 
-const quickInputTemplateItemSchema = z.object({
-  name: z.string().min(1),
-  prompt: z.string().min(1),
-  autoTrigger: z.boolean().default(false),
-  modelId: z.string().min(1).nullable().default(null),
-  branchModelIds: z.array(z.string().min(1)).default([]),
-});
+const quickInputTemplateItemSchema = z.preprocess(
+  (value) => {
+    if (typeof value !== 'object' || value === null) {
+      return value;
+    }
+
+    const input = value as { parallelModelIds?: string[]; branchModelIds?: string[] };
+    if (Array.isArray(input.parallelModelIds)) {
+      return input;
+    }
+
+    return {
+      ...input,
+      parallelModelIds: Array.isArray(input.branchModelIds) ? input.branchModelIds : [],
+    };
+  },
+  z.object({
+    name: z.string().min(1),
+    prompt: z.string().min(1),
+    autoTrigger: z.boolean().default(false),
+    modelId: z.string().min(1).nullable().default(null),
+    parallelModelIds: z.array(z.string().min(1)).default([]),
+  }),
+);
 
 const quickInputTemplateDocumentSchema = z.union([
   z.array(quickInputTemplateItemSchema),
@@ -91,7 +108,7 @@ export const appendQuickInputTemplates = ({
         prompt: template.prompt,
         autoTrigger: template.autoTrigger,
         modelId: template.modelId && enabledModelIds.has(template.modelId) ? template.modelId : null,
-        branchModelIds: sanitizeBranchModelIds(config, template.branchModelIds),
+        parallelModelIds: sanitizeParallelModelIds(config, template.parallelModelIds),
         order: nextOrder++,
         deletedAt: null,
       },

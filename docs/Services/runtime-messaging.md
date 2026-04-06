@@ -148,9 +148,11 @@ long-lived port 事件：
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
 - 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。
 - `EDIT_USER_MESSAGE`、`RETRY_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
+- `EXPAND_MESSAGE_BRANCHES` 必须显式携带 `modelId`；background 只创建一个目标分支，不再按后台剩余候选批量补分支。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CLEAR_PAGE_CONTEXT` 必须先取消当前页面活跃会话并等待其生命周期收敛，再删除页面记录，避免流式尾包把刚清空的页面重新写回。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
+- extension page 的 API 封装在消费 one-shot command 前，必须先把 background 返回的 `{ error }` 收敛为异常，禁止 UI 组件直接读取未校验的 `payload` 字段。
 
 ## 6. 错误与异常处理
 
@@ -171,6 +173,9 @@ long-lived port 事件：
   - 同步开启时先写入 tombstone，再清理本地页面、会话与 loading。
 - 同步命令：
   - `TEST_SYNC_CONNECTION` 或 `SYNC_NOW` 失败时返回显式错误，不允许 background 吞错后伪造成功响应。
+- extension page API：
+  - `chrome.runtime.lastError` 与 background `{ error }` 都必须在 API 封装层统一转成异常。
+  - 组件层只消费成功响应类型，失败路径统一走 `try/catch` 降级提示。
 
 ## 7. 数据与状态
 
@@ -208,9 +213,10 @@ long-lived port 事件：
 - 已覆盖：`CLEAR_PAGE_CONTEXT` 的取消后清理顺序、页面级 `includePageContent` 通过 `SEND_CHAT` 进入真实模型上下文。
 - 已覆盖：自动触发首次执行、重开 side panel 不重复触发、自动触发会话进入现有停止/清理链路。
 - 已覆盖：`CLEAR_TAB_CONVERSATION` 的目标标签取消与清理语义、`EXPORT_CONVERSATION` 的命令路由。
-- 已覆盖：`EXPAND_MESSAGE_BRANCHES / STOP_BRANCH / DELETE_BRANCH` 命令契约、分支级流式事件和命令路由。
+- 已覆盖：`EXPAND_MESSAGE_BRANCHES / STOP_BRANCH / DELETE_BRANCH` 命令契约、分支级流式事件和命令路由，其中 `EXPAND_MESSAGE_BRANCHES` 现为“显式 `modelId` 单分支追加”。
 - 已覆盖：`EDIT_USER_MESSAGE / RETRY_MESSAGE` 命令契约，以及编辑裁剪、重试替换旧助手消息的命令路由。
 - 已覆盖：设置页配置命令、同步连接测试与手动同步命令。
+- 已覆盖：sidebar / conversations 页面 runtime API 遇到 background `{ error }` 时直接抛错，分支扩展失败时 UI 进入提示态而不是读取空 `payload`。
 - 未覆盖：对话管理页复用流式订阅、快捷输入远端模板命令。
 
 ## 11. 相关文档

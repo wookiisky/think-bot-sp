@@ -12,7 +12,7 @@ import { MultiSelectPopover } from '../../components/ui/multi-select-popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { Tooltip } from '../../components/ui/tooltip';
-import { getEnabledCompleteModels, sanitizeBranchModelIds } from '../../domain/config/config-schema';
+import { getEnabledCompleteModels, sanitizeParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 
 type QuickInputsPanelProps = {
@@ -239,7 +239,7 @@ export const QuickInputsPanel = ({
     prompt: '',
     autoTrigger: false,
     modelId: null,
-    branchModelIds: [],
+    parallelModelIds: [],
     order: config.quickInputs.length,
     deletedAt: null,
   });
@@ -328,8 +328,8 @@ export const QuickInputsPanel = ({
                   const expanded = item.id === expandedQuickInputId;
                   const hasMissingModelReference =
                     !!item.modelId && !availableModels.some((model) => model.id === item.modelId);
-                  const branchModelIds = sanitizeBranchModelIds(config, item.branchModelIds);
-                  const hasMissingBranchModels = branchModelIds.length !== item.branchModelIds.length;
+                  const parallelModelIds = sanitizeParallelModelIds(config, item.parallelModelIds);
+                  const hasMissingParallelModels = parallelModelIds.length !== item.parallelModelIds.length;
                   const modelSelectValue = hasMissingModelReference ? `__missing__:${item.modelId ?? ''}` : item.modelId ?? '__none__';
 
                   return (
@@ -412,12 +412,12 @@ export const QuickInputsPanel = ({
                                 value: model.id,
                                 label: model.name,
                               }))}
-                              values={branchModelIds}
+                              values={parallelModelIds}
                               emptyText={t('settings.noBranchModels')}
                               disabled={disabled}
-                              onChange={(nextValues) => updateQuickInput(item.id, { branchModelIds: nextValues })}
+                              onChange={(nextValues) => updateQuickInput(item.id, { parallelModelIds: nextValues })}
                             />
-                            {hasMissingBranchModels ? (
+                            {hasMissingParallelModels ? (
                               <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.quickInputBranchModelsMissing')}</p>
                             ) : null}
                           </label>

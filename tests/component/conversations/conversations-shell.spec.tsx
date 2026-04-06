@@ -11,7 +11,7 @@ const quickInputConfig = {
   prompt: '请快速审阅当前页面。',
   autoTrigger: true,
   modelId: 'model-1',
-  branchModelIds: [],
+  parallelModelIds: [],
   order: 0,
   deletedAt: null,
 };
@@ -427,6 +427,7 @@ describe('ConversationsShell', () => {
         pageUrl: 'https://example.com/article-a',
         promptTabId: 'quick-review',
         modelId: 'model-1',
+        displayText: '快速审阅',
         text: '请快速审阅当前页面。',
         images: [],
         includePageContent: true,

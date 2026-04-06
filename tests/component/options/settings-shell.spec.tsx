@@ -183,11 +183,11 @@ describe('SettingsShell', () => {
     expect(mocks.saveConfig).toHaveBeenCalledWith(config);
   });
 
-  it('保存前会清理失效分支模型引用', async () => {
+  it('保存前会清理失效并行模型引用', async () => {
     const config = createDefaultConfig({
       basic: {
         ...createDefaultConfig().basic,
-        branchModelIds: ['model-1', 'missing-branch-model'],
+        parallelModelIds: ['model-1', 'missing-branch-model'],
       },
       models: [
         {
@@ -215,7 +215,7 @@ describe('SettingsShell', () => {
           prompt: '请总结当前页面',
           autoTrigger: false,
           modelId: null,
-          branchModelIds: ['missing-branch-model', 'model-1'],
+          parallelModelIds: ['missing-branch-model', 'model-1'],
           order: 0,
           deletedAt: null,
         },
@@ -229,12 +229,12 @@ describe('SettingsShell', () => {
         ...config,
         basic: {
           ...config.basic,
-          branchModelIds: ['model-1'],
+          parallelModelIds: ['model-1'],
         },
         quickInputs: [
           {
             ...config.quickInputs[0],
-            branchModelIds: ['model-1'],
+            parallelModelIds: ['model-1'],
           },
         ],
       }),
@@ -251,12 +251,12 @@ describe('SettingsShell', () => {
     expect(mocks.saveConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         basic: expect.objectContaining({
-          branchModelIds: ['model-1'],
+          parallelModelIds: ['model-1'],
         }),
         quickInputs: [
           expect.objectContaining({
             id: 'quick-1',
-            branchModelIds: ['model-1'],
+            parallelModelIds: ['model-1'],
           }),
         ],
       }),

@@ -40,10 +40,10 @@
       - 类型：`string | null`
       - 必填：否
       - 含义：默认模型稳定 ID；引用失效时需要在保存前阻断。
-    - `branchModelIds`
+    - `parallelModelIds`
       - 类型：`string[]`
       - 必填：是
-      - 含义：全局分支模型引用列表；保存前会过滤失效模型并去重。
+      - 含义：全局并行模型引用列表；仅作用于快捷输入首轮执行，保存前会过滤失效模型并去重。
     - `systemPrompt`
       - 类型：`string`
       - 必填：是
@@ -193,10 +193,10 @@
       - 类型：`string | null`
       - 必填：否
       - 含义：专属模型引用；引用失效时允许保留旧值并在设置页提示降级。
-    - `branchModelIds`
+    - `parallelModelIds`
       - 类型：`string[]`
       - 必填：是
-      - 含义：专属分支模型引用列表；保存和远端模板导入时都会过滤失效模型并去重。
+      - 含义：专属并行模型引用列表；会在全局并行模型基础上追加，保存和远端模板导入时都会过滤失效模型并去重。
     - `order`
       - 类型：`number`
       - 必填：是
@@ -222,7 +222,7 @@
 - 模型、快捷输入、黑名单内部对象必须带稳定 `id`。
 - 删除模型和快捷输入采用软删除标记，不直接丢失历史引用。
 - 系统内置快捷输入和系统内置黑名单规则都使用稳定 id，迁移时只补缺失项，不覆盖已有同 id 项。
-- 兼容旧配置时，缺失的 `extractionPanelHeight / jinaApiKey / jinaResponseTemplate / branchModelIds` 会自动补默认值。
+- 兼容旧配置时，缺失的 `extractionPanelHeight / jinaApiKey / jinaResponseTemplate / parallelModelIds` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
 - 设置页中的模型项采用“列表摘要 + 展开编辑”形态，但持久化仍以完整对象保存，不拆分多 key。
 - 设置页中的模型列表与快捷输入列表都支持拖拽排序，但持久化仍只写回 `order`，不引入额外排序元数据。
 - Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。
@@ -275,7 +275,7 @@
 - 远端快捷输入模板导入会先转成本地 `QuickInput`，生成新本地 ID 后再进入整份配置保存流程：
   - 当前按 `name + prompt` 跳过已存在项。
   - 失效 `modelId` 会在导入时降级成 `null`。
-  - 失效 `branchModelIds` 会在导入时过滤。
+  - 失效 `parallelModelIds` 会在导入时过滤。
 - 风险：
   - 大对象整体保存可能覆盖并发修改。
   - 不完整模型进入默认模型候选会导致发送失败。

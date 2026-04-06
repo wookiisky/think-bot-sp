@@ -64,13 +64,15 @@
   - 标题栏右侧统一提供 `上移 / 下移 / 删除 / 自动触发`；其中 `上移 / 下移 / 删除` 当前采用 icon button + 即时 tooltip。
 - 首次安装时默认写入 7 个内置快捷输入：`概括 / 缩写 / 重构 / 反直觉 / 审计 / 第一性原理 / 意图分析`。
 - 旧配置读取与导入时采用“补缺不覆盖”：只补齐缺失的内置快捷输入，不覆盖已有同 id 项。
-- 快捷输入当前可编辑 `name / prompt / autoTrigger / modelId / branchModelIds / order / deletedAt`。
+- 快捷输入当前可编辑 `name / prompt / autoTrigger / modelId / parallelModelIds / order / deletedAt`。
 - 快捷输入支持从公开 `quick_input_tabs.json` 导入远端模板：
   - 导入时为模板重建本地 ID。
   - 按 `name + prompt` 跳过已存在项，只追加新模板。
-- 失效 `modelId` 会降级成 `null`，失效 `branchModelIds` 会在导入时过滤。
+- 失效 `modelId` 会降级成 `null`，失效 `parallelModelIds` 会在导入时过滤。
 - 基础设置当前交付默认提取方式、默认提取区高度、Jina API Key、Jina 响应模板和“默认附带页面正文”。
-- 基础设置和快捷输入中的分支模型选择统一改为多选下拉，只保留“分支模型”标题，不再展示额外说明文案。
+- 基础设置和快捷输入中的并行模型选择统一使用多选下拉。
+- `basic.parallelModelIds` 表示全部快捷输入首轮默认追加的并行模型。
+- `quickInputs[].parallelModelIds` 表示当前快捷输入在全局并行模型基础上额外追加的模型，保存前会去重。
 - Jina 响应模板默认使用 `{{content}}` 占位符包裹原始 Reader 响应；如果模板里不包含该占位符，系统会把原始响应追加到模板尾部。
 - 语言和主题切换都支持即时预览并在保存后持久化。
 - 云同步分栏当前交付 `enabled / provider / gist / webdav / 测试连接 / 立即同步 / 最近同步时间`。

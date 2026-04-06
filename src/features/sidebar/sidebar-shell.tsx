@@ -423,14 +423,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             }
             return;
           case 'CHAT_STREAM_FINISHED':
-            setActiveSessionIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            setRestoreMessageIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -457,14 +449,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             }
             return;
           case 'CHAT_STREAM_FAILED':
-            setActiveSessionIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            setRestoreMessageIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
             if (
               payload.rollbackOnFailure === true
               && typeof payload.messageId === 'string'
@@ -502,14 +486,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             }
             return;
           case 'CHAT_STREAM_CANCELLED':
-            setActiveSessionIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            setRestoreMessageIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -634,8 +610,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: payload.content as string,
                   status: 'loading',
                   errorMessage: null,
-                  branches: [],
-                  selectedBranchId: null,
+                  branches: current.find((message) => message.id === payload.messageId)?.branches ?? [],
+                  selectedBranchId: current.find((message) => message.id === payload.messageId)?.selectedBranchId ?? null,
                 })),
               );
             }
@@ -643,6 +619,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           case 'LOADING_STATE_UPDATE':
             if (typeof payload.status === 'string' && payload.status !== 'loading') {
               setActiveSessionIds((current) => ({
+                ...current,
+                [promptTabId]: null,
+              }));
+              setRestoreMessageIds((current) => ({
                 ...current,
                 [promptTabId]: null,
               }));
@@ -866,26 +846,30 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                     }
                   : message,
               );
-        return upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
-          id: response.payload.messageId,
-          role: 'assistant',
-          content: message?.content ?? '',
-          status: 'loading',
-          errorMessage: null,
-          branches: [
-            ...(message?.branches.filter((branch) => branch.id !== response.payload.branchId) ?? []),
+        return appendAssistantBranches(
+          upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
+            id: response.payload.messageId,
+            role: 'assistant',
+            content: message?.content ?? '',
+            status: 'loading',
+            errorMessage: null,
+            branches: message?.branches ?? [],
+            selectedBranchId: response.payload.branchId,
+          })),
+          response.payload.messageId,
+          (response.payload.branches ?? [
             {
-              id: response.payload.branchId,
+              branchId: response.payload.branchId,
               modelId: response.payload.modelId,
               modelLabel: response.payload.modelLabel,
-              isPrimary: true,
-              content: message?.branches.find((branch) => branch.id === response.payload.branchId)?.content ?? '',
-              status: 'loading',
-              errorMessage: null,
             },
-          ],
-          selectedBranchId: response.payload.branchId,
-        }));
+          ]).map((branch) => ({
+            id: branch.branchId,
+            modelId: branch.modelId,
+            modelLabel: branch.modelLabel,
+            isPrimary: branch.branchId === response.payload.branchId,
+          })),
+        );
       });
     } catch {
       setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
@@ -948,36 +932,41 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         if (targetIndex < 0) {
           return current;
         }
-        return [
-          ...current.slice(0, targetIndex + 1).map((message) =>
-            message.id === messageId
-              ? {
-                  ...message,
-                  content: text,
-                  displayContent: undefined,
-                }
-              : message,
-          ),
-          {
-            id: response.payload.messageId,
-            role: 'assistant',
-            content: '',
-            status: 'loading',
-            errorMessage: null,
-            branches: [
-              {
-                id: response.payload.branchId,
-                modelId: response.payload.modelId,
-                modelLabel: response.payload.modelLabel,
-                isPrimary: true,
-                content: '',
-                status: 'loading',
-                errorMessage: null,
-              },
-            ],
-            selectedBranchId: response.payload.branchId,
-          },
-        ];
+        return appendAssistantBranches(
+          [
+            ...current.slice(0, targetIndex + 1).map((message) =>
+              message.id === messageId
+                ? {
+                    ...message,
+                    content: text,
+                    displayContent: undefined,
+                  }
+                : message,
+            ),
+            {
+              id: response.payload.messageId,
+              role: 'assistant',
+              content: '',
+              status: 'loading',
+              errorMessage: null,
+              branches: [],
+              selectedBranchId: response.payload.branchId,
+            },
+          ],
+          response.payload.messageId,
+          (response.payload.branches ?? [
+            {
+              branchId: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+            },
+          ]).map((branch) => ({
+            id: branch.branchId,
+            modelId: branch.modelId,
+            modelLabel: branch.modelLabel,
+            isPrimary: branch.branchId === response.payload.branchId,
+          })),
+        );
       });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.editFailed'));
@@ -1007,28 +996,33 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         if (targetIndex < 0) {
           return current;
         }
-        return [
-          ...current.slice(0, targetIndex + 1),
-          {
-            id: response.payload.messageId,
-            role: 'assistant',
-            content: '',
-            status: 'loading',
-            errorMessage: null,
-            branches: [
-              {
-                id: response.payload.branchId,
-                modelId: response.payload.modelId,
-                modelLabel: response.payload.modelLabel,
-                isPrimary: true,
-                content: '',
-                status: 'loading',
-                errorMessage: null,
-              },
-            ],
-            selectedBranchId: response.payload.branchId,
-          },
-        ];
+        return appendAssistantBranches(
+          [
+            ...current.slice(0, targetIndex + 1),
+            {
+              id: response.payload.messageId,
+              role: 'assistant',
+              content: '',
+              status: 'loading',
+              errorMessage: null,
+              branches: [],
+              selectedBranchId: response.payload.branchId,
+            },
+          ],
+          response.payload.messageId,
+          (response.payload.branches ?? [
+            {
+              branchId: response.payload.branchId,
+              modelId: response.payload.modelId,
+              modelLabel: response.payload.modelLabel,
+            },
+          ]).map((branch) => ({
+            id: branch.branchId,
+            modelId: branch.modelId,
+            modelLabel: branch.modelLabel,
+            isPrimary: branch.branchId === response.payload.branchId,
+          })),
+        );
       });
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
@@ -1193,7 +1187,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   /** 针对既有助手消息继续新增分支。 */
-  const handleExpandBranches = async (promptTabId: string, messageId: string) => {
+  const handleExpandBranches = async (promptTabId: string, messageId: string, modelId: string) => {
     try {
       setPromptTabNotice(promptTabId, '');
       const response = await api.expandMessageBranches({
@@ -1201,6 +1195,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         pageUrl,
         promptTabId,
         messageId,
+        modelId,
       });
       setPromptTabMessages(promptTabId, (current) =>
         appendAssistantBranches(
@@ -1494,6 +1489,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               restoreMessageId={restoreMessageIds[promptTab.id] ?? null}
               editingMessageId={editingMap[promptTab.id]?.messageId ?? null}
               editingText={editingMap[promptTab.id]?.text ?? ''}
+              availableBranchModels={models.map((model) => ({ id: model.id, name: model.name }))}
               t={t}
               onStartEdit={(messageId, content) => setPromptTabEditing(promptTab.id, { messageId, text: content })}
               onEditingTextChange={(text) => {
@@ -1511,7 +1507,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
               onRetryAssistantMessage={(messageId, branchId) => handleRetryMessage(promptTab.id, messageId, branchId)}
               onSelectAssistantBranch={(messageId, branchId) => handleSelectAssistantBranch(promptTab.id, messageId, branchId)}
-              onExpandBranches={(messageId) => handleExpandBranches(promptTab.id, messageId)}
+              onExpandBranches={(messageId, modelId) => handleExpandBranches(promptTab.id, messageId, modelId)}
               onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
               onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}

@@ -14,6 +14,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import removeMarkdown from 'remove-markdown';
+import { Popover as PopoverPrimitive } from 'radix-ui';
 
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -63,6 +64,13 @@ type ChatThreadProps = {
   }>;
   /** 当前恢复中的助手消息 id。 */
   restoreMessageId: string | null;
+  /** 当前可用的分支模型列表。 */
+  availableBranchModels: Array<{
+    /** 模型 id。 */
+    id: string;
+    /** 模型展示名。 */
+    name: string;
+  }>;
   /** 当前编辑中的用户消息 id。 */
   editingMessageId: string | null;
   /** 当前编辑草稿。 */
@@ -84,7 +92,7 @@ type ChatThreadProps = {
   /** 切换当前轮的主分支。 */
   onSelectAssistantBranch: (...input: [messageId: string, branchId: string]) => Promise<void>;
   /** 继续新增分支。 */
-  onExpandBranches: (...input: [messageId: string]) => Promise<void>;
+  onExpandBranches: (...input: [messageId: string, modelId: string]) => Promise<void>;
   /** 停止当前消息所属会话。 */
   onStop: () => Promise<void>;
   /** 停止单个分支。 */
@@ -99,6 +107,7 @@ type ChatThreadProps = {
 export const ChatThread = ({
   messages,
   restoreMessageId: _restoreMessageId,
+  availableBranchModels,
   editingMessageId,
   editingText,
   t,
@@ -117,6 +126,7 @@ export const ChatThread = ({
 }: ChatThreadProps) => {
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  const [expandMessageId, setExpandMessageId] = useState<string | null>(null);
 
   /** 复制指定格式的消息内容。 */
   const handleCopyMessage = async (input: { content: string; mode: 'plain' | 'markdown' }) => {
@@ -156,6 +166,7 @@ export const ChatThread = ({
           const visibleContent = message.displayContent ?? message.content;
           const isAssistantLoading = message.role === 'assistant' && message.status === 'loading';
           const canSelectAssistantBranch = message.role === 'assistant' && messages.slice(messageIndex + 1).length === 0;
+          const branchDisplayLabels = buildBranchDisplayLabels(message.branches);
 
           return (
             <div
@@ -323,7 +334,7 @@ export const ChatThread = ({
                           <div className="flex items-start gap-3">
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <Badge variant="outline">{t(branch.isPrimary ? 'workspace.status.primaryBranch' : 'workspace.status.branch')}</Badge>
-                              <span>{branch.modelLabel}</span>
+                              <span>{branchDisplayLabels.get(branch.id) ?? branch.modelLabel}</span>
                               <WorkspaceStatusGlyph
                                 label={resolveStatusLabel(branch.status, t)}
                                 status={toVisualStatus(branch.status)}
@@ -406,17 +417,52 @@ export const ChatThread = ({
 
                     {message.role === 'assistant' ? (
                       <>
-                        <Tooltip content={t('workspace.expandBranches')}>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={t('workspace.expandBranches')}
-                            onClick={() => void onExpandBranches(message.id)}
-                          >
-                            <GitBranchPlusIcon />
-                          </Button>
-                        </Tooltip>
+                        <PopoverPrimitive.Root
+                          open={expandMessageId === message.id}
+                          onOpenChange={(open) => setExpandMessageId(open ? message.id : null)}
+                        >
+                          <Tooltip content={t('workspace.expandBranches')}>
+                            <PopoverPrimitive.Trigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={t('workspace.expandBranches')}
+                              >
+                                <GitBranchPlusIcon />
+                              </Button>
+                            </PopoverPrimitive.Trigger>
+                          </Tooltip>
+                          <PopoverPrimitive.Portal>
+                            <PopoverPrimitive.Content
+                              sideOffset={8}
+                              align="end"
+                              className="z-50 w-56 rounded-xl border border-border/80 bg-background/95 p-2 shadow-md backdrop-blur"
+                            >
+                              <div className="mb-2 text-xs font-medium text-muted-foreground">{t('workspace.selectBranchModel')}</div>
+                              {availableBranchModels.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">{t('workspace.noAvailableBranchModels')}</p>
+                              ) : (
+                                <div className="grid gap-1">
+                                  {availableBranchModels.map((model) => (
+                                    <Button
+                                      key={model.id}
+                                      type="button"
+                                      variant="ghost"
+                                      className="justify-start"
+                                      onClick={() => {
+                                        setExpandMessageId(null);
+                                        void onExpandBranches(message.id, model.id);
+                                      }}
+                                    >
+                                      {model.name}
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
+                            </PopoverPrimitive.Content>
+                          </PopoverPrimitive.Portal>
+                        </PopoverPrimitive.Root>
                         <Tooltip content={t('workspace.scrollToMessageTop')}>
                           <Button
                             type="button"
@@ -504,6 +550,34 @@ const resolveStatusLabel = (status: 'loading' | 'done' | 'error' | 'cancelled', 
     default:
       return '';
   }
+};
+
+/** 为同模型重复分支追加序号，避免用户误判为同一列。 */
+const buildBranchDisplayLabels = (
+  branches: Array<{
+    /** 分支 id。 */
+    id: string;
+    /** 分支模型 id。 */
+    modelId: string;
+    /** 分支模型展示名。 */
+    modelLabel: string;
+  }>,
+) => {
+  const totalByModelId = new Map<string, number>();
+  const indexByModelId = new Map<string, number>();
+
+  for (const branch of branches) {
+    totalByModelId.set(branch.modelId, (totalByModelId.get(branch.modelId) ?? 0) + 1);
+  }
+
+  return new Map(
+    branches.map((branch) => {
+      const nextIndex = (indexByModelId.get(branch.modelId) ?? 0) + 1;
+      indexByModelId.set(branch.modelId, nextIndex);
+      const total = totalByModelId.get(branch.modelId) ?? 1;
+      return [branch.id, total > 1 ? `${branch.modelLabel} #${nextIndex}` : branch.modelLabel];
+    }),
+  );
 };
 
 /** 统一根据角色和运行态生成消息气泡样式。 */

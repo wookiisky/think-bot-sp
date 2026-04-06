@@ -21,6 +21,8 @@ const translations: Record<string, string> = {
   'workspace.retryUserMessage': '重试问题',
   'workspace.retryAssistantMessage': '重试回答',
   'workspace.expandBranches': '继续新增分支',
+  'workspace.selectBranchModel': '选择模型',
+  'workspace.noAvailableBranchModels': '暂无可用模型',
   'workspace.stop': '停止',
   'workspace.stopBranch': '停止分支',
   'workspace.deleteBranch': '删除分支',
@@ -86,6 +88,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -128,6 +131,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -195,6 +199,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -249,6 +254,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -307,6 +313,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -359,6 +366,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -420,6 +428,7 @@ describe('ChatThread', () => {
           },
         ]}
         restoreMessageId={null}
+        availableBranchModels={[]}
         editingMessageId={null}
         editingText=""
         t={t}
@@ -441,5 +450,75 @@ describe('ChatThread', () => {
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
     expect(branchRail).toHaveAttribute('data-reading-layout', 'grid');
     expect(branchRail.getAttribute('style')).toContain('minmax(350px, 1fr)');
+  });
+
+  it('继续新增分支会先弹出模型列表，并允许同模型分支显示序号', async () => {
+    const user = userEvent.setup();
+    const onExpandBranches = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '主回答',
+                status: 'done',
+                errorMessage: null,
+              },
+              {
+                id: 'branch-2',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: false,
+                content: '第二个同模型分支',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-1',
+          },
+        ]}
+        restoreMessageId={null}
+        availableBranchModels={[
+          { id: 'model-1', name: '模型一' },
+          { id: 'model-2', name: '模型二' },
+        ]}
+        editingMessageId={null}
+        editingText=""
+        t={t}
+        onStartEdit={vi.fn()}
+        onEditingTextChange={vi.fn()}
+        onCancelEdit={vi.fn()}
+        onSubmitEdit={vi.fn()}
+        onRetryUserMessage={vi.fn()}
+        onRetryAssistantMessage={vi.fn()}
+        onSelectAssistantBranch={vi.fn()}
+        onExpandBranches={onExpandBranches}
+        onStop={vi.fn()}
+        onStopBranch={vi.fn()}
+        onDeleteBranch={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+
+    await user.hover(screen.getByTestId('chat-message-assistant-1'));
+    await user.click(screen.getByRole('button', { name: '继续新增分支' }));
+
+    expect(await screen.findByText('选择模型')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '模型二' }));
+
+    expect(onExpandBranches).toHaveBeenCalledWith('assistant-1', 'model-2');
+    expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('模型一 #1');
+    expect(screen.getByTestId('branch-branch-2')).toHaveTextContent('模型一 #2');
   });
 });

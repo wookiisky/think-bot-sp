@@ -1027,6 +1027,47 @@ describe('SidebarShell', () => {
     const user = userEvent.setup();
     let portMessageListener: ((event: unknown) => void) | null = null;
     const api = createSidebarApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+            {
+              id: 'model-2',
+              name: '分支模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model-2',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 1,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
         browserTabId: 7,
@@ -1094,11 +1135,13 @@ describe('SidebarShell', () => {
 
     await user.hover(await screen.findByTestId('chat-message-assistant-1'));
     await user.click(await screen.findByRole('button', { name: '继续新增分支' }));
+    await user.click(await screen.findByRole('button', { name: '分支模型' }));
     expect(api.expandMessageBranches).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      modelId: 'model-2',
     });
 
     await waitFor(() => expect(screen.getByTestId('branch-branch-1')).toBeVisible());
@@ -1137,6 +1180,98 @@ describe('SidebarShell', () => {
       branchId: 'branch-1',
     });
     await waitFor(() => expect(screen.queryByTestId('branch-branch-1')).toBeNull());
+  });
+
+  it('新增分支失败时展示错误提示，不读取未定义 payload', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article:chat',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: '主回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-1',
+              status: 'done',
+              summary: '主回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      expandMessageBranches: vi.fn().mockRejectedValue(new Error('no branch models configured')),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.hover(await screen.findByTestId('chat-message-assistant-1'));
+    await user.click(await screen.findByRole('button', { name: '继续新增分支' }));
+    await user.click(await screen.findByRole('button', { name: '主模型' }));
+
+    await waitFor(() => expect(screen.getByText('新增分支失败，请重试')).toBeVisible());
+    expect(screen.queryByTestId('branch-branch-1')).toBeNull();
   });
 
   it('支持编辑用户消息并重发，也支持重试助手消息替换旧结果', async () => {

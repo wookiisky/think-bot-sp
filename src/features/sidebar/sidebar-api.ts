@@ -1,5 +1,6 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import { EXTENSION_PAGES } from '../../shared/extension-pages';
+import { requestRuntimeMessage } from '../../shared/runtime-request';
 import type {
   SidebarConversationRecord,
   SidebarLoadingStateRecord,
@@ -59,6 +60,15 @@ type SwitchExtractionMethodResponse = {
   };
 };
 
+type BranchDescriptor = {
+  /** 分支 id。 */
+  branchId: string;
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
+};
+
 type SendChatResponse = {
   /** 响应类型。 */
   type: 'SEND_CHAT_SUCCESS';
@@ -76,6 +86,8 @@ type SendChatResponse = {
     modelId: string;
     /** 主分支模型展示名。 */
     modelLabel: string;
+    /** 本轮初始化创建的分支摘要。 */
+    branches: BranchDescriptor[];
   };
 };
 
@@ -96,6 +108,8 @@ type EditUserMessageResponse = {
     modelLabel: string;
     /** 新建流式会话 id。 */
     sessionId: string;
+    /** 本轮初始化创建的分支摘要。 */
+    branches: BranchDescriptor[];
   };
 };
 
@@ -116,6 +130,8 @@ type RetryUserMessageResponse = {
     modelLabel: string;
     /** 新建流式会话 id。 */
     sessionId: string;
+    /** 本轮初始化创建的分支摘要。 */
+    branches: BranchDescriptor[];
   };
 };
 
@@ -153,14 +169,7 @@ type ExpandMessageBranchesResponse = {
     /** 目标助手消息 id。 */
     messageId: string;
     /** 新增分支摘要。 */
-    branches: Array<{
-      /** 分支 id。 */
-      branchId: string;
-      /** 分支模型 id。 */
-      modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }>;
+    branches: BranchDescriptor[];
   };
 };
 
@@ -300,7 +309,7 @@ type SidebarApi = {
   ) => Promise<SelectAssistantBranchResponse>;
   /** 为既有助手消息继续新增分支。 */
   expandMessageBranches: (
-    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string }]
+    ..._input: [{ tabId: number; pageUrl: string; promptTabId: string; messageId: string; modelId: string }]
   ) => Promise<ExpandMessageBranchesResponse>;
   /** 停止当前流式会话。 */
   stopSession: (..._input: [{ tabId: number; pageUrl: string; promptTabId: string; sessionId: string }]) => Promise<StopSessionResponse>;
@@ -333,102 +342,102 @@ const openTab = async (url: string) => {
 /** 创建 side panel API，统一封装 runtime message 调用。 */
 export const createSidebarApi = (): SidebarApi => ({
   getSidebarBootstrap(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'GET_SIDEBAR_BOOTSTRAP',
       ...input,
     });
   },
   getConfig() {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'GET_CONFIG',
     });
   },
   confirmBlacklistContinue(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'CONFIRM_BLACKLIST_CONTINUE',
       ...input,
     });
   },
   reExtractContent(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'RE_EXTRACT_CONTENT',
       ...input,
     });
   },
   switchExtractionMethod(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SWITCH_EXTRACTION_METHOD',
       ...input,
     });
   },
   clearPageContext(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'CLEAR_PAGE_CONTEXT',
       ...input,
     });
   },
   clearTabConversation(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'CLEAR_TAB_CONVERSATION',
       ...input,
     });
   },
   sendChat(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SEND_CHAT',
       ...input,
     });
   },
   editUserMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EDIT_USER_MESSAGE',
       ...input,
     });
   },
   retryUserMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'RETRY_USER_MESSAGE',
       ...input,
     });
   },
   retryMessage(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'RETRY_MESSAGE',
       ...input,
     });
   },
   selectAssistantBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'SELECT_ASSISTANT_BRANCH',
       ...input,
     });
   },
   expandMessageBranches(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EXPAND_MESSAGE_BRANCHES',
       ...input,
     });
   },
   stopSession(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'STOP_SESSION',
       ...input,
     });
   },
   stopBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'STOP_BRANCH',
       ...input,
     });
   },
   deleteBranch(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'DELETE_BRANCH',
       ...input,
     });
   },
   exportConversation(input) {
-    return chrome.runtime.sendMessage({
+    return requestRuntimeMessage({
       type: 'EXPORT_CONVERSATION',
       ...input,
     });

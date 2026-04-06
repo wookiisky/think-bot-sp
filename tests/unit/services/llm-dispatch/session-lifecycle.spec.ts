@@ -201,6 +201,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-1',
         branchId: 'branch-1',
       },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-1',
+        status: 'done',
+      },
     ]);
   });
 
@@ -427,6 +434,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-2',
         branchId: 'branch-2',
       },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-2',
+        status: 'cancelled',
+      },
     ]);
   });
 
@@ -553,6 +567,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-3',
         errorMessage: 'provider timeout',
       },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-3',
+        status: 'error',
+      },
     ]);
   });
 
@@ -660,6 +681,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         errorMessage: 'provider timeout',
         rollbackOnFailure: true,
         userMessageId: 'user-rollback',
+      },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        sessionId: 'session-rollback',
+        status: 'error',
       },
     ]);
   });
@@ -944,6 +972,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-6',
         branchId: 'branch-6',
       },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-6',
+        status: 'done',
+      },
     ]);
   });
 
@@ -1043,7 +1078,7 @@ describe('chat-dispatch-service session lifecycle', () => {
     });
   });
 
-  it('expandBranches 会按全局加当前配置合并分支模型，并允许分支各自收敛', async () => {
+  it('expandBranches 会按用户选择的模型新增单分支，并独立收敛错误态', async () => {
     const storage = createFakeStorageArea();
     const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
     await conversationRepository.saveConversation({
@@ -1160,22 +1195,12 @@ describe('chat-dispatch-service session lifecycle', () => {
       warn: vi.fn(),
       error: vi.fn(),
     };
-    const streamText = vi.fn().mockImplementation(async ({ model }) => {
-      const modelId = (model as { modelId: string }).modelId;
-      if (modelId === 'model-branch-a') {
-        return {
-          textStream: (async function* () {
-            yield '分支A结果';
-          })(),
-        };
-      }
-      return {
-        textStream: (async function* () {
-          yield '分支B前缀';
-          throw new Error('branch provider timeout');
-        })(),
-      };
-    });
+    const streamText = vi.fn().mockImplementation(async () => ({
+      textStream: (async function* () {
+        yield '分支B前缀';
+        throw new Error('branch provider timeout');
+      })(),
+    }));
     const service = createChatDispatchService({
       configRepository: {
         getConfig: vi.fn().mockResolvedValue({
@@ -1233,16 +1258,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         publishToPromptTab,
       },
       streamText,
-      createSessionId: (() => {
-        const ids = ['branch-session-a', 'branch-session-b'];
-        return () => ids.shift() ?? 'exhausted-session';
-      })(),
+      createSessionId: () => 'branch-session-b',
       createMessageId: (() => {
-        const ids = ['branch-a', 'branch-b'];
+        const ids = ['branch-b'];
         return () => ids.shift() ?? 'exhausted-branch';
       })(),
       now: (() => {
-        const values = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+        const values = [11, 12, 13, 14, 15, 16];
         return () => values.shift() ?? 99;
       })(),
     });
@@ -1251,13 +1273,9 @@ describe('chat-dispatch-service session lifecycle', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'quick-summary',
       messageId: 'assistant-1',
+      modelId: 'model-branch-b',
     });
     expect(sessions).toEqual([
-      expect.objectContaining({
-        branchId: 'branch-a',
-        modelId: 'model-branch-a',
-        modelLabel: '分支模型A',
-      }),
       expect.objectContaining({
         branchId: 'branch-b',
         modelId: 'model-branch-b',
@@ -1267,13 +1285,6 @@ describe('chat-dispatch-service session lifecycle', () => {
     const results = await Promise.all(sessions.map((session) => session.done));
 
     expect(results).toEqual([
-      {
-        sessionId: 'branch-session-a',
-        messageId: 'assistant-1',
-        status: 'done',
-        errorMessage: null,
-        persisted: true,
-      },
       {
         sessionId: 'branch-session-b',
         messageId: 'assistant-1',
@@ -1290,14 +1301,6 @@ describe('chat-dispatch-service session lifecycle', () => {
             id: 'assistant-1',
             branches: expect.arrayContaining([
               expect.objectContaining({
-                id: 'branch-a',
-                modelId: 'model-branch-a',
-                modelLabel: '分支模型A',
-                content: '分支A结果',
-                status: 'done',
-                errorMessage: null,
-              }),
-              expect.objectContaining({
                 id: 'branch-b',
                 modelId: 'model-branch-b',
                 modelLabel: '分支模型B',
@@ -1310,22 +1313,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         ]),
       }),
     );
-    expect(streamText).toHaveBeenCalledTimes(2);
+    expect(streamText).toHaveBeenCalledTimes(1);
     expect(collectPublishedEvents(publishToPromptTab)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'BRANCH_STREAM_STARTED',
-          branchId: 'branch-a',
-          modelId: 'model-branch-a',
-        }),
-        expect.objectContaining({
-          type: 'BRANCH_STREAM_STARTED',
           branchId: 'branch-b',
           modelId: 'model-branch-b',
-        }),
-        expect.objectContaining({
-          type: 'BRANCH_STREAM_FINISHED',
-          branchId: 'branch-a',
         }),
         expect.objectContaining({
           type: 'BRANCH_STREAM_FAILED',
@@ -1337,25 +1331,18 @@ describe('chat-dispatch-service session lifecycle', () => {
     expect(logger.info).toHaveBeenCalledWith('branch.stream.started', {
       normalizedUrl: 'https://example.com/article',
       promptTab: 'quick-summary',
-      sessionId: 'branch-session-a',
+      sessionId: 'branch-session-b',
       messageId: 'assistant-1',
-      branchId: 'branch-a',
+      branchId: 'branch-b',
       provider: 'openai-compatible',
-      modelId: 'model-branch-a',
+      modelId: 'model-branch-b',
     });
     expect(logger.info).toHaveBeenCalledWith('branch.stream.first_chunk', {
       normalizedUrl: 'https://example.com/article',
       promptTab: 'quick-summary',
-      sessionId: 'branch-session-a',
+      sessionId: 'branch-session-b',
       messageId: 'assistant-1',
-      branchId: 'branch-a',
-    });
-    expect(logger.info).toHaveBeenCalledWith('branch.stream.completed', {
-      normalizedUrl: 'https://example.com/article',
-      promptTab: 'quick-summary',
-      sessionId: 'branch-session-a',
-      messageId: 'assistant-1',
-      branchId: 'branch-a',
+      branchId: 'branch-b',
     });
     expect(logger.error).toHaveBeenCalledWith('branch.stream.failed', {
       normalizedUrl: 'https://example.com/article',
@@ -1568,6 +1555,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-edit',
         messageId: 'assistant-edit',
         branchId: 'assistant-edit:primary',
+      },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-edit',
+        status: 'done',
       },
     ]);
   });
@@ -1943,6 +1937,13 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-user-retry',
         messageId: 'assistant-user-retry',
         branchId: 'branch-user-retry',
+      },
+      {
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        sessionId: 'session-user-retry',
+        status: 'done',
       },
     ]);
   });

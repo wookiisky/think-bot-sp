@@ -19,11 +19,12 @@ const t = (key: string) =>
     'settings.theme': '主题',
     'settings.defaultModel': '默认模型',
     'settings.noDefaultModel': '不设置默认模型',
-    'settings.branchModels': '分支模型',
+    'settings.branchModels': '并行模型',
     'settings.multiSelectPlaceholder': '请选择',
     'settings.multiSelectSummary': '{count} 个已选',
-    'settings.noBranchModels': '暂无可用分支模型',
-    'settings.branchModelsMissing': '部分分支模型引用已失效，保存时会自动清理。',
+    'settings.noBranchModels': '暂无可用并行模型',
+    'settings.branchModelsDescription': '为全部快捷输入配置默认并行模型，触发时会与主模型一起执行。',
+    'settings.branchModelsMissing': '部分并行模型引用已失效，保存时会自动清理。',
     'settings.savedPages': '总保存页面数',
     'settings.cacheSize': '总大小',
     'settings.extractionMethod': '默认提取方式',
@@ -98,26 +99,26 @@ const ControlledBasicSettingsPanel = ({ config: initialConfig }: { config?: Retu
 describe('BasicSettingsPanel', () => {
   afterEach(() => cleanup());
 
-  it('支持通过多选下拉选择分支模型', async () => {
+  it('支持通过多选下拉选择并行模型', async () => {
     render(<ControlledBasicSettingsPanel />);
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: '分支模型' }));
-    await user.click(screen.getByRole('checkbox', { name: '分支模型:主模型' }));
-    await user.click(screen.getByRole('checkbox', { name: '分支模型:备用模型' }));
+    await user.click(screen.getByRole('button', { name: '并行模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '并行模型:主模型' }));
+    await user.click(screen.getByRole('checkbox', { name: '并行模型:备用模型' }));
 
-    expect(screen.getByRole('checkbox', { name: '分支模型:主模型' })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: '分支模型:备用模型' })).toBeChecked();
-    expect(screen.queryByText('为 Chat 和未单独覆盖的快捷输入配置默认分支模型。')).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '并行模型:主模型' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '并行模型:备用模型' })).toBeChecked();
+    expect(screen.queryByText('为全部快捷输入配置默认并行模型，触发时会与主模型一起执行。')).not.toBeInTheDocument();
   });
 
-  it('存在失效全局分支模型引用时显示降级提示', () => {
+  it('存在失效全局并行模型引用时显示降级提示', () => {
     render(
       <ControlledBasicSettingsPanel
         config={createDefaultConfig({
           basic: {
             ...createDefaultConfig().basic,
-            branchModelIds: ['missing-model'],
+            parallelModelIds: ['missing-model'],
           },
           models: [
             {
@@ -142,7 +143,7 @@ describe('BasicSettingsPanel', () => {
       />,
     );
 
-    expect(screen.getByText('部分分支模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
+    expect(screen.getByText('部分并行模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
   });
 
   it('支持编辑提取默认参数并限制高度范围', async () => {

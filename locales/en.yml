@@ -58,13 +58,13 @@ settings.recentErrorSource.sidebar: Sidebar
 settings.recentErrorSource.conversations: History
 settings.recentErrorSource.sync: Sync
 settings.recentErrorSource.settings: Settings
-settings.basicDescription: Manage theme, language, default model, branch models, and extraction defaults.
+settings.basicDescription: Manage theme, language, default model, parallel models, and extraction defaults.
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
-settings.branchModels: Branch Models
-settings.branchModelsDescription: Configure default branch models for Chat and quick inputs without their own overrides.
-settings.noBranchModels: No branch model available
-settings.branchModelsMissing: Some branch model references are unavailable and will be removed on save.
+settings.branchModels: Parallel Models
+settings.branchModelsDescription: Configure default parallel models for quick inputs so they run alongside the primary model.
+settings.noBranchModels: No parallel model available
+settings.branchModelsMissing: Some parallel model references are unavailable and will be removed on save.
 settings.multiSelectPlaceholder: Please Select
 settings.multiSelectSummary: "{count} selected"
 settings.extractionMethod: Default Extraction Method
@@ -104,9 +104,9 @@ settings.quickInputAutoTrigger: Auto Trigger
 settings.quickInputModel: Dedicated Model
 settings.quickInputNoModel: No Dedicated Model
 settings.quickInputModelMissing: The referenced model is unavailable. Please choose another one.
-settings.quickInputBranchModels: Branch Models
-settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global branch models.
-settings.quickInputBranchModelsMissing: Some dedicated branch model references are unavailable and will be removed on save.
+settings.quickInputBranchModels: Parallel Models
+settings.quickInputBranchModelsDescription: The current quick input adds these models on top of the global parallel models.
+settings.quickInputBranchModelsMissing: Some quick-input parallel model references are unavailable and will be removed on save.
 workspace.chatTab: Chat
 workspace.model: Model
 workspace.selectModel: Select Model
@@ -131,6 +131,8 @@ workspace.retryUserMessage: Retry Question
 workspace.retryAssistantMessage: Retry Answer
 workspace.retryMessage: Retry
 workspace.expandBranches: Expand Branches
+workspace.selectBranchModel: Select Model
+workspace.noAvailableBranchModels: No model available
 workspace.stopBranch: Stop Branch
 workspace.deleteBranch: Delete Branch
 workspace.selectPrimaryBranch: Use As Next Primary
