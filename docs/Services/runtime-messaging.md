@@ -149,6 +149,7 @@ long-lived port 事件：
 - 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。
 - `EDIT_USER_MESSAGE`、`RETRY_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。
 - `EXPAND_MESSAGE_BRANCHES` 必须显式携带 `modelId`；background 只创建一个目标分支，不再按后台剩余候选批量补分支。
+- `DELETE_BRANCH` 删除最后一个分支时，会在仓储层一并删除整条助手消息，避免留下空壳记录。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CLEAR_PAGE_CONTEXT` 必须先取消当前页面活跃会话并等待其生命周期收敛，再删除页面记录，避免流式尾包把刚清空的页面重新写回。
 - `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。

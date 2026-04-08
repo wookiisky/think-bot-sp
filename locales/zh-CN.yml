@@ -137,6 +137,11 @@ workspace.stopBranch: 停止分支
 workspace.deleteBranch: 删除分支
 workspace.selectPrimaryBranch: 设为后续主分支
 workspace.useAsPrimary: 当前用于后续对话
+workspace.openBranchPreview: 打开分支预览
+workspace.closeBranchPreview: 关闭分支预览
+workspace.resizeBranchPreview: 调整分支预览尺寸
+workspace.branchPreviewTitle: 分支内容预览
+workspace.branchPreviewDescription: 预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。
 workspace.scrollToMessageTop: 定位到消息顶部
 workspace.scrollToMessageBottom: 定位到消息底部
 workspace.copyPlainText: 复制纯文本

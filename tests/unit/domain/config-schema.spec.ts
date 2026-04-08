@@ -75,6 +75,45 @@ describe('config schema', () => {
     expect(config.quickInputs[0]?.parallelModelIds).toEqual([]);
   });
 
+  it('旧配置缺少 sync 字段或其子字段时 parse 后自动补默认值', () => {
+    const legacyWithoutSync = {
+      ...createDefaultConfig(),
+    } as Record<string, unknown>;
+    delete legacyWithoutSync.sync;
+
+    const parsedWithoutSync = extensionConfigSchema.parse(legacyWithoutSync);
+    expect(parsedWithoutSync.sync).toEqual({
+      enabled: false,
+      provider: 'none',
+      gistToken: '',
+      gistId: '',
+      webdavUrl: '',
+      webdavUsername: '',
+      webdavPassword: '',
+      lastSyncAt: null,
+    });
+
+    const parsedWithPartialSync = extensionConfigSchema.parse({
+      ...createDefaultConfig(),
+      sync: {
+        enabled: true,
+        provider: 'gist',
+        gistToken: 'token',
+      },
+    });
+
+    expect(parsedWithPartialSync.sync).toEqual({
+      enabled: true,
+      provider: 'gist',
+      gistToken: 'token',
+      gistId: '',
+      webdavUrl: '',
+      webdavUsername: '',
+      webdavPassword: '',
+      lastSyncAt: null,
+    });
+  });
+
   it('会给旧配置补齐缺失的系统快捷输入和黑名单规则，但不覆盖已有项', () => {
     const seededConfig = applySystemConfigSeeds(
       createDefaultConfig({

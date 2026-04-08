@@ -303,6 +303,89 @@ describe('ConversationsShell', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('## 正文标题\n- 要点一\n结论'));
   });
 
+  it('历史页支持分支独立预览层，并可通过遮罩关闭且不丢当前草稿', async () => {
+    const user = userEvent.setup();
+    const api = createConversationsApi({
+      getPageDetail: vi.fn().mockResolvedValue({
+        type: 'GET_PAGE_DETAIL_SUCCESS',
+        page: {
+          id: 'https://example.com/article-a',
+          url: 'https://example.com/article-a',
+          normalizedUrl: 'https://example.com/article-a',
+          title: '页面 A',
+          faviconUrl: '',
+          content: '正文 A',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 2,
+          expiresAt: 3,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article-a:chat',
+            normalizedUrl: 'https://example.com/article-a',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-preview',
+                role: 'assistant',
+                content: '主回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [
+                  {
+                    id: 'branch-preview',
+                    modelId: 'model-1',
+                    modelLabel: '模型一',
+                    isPrimary: true,
+                    content: '# 历史分支\n\n- 预览项',
+                    status: 'done',
+                    errorMessage: null,
+                    createdAt: 1,
+                    updatedAt: 1,
+                  },
+                ],
+                selectedBranchId: 'branch-preview',
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-preview',
+              status: 'done',
+              summary: '主回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        activePromptTabId: 'chat',
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await user.type(await screen.findByLabelText('聊天输入'), '历史页草稿');
+    await user.hover(screen.getByTestId('branch-branch-preview'));
+    await user.click(screen.getByRole('button', { name: '打开分支预览' }));
+
+    expect(await screen.findByTestId('branch-preview-dialog')).toBeVisible();
+    expect(within(screen.getByTestId('branch-preview-content')).getByText('历史分支')).toBeVisible();
+    expect(within(screen.getByTestId('branch-preview-content')).getByText('预览项')).toBeVisible();
+
+    fireEvent.click(screen.getByTestId('branch-preview-overlay'));
+
+    await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('历史页草稿');
+    expect(screen.getByRole('tab', { name: '聊天' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('打开历史页面时不会自动触发 quick input 标签发送', async () => {
     const api = createConversationsApi({
       getConfig: vi.fn().mockResolvedValue({

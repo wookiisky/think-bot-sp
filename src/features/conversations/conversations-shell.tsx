@@ -29,6 +29,7 @@ import {
   buildMessageStateMap,
   buildPromptTabs,
   buildRestoreMessageIdMap,
+  findBranchPreviewDetail,
   getPromptTabStatusKind,
   toModelOptions,
   toOptimisticUserContent,
@@ -42,6 +43,7 @@ import {
   upsertAssistantBranch,
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
+import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
 import { ChatInput } from '../sidebar/chat-input';
 import { ChatThread } from '../sidebar/chat-thread';
@@ -76,6 +78,14 @@ type PageDetailState = {
   conversations: SidebarConversationRecord[];
   /** 当前页面 loading。 */
   loadingStates: SidebarLoadingStateRecord[];
+};
+type BranchPreviewTarget = {
+  /** 所属 promptTab id。 */
+  promptTabId: string;
+  /** 所属助手消息 id。 */
+  messageId: string;
+  /** 目标分支 id。 */
+  branchId: string;
 };
 
 /** 左侧历史栏最小宽度。 */
@@ -118,6 +128,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
+  const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
@@ -129,6 +140,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
+  const branchPreview =
+    branchPreviewTarget
+      ? findBranchPreviewDetail(
+          messageMap[branchPreviewTarget.promptTabId] ?? [],
+          branchPreviewTarget.messageId,
+          branchPreviewTarget.branchId,
+        )
+      : null;
 
   /** 更新单个标签的消息列表。 */
   const setPromptTabMessages = (promptTabId: string, update: (_current: ChatMessageState[]) => ChatMessageState[]) => {
@@ -218,6 +237,12 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     setIncludePageContent(input.detail.page?.includePageContent ?? input.defaultIncludePageContent);
     setTitleDraft(input.detail.page?.title ?? '');
   };
+
+  useEffect(() => {
+    if (branchPreviewTarget && !branchPreview) {
+      setBranchPreviewTarget(null);
+    }
+  }, [branchPreview, branchPreviewTarget]);
 
   useEffect(() => {
     if (!sidebarResizeState) {
@@ -1461,17 +1486,25 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
                 onRetryAssistantMessage={(messageId, branchId) => handleRetryMessage(promptTab.id, messageId, branchId)}
                 onSelectAssistantBranch={(messageId, branchId) => handleSelectAssistantBranch(promptTab.id, messageId, branchId)}
-                onExpandBranches={(messageId, modelId) => handleExpandBranches(promptTab.id, messageId, modelId)}
-                onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
-                onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
-                onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
-                onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
-              />
-            </div>
-          ))}
-        </section>
+              onExpandBranches={(messageId, modelId) => handleExpandBranches(promptTab.id, messageId, modelId)}
+              onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
+              onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
+              onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
+              onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
+              onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
+            />
+          </div>
+        ))}
+      </section>
 
-        <ChatInput
+      <BranchPreviewOverlay
+        open={branchPreview !== null}
+        preview={branchPreview}
+        t={t}
+        onClose={() => setBranchPreviewTarget(null)}
+      />
+
+      <ChatInput
           disabled={!selectedPage || !activePromptTab}
           sending={Boolean(activeSessionId)}
           text={activeComposer?.text ?? ''}

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { extensionConfigSchema, modelConfigSchema } from '../../domain/config/config-schema';
+import { extensionConfigSchema, modelConfigSchema, syncConfigSchema } from '../../domain/config/config-schema';
 
 type SupportedCommandType =
   | 'GET_CONFIG'
@@ -54,7 +54,7 @@ const importConfigCommandSchema = z.object({
 
 const testSyncConnectionCommandSchema = z.object({
   type: z.literal('TEST_SYNC_CONNECTION'),
-  sync: extensionConfigSchema.shape.sync,
+  sync: syncConfigSchema,
 });
 
 const testModelCommandSchema = z.object({

@@ -137,6 +137,11 @@ workspace.stopBranch: Stop Branch
 workspace.deleteBranch: Delete Branch
 workspace.selectPrimaryBranch: Use As Next Primary
 workspace.useAsPrimary: Used For Next Turn
+workspace.openBranchPreview: Open Branch Preview
+workspace.closeBranchPreview: Close Branch Preview
+workspace.resizeBranchPreview: Resize Branch Preview
+workspace.branchPreviewTitle: Branch Preview
+workspace.branchPreviewDescription: The preview reuses the same Markdown renderer as the chat area and does not affect the current session or draft when closed.
 workspace.scrollToMessageTop: Scroll To Message Top
 workspace.scrollToMessageBottom: Scroll To Message Bottom
 workspace.copyPlainText: Copy Plain Text

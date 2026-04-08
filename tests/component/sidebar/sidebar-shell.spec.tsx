@@ -1133,8 +1133,9 @@ describe('SidebarShell', () => {
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
-    await user.hover(await screen.findByTestId('chat-message-assistant-1'));
-    await user.click(await screen.findByRole('button', { name: '继续新增分支' }));
+    const primaryBranchCard = await screen.findByTestId('branch-assistant-1:primary');
+    await user.hover(primaryBranchCard);
+    await user.click(within(primaryBranchCard).getByRole('button', { name: '继续新增分支' }));
     await user.click(await screen.findByRole('button', { name: '分支模型' }));
     expect(api.expandMessageBranches).toHaveBeenCalledWith({
       tabId: 7,
@@ -1161,7 +1162,7 @@ describe('SidebarShell', () => {
     expect(screen.getByText('分支内容')).toBeVisible();
 
     await user.hover(screen.getByTestId('branch-branch-1'));
-    await user.click(screen.getByRole('button', { name: '停止分支' }));
+    await user.click(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '停止分支' }));
     expect(api.stopBranch).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
@@ -1170,7 +1171,7 @@ describe('SidebarShell', () => {
     });
 
     await user.hover(screen.getByTestId('branch-branch-1'));
-    await user.click(screen.getByRole('button', { name: '删除分支' }));
+    await user.click(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '删除分支' }));
     await user.click(within(screen.getByTestId('delete-branch-confirm-branch-1')).getByRole('button', { name: '删除分支' }));
     expect(api.deleteBranch).toHaveBeenCalledWith({
       tabId: 7,
@@ -1180,6 +1181,107 @@ describe('SidebarShell', () => {
       branchId: 'branch-1',
     });
     await waitFor(() => expect(screen.queryByTestId('branch-branch-1')).toBeNull());
+  });
+
+  it('侧边栏支持分支独立预览层，并可拖拽尺寸后按 Esc 关闭且不丢草稿', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article:chat',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-preview',
+                role: 'assistant',
+                content: '主回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [
+                  {
+                    id: 'branch-preview',
+                    modelId: 'model-1',
+                    modelLabel: '主模型',
+                    isPrimary: true,
+                    content: '# 预览标题\n\n- 预览内容',
+                    status: 'done',
+                    errorMessage: null,
+                    createdAt: 1,
+                    updatedAt: 1,
+                  },
+                ],
+                selectedBranchId: 'branch-preview',
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-preview',
+              status: 'done',
+              summary: '主回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.type(await screen.findByLabelText('聊天输入'), '未发送草稿');
+    await user.hover(screen.getByTestId('branch-branch-preview'));
+    await user.click(screen.getByRole('button', { name: '打开分支预览' }));
+
+    const dialog = await screen.findByTestId('branch-preview-dialog');
+    expect(dialog).toHaveStyle({ width: '760px', height: '560px' });
+    expect(screen.getByRole('heading', { name: '分支内容预览' })).toBeVisible();
+    expect(within(screen.getByTestId('branch-preview-content')).getByText('预览标题')).toBeVisible();
+    expect(within(screen.getByTestId('branch-preview-content')).getByText('预览内容')).toBeVisible();
+
+    fireEvent.pointerDown(screen.getByTestId('branch-preview-resize-handle'), {
+      clientX: 760,
+      clientY: 560,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: 820,
+      clientY: 620,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(dialog).toHaveStyle({ width: '820px', height: '620px' });
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('未发送草稿');
+    expect(screen.getByTestId('branch-branch-preview')).toBeVisible();
   });
 
   it('新增分支失败时展示错误提示，不读取未定义 payload', async () => {

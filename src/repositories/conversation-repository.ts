@@ -1035,26 +1035,31 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
         const assistantMessage = requireAssistantMessage(conversation, messageId);
         requireAssistantBranch(assistantMessage, branchId);
 
+        const nextMessages =
+          assistantMessage.branches.length === 1
+            ? conversation.messages.filter((message) => message.id !== messageId)
+            : conversation.messages.map((message) =>
+                message.id === messageId
+                  ? syncAssistantMessageFromSelectedBranch(
+                      {
+                        ...assistantMessage,
+                        branches: assistantMessage.branches.filter((item) => item.id !== branchId),
+                        selectedBranchId:
+                          assistantMessage.selectedBranchId === branchId
+                            ? assistantMessage.branches.find((item) => item.id !== branchId)?.id ?? null
+                            : assistantMessage.selectedBranchId,
+                      },
+                      now,
+                    )
+                  : message,
+              );
         const next = conversationRecordSchema.parse({
           ...conversation,
-          messages: conversation.messages.map((message) =>
-            message.id === messageId
-              ? syncAssistantMessageFromSelectedBranch(
-                  {
-                    ...assistantMessage,
-                    branches: assistantMessage.branches.filter((item) => item.id !== branchId),
-                    selectedBranchId:
-                      assistantMessage.selectedBranchId === branchId
-                        ? assistantMessage.branches.find((item) => item.id !== branchId)?.id ?? null
-                        : assistantMessage.selectedBranchId,
-                  },
-                  now,
-                )
-              : message,
-          ),
+          messages: nextMessages,
+          lastAssistantState: buildLastAssistantState(nextMessages),
           updatedAt: now,
         });
-        return persistConversation(next);
+        return persistConversationOrRemove(next);
       });
     },
 

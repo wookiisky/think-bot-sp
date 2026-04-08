@@ -78,6 +78,30 @@ describe('config-repository', () => {
     expect(config.blacklist.map((item) => item.id)).toEqual(DEFAULT_BLACKLIST_RULES.map((item) => item.id));
   });
 
+  it('读取旧配置时会补齐缺失的 sync 配置，避免 background 因存量数据崩溃', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConfigRepository(createChromeLocalAdapter(storage));
+    const legacyConfig = {
+      ...createDefaultConfig(),
+    } as Record<string, unknown>;
+    delete legacyConfig.sync;
+
+    await storage.set({ [CONFIG_STORAGE_KEY]: legacyConfig });
+
+    await expect(repo.getConfig()).resolves.toMatchObject({
+      sync: {
+        enabled: false,
+        provider: 'none',
+        gistToken: '',
+        gistId: '',
+        webdavUrl: '',
+        webdavUsername: '',
+        webdavPassword: '',
+        lastSyncAt: null,
+      },
+    });
+  });
+
   it('保存非法黑名单正则时直接拒绝', async () => {
     const storage = createFakeStorageArea();
     const repo = createConfigRepository(createChromeLocalAdapter(storage));

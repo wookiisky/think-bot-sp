@@ -1,11 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../../src/domain/config/config-schema';
+import { createChromeLocalAdapter } from '../../../../src/repositories/chrome-local-adapter';
+import { createConfigRepository } from '../../../../src/repositories/config-repository';
 import {
   createConfigCommandHandler,
   isConfigCommandMessage,
   supportedCommandTypes,
 } from '../../../../src/services/runtime-messaging/config-commands';
+import { CONFIG_STORAGE_KEY } from '../../../../src/shared/storage-keys';
+import { createFakeStorageArea } from '../../../helpers/fake-storage';
 
 describe('config-commands', () => {
   it('暴露统一的命令识别能力', () => {
@@ -203,5 +207,52 @@ describe('config-commands', () => {
 
     await expect(handler({ type: 'UNKNOWN' } as never)).rejects.toThrow(/unsupported command/i);
     await expect(handler({ type: 'SAVE_CONFIG', config: {} })).rejects.toThrow();
+  });
+
+  it('GET_CONFIG 在旧配置缺少 sync 字段时仍返回补齐后的配置', async () => {
+    const storage = createFakeStorageArea();
+    const configRepository = createConfigRepository(createChromeLocalAdapter(storage));
+    const legacyConfig = {
+      ...createDefaultConfig(),
+    } as Record<string, unknown>;
+    delete legacyConfig.sync;
+
+    await storage.set({
+      [CONFIG_STORAGE_KEY]: legacyConfig,
+    });
+
+    const handler = createConfigCommandHandler({
+      configRepository,
+      pageRepository: {
+        getCacheStats: vi.fn(),
+        clearCache: vi.fn(),
+      },
+      recentErrorRepository: {
+        getRecentError: vi.fn(),
+      },
+      syncService: {
+        testConnection: vi.fn(),
+        syncNow: vi.fn(),
+      },
+      modelTestService: {
+        testModel: vi.fn(),
+      },
+    });
+
+    await expect(handler({ type: 'GET_CONFIG' })).resolves.toEqual({
+      type: 'GET_CONFIG_SUCCESS',
+      config: expect.objectContaining({
+        sync: {
+          enabled: false,
+          provider: 'none',
+          gistToken: '',
+          gistId: '',
+          webdavUrl: '',
+          webdavUsername: '',
+          webdavPassword: '',
+          lastSyncAt: null,
+        },
+      }),
+    });
   });
 });

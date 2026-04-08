@@ -41,6 +41,12 @@ export type ChatMessageState = {
   selectedBranchId: string | null;
 };
 
+/** 分支预览详情。 */
+export type BranchPreviewDetail = BranchMessageState & {
+  /** 所属助手消息 id。 */
+  messageId: string;
+};
+
 /** 模型选项。 */
 export type ModelOption = {
   /** 模型稳定 id。 */
@@ -238,6 +244,22 @@ export const toChatMessageStates = (messages: SidebarConversationRecord['message
       selectedBranchId,
     };
   });
+
+/** 从消息列表中定位一个可预览的助手分支。 */
+export const findBranchPreviewDetail = (
+  messages: ChatMessageState[],
+  messageId: string,
+  branchId: string,
+): BranchPreviewDetail | null => {
+  const message = messages.find((item) => item.id === messageId && item.role === 'assistant');
+  const branch = message?.branches.find((item) => item.id === branchId) ?? null;
+  return branch
+    ? {
+        messageId,
+        ...branch,
+      }
+    : null;
+};
 
 /** 生成可见 promptTab 列表。 */
 export const buildPromptTabs = ({

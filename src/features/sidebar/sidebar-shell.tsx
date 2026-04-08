@@ -28,6 +28,7 @@ import {
   appendAssistantBranches,
   buildActiveSessionIdMap,
   buildComposerStateMap,
+  findBranchPreviewDetail,
   buildMessageStateMap,
   buildPromptTabs,
   buildRestoreMessageIdMap,
@@ -45,6 +46,7 @@ import {
   upsertAssistantBranch,
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
+import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
 import {
   createWorkspaceTranslator,
   getPromptTabStatusLabelKey,
@@ -73,6 +75,14 @@ type SidebarToast = {
   tone: 'success' | 'error';
   /** 反馈正文。 */
   message: string;
+};
+type BranchPreviewTarget = {
+  /** 所属 promptTab id。 */
+  promptTabId: string;
+  /** 所属助手消息 id。 */
+  messageId: string;
+  /** 目标分支 id。 */
+  branchId: string;
 };
 type SidebarShellProps = {
   /** side panel 消息 API。 */
@@ -125,6 +135,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [editingMap, setEditingMap] = useState<Record<string, EditingState | null>>({
     [CHAT_PROMPT_TAB_ID]: null,
   });
+  const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const t = createWorkspaceTranslator(localeResources, localeCode);
@@ -139,6 +150,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(content);
+  const branchPreview =
+    branchPreviewTarget
+      ? findBranchPreviewDetail(
+          messageMap[branchPreviewTarget.promptTabId] ?? [],
+          branchPreviewTarget.messageId,
+          branchPreviewTarget.branchId,
+        )
+      : null;
 
   useEffect(() => {
     if (!toast) {
@@ -153,6 +172,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       window.clearTimeout(timer);
     };
   }, [toast]);
+
+  useEffect(() => {
+    if (branchPreviewTarget && !branchPreview) {
+      setBranchPreviewTarget(null);
+    }
+  }, [branchPreview, branchPreviewTarget]);
 
   useEffect(() => {
     if (!extractionResizeState) {
@@ -1238,14 +1263,20 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         branchId,
       });
       setPromptTabMessages(promptTabId, (current) =>
-        current.map((message) =>
-          message.id === messageId && message.role === 'assistant'
-            ? syncAssistantMessageState({
-                ...message,
-                branches: message.branches.filter((branch) => branch.id !== branchId),
-              })
-            : message,
-        ),
+        current.flatMap((message) => {
+          if (message.id !== messageId || message.role !== 'assistant') {
+            return [message];
+          }
+          if (message.branches.length <= 1) {
+            return [];
+          }
+          return [
+            syncAssistantMessageState({
+              ...message,
+              branches: message.branches.filter((branch) => branch.id !== branchId),
+            }),
+          ];
+        }),
       );
     } catch {
       setPromptTabNotice(promptTabId, t('workspace.notice.deleteBranchFailed'));
@@ -1511,11 +1542,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
               onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
+              onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
               onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
             />
           </div>
         ))}
       </section>
+
+      <BranchPreviewOverlay
+        open={branchPreview !== null}
+        preview={branchPreview}
+        t={t}
+        onClose={() => setBranchPreviewTarget(null)}
+      />
 
       <ChatInput
         disabled={state === 'bootstrapping' || state === 'extracting' || state === 'blocked' || !activePromptTab}

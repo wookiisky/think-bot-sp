@@ -237,9 +237,15 @@ describe('conversation-repository', () => {
       normalizedUrl: 'https://example.com/a',
       promptTabId: 'quick-summary',
       messageId: 'assistant-1',
-      primaryBranchId: 'branch-1',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: [
+        {
+          id: 'branch-1',
+          modelId: 'model-1',
+          modelLabel: '主模型',
+          isPrimary: true,
+        },
+      ],
+      selectedBranchId: 'branch-1',
       now: 2,
     });
 
@@ -270,9 +276,15 @@ describe('conversation-repository', () => {
       normalizedUrl: 'https://example.com/a',
       promptTabId: 'chat',
       messageId: 'assistant-1',
-      primaryBranchId: 'assistant-1:primary',
-      modelId: 'model-main',
-      modelLabel: '主模型',
+      initialBranches: [
+        {
+          id: 'assistant-1:primary',
+          modelId: 'model-main',
+          modelLabel: '主模型',
+          isPrimary: true,
+        },
+      ],
+      selectedBranchId: 'assistant-1:primary',
       now: 2,
     });
     await repo.finishAssistantMessage({
@@ -377,6 +389,93 @@ describe('conversation-repository', () => {
             ],
           }),
         ]),
+      }),
+    );
+  });
+
+  it('删除最后一个分支时会连同整条助手消息一起删除', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.appendUserMessage({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'user-1',
+      content: '请总结',
+      images: [],
+      now: 1,
+    });
+    await repo.appendAssistantMessage({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      initialBranches: [
+        {
+          id: 'assistant-1:primary',
+          modelId: 'model-main',
+          modelLabel: '主模型',
+          isPrimary: true,
+        },
+      ],
+      selectedBranchId: 'assistant-1:primary',
+      now: 2,
+    });
+    await repo.finishAssistantMessage({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      now: 3,
+    });
+    await repo.appendAssistantBranch({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      modelId: 'model-branch-1',
+      modelLabel: '分支模型一',
+      now: 4,
+    });
+    await repo.appendAssistantBranch({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      branchId: 'branch-2',
+      modelId: 'model-branch-2',
+      modelLabel: '分支模型二',
+      now: 5,
+    });
+
+    await repo.deleteAssistantBranch({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      now: 6,
+    });
+    await repo.deleteAssistantBranch({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      branchId: 'branch-2',
+      now: 7,
+    });
+    await repo.deleteAssistantBranch({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      messageId: 'assistant-1',
+      branchId: 'assistant-1:primary',
+      now: 8,
+    });
+
+    await expect(repo.getConversation('https://example.com/a', 'chat')).resolves.toEqual(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            id: 'user-1',
+            role: 'user',
+          }),
+        ],
+        lastAssistantState: null,
       }),
     );
   });

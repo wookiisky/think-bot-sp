@@ -149,7 +149,7 @@ const blacklistRuleSchema = z.object({
   deletedAt: z.number().int().nonnegative().nullable(),
 });
 
-const syncConfigSchema = z.object({
+export const syncConfigSchema = z.object({
   enabled: z.boolean(),
   provider: z.enum(['none', 'gist', 'webdav']),
   gistToken: z.string(),
@@ -159,6 +159,18 @@ const syncConfigSchema = z.object({
   webdavPassword: z.string(),
   lastSyncAt: z.number().int().nonnegative().nullable(),
 });
+
+/** 默认同步配置，兼容旧版未持久化 sync 字段的存量数据。 */
+export const DEFAULT_SYNC_CONFIG = {
+  enabled: false,
+  provider: 'none',
+  gistToken: '',
+  gistId: '',
+  webdavUrl: '',
+  webdavUsername: '',
+  webdavPassword: '',
+  lastSyncAt: null,
+} satisfies z.input<typeof syncConfigSchema>;
 
 type QuickInputConfig = z.infer<typeof quickInputSchema>;
 type BlacklistRuleConfig = z.infer<typeof blacklistRuleSchema>;
@@ -306,6 +318,7 @@ export const extensionConfigSchema = z
       const input = value as {
         basic?: { parallelModelIds?: string[]; branchModelIds?: string[] };
         quickInputs?: Array<{ parallelModelIds?: string[]; branchModelIds?: string[] }>;
+        sync?: Partial<z.input<typeof syncConfigSchema>>;
       };
 
       return {
@@ -317,6 +330,13 @@ export const extensionConfigSchema = z
         quickInputs: Array.isArray(input.quickInputs)
           ? input.quickInputs.map((quickInput) => migrateLegacyParallelModelIds(quickInput))
           : input.quickInputs,
+        sync:
+          typeof input.sync === 'object' && input.sync !== null
+            ? {
+                ...DEFAULT_SYNC_CONFIG,
+                ...input.sync,
+              }
+            : DEFAULT_SYNC_CONFIG,
       };
     },
     z.object({
@@ -446,14 +466,7 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
       ...quickInput,
     })),
     sync: {
-      enabled: false,
-      provider: 'none',
-      gistToken: '',
-      gistId: '',
-      webdavUrl: '',
-      webdavUsername: '',
-      webdavPassword: '',
-      lastSyncAt: null,
+      ...DEFAULT_SYNC_CONFIG,
       ...(overrides.sync ?? {}),
     },
     blacklist: overrides.blacklist ?? DEFAULT_BLACKLIST_RULES,
