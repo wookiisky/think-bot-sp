@@ -79,3 +79,4 @@
 - 失败模型桩和延迟流式桩
 - E2E 专用 `__THINK_BOT_TEST_STREAM__` 流式桩
 - E2E 专用 `__THINK_BOT_TEST_LAST_STREAM_MESSAGES__` 上下文观察桩
+  - 开启“包含页面内容”时，首条通常为 system 消息，页面正文位于其末尾的 `# Page Content` 段

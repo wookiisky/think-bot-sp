@@ -22,6 +22,13 @@ type ChatDispatchInput = {
   rollbackOnFailure?: boolean;
 };
 
+type PromptContext = {
+  /** 当前请求最终使用的系统提示词。 */
+  systemPrompt: string;
+  /** 当前请求附带的页面正文。 */
+  pageContent: string;
+};
+
 type BranchSummary = {
   /** 分支稳定 id。 */
   branchId: string;
@@ -237,6 +244,16 @@ type ConversationHistoryMessage =
       role: 'assistant';
       /** 助手文本。 */
       content: string;
+      /** 助手消息无图片输入。 */
+      images: string[];
+    }
+  | {
+      /** 消息角色。 */
+      role: 'system';
+      /** 系统提示词。 */
+      content: string;
+      /** 系统消息无图片输入。 */
+      images: string[];
     };
 
 type StreamSession = {
@@ -568,9 +585,39 @@ const isAbortError = (error: unknown): boolean =>
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
 
-/** 构造实际发给模型的用户消息。 */
-const buildPromptContent = (input: Pick<ChatDispatchInput, 'content' | 'pageContent'>): string =>
-  input.pageContent.trim() ? `页面内容：\n${input.pageContent}\n\n用户消息：${input.content}` : input.content;
+/** 构造最终系统提示词，页面正文始终追加在末尾。 */
+const buildEffectiveSystemPrompt = (input: PromptContext): string => {
+  const trimmedSystemPrompt = input.systemPrompt.trim();
+  const trimmedPageContent = (input.pageContent ?? '').trim();
+  if (!trimmedPageContent) {
+    return trimmedSystemPrompt;
+  }
+
+  const pageContentSection = `# Page Content\n${trimmedPageContent}`;
+  return trimmedSystemPrompt ? `${trimmedSystemPrompt}\n\n${pageContentSection}` : pageContentSection;
+};
+
+/** 统一把系统提示词拼到消息最前面，避免污染用户消息正文。 */
+const buildModelMessages = (input: {
+  /** 历史消息和当前轮消息。 */
+  conversationMessages: ConversationHistoryMessage[];
+  /** 当前请求使用的提示词上下文。 */
+  promptContext: PromptContext;
+}): ConversationHistoryMessage[] => {
+  const effectiveSystemPrompt = buildEffectiveSystemPrompt(input.promptContext);
+  if (!effectiveSystemPrompt) {
+    return input.conversationMessages;
+  }
+
+  return [
+    {
+      role: 'system',
+      content: effectiveSystemPrompt,
+      images: [],
+    },
+    ...input.conversationMessages,
+  ];
+};
 
 /** 构造统一的 AI SDK 调用参数，避免各入口遗漏模型配置。 */
 const buildModelInvocation = (input: {
@@ -711,7 +758,16 @@ const toConversationHistory = (
       ];
     }
     if (message.role !== 'assistant') {
-      return [];
+      if (message.role !== 'system') {
+        return [];
+      }
+      return [
+        {
+          role: 'system' as const,
+          content: message.content,
+          images: [],
+        },
+      ];
     }
 
     const selectedContent = getSelectedAssistantContent(message)?.trim() ?? '';
@@ -722,6 +778,7 @@ const toConversationHistory = (
       {
         role: 'assistant' as const,
         content: selectedContent,
+        images: [],
       },
     ];
   });
@@ -966,14 +1023,20 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       if (!primaryBranch) {
         throw new Error(`primary branch plan missing: ${input.promptTabId}`);
       }
-      const streamMessages: ConversationHistoryMessage[] = [
-        ...toConversationHistory(conversation?.messages ?? []),
-        {
-          role: 'user',
-          content: buildPromptContent(input),
-          images: input.images,
+      const streamMessages = buildModelMessages({
+        conversationMessages: [
+          ...toConversationHistory(conversation?.messages ?? []),
+          {
+            role: 'user',
+            content: input.content,
+            images: input.images,
+          },
+        ],
+        promptContext: {
+          systemPrompt: config.basic.systemPrompt,
+          pageContent: input.pageContent,
         },
-      ];
+      });
       const abortController = new AbortController();
       const shouldRollbackOnFailure = input.rollbackOnFailure ?? false;
       const getLifecycleScope = () => ({
@@ -1284,6 +1347,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       messageId: string;
       /** 编辑后的用户文本。 */
       content: string;
+      /** 当前请求真正附带的页面正文。 */
+      pageContent: string;
     }): Promise<MultiBranchStreamSession> {
       const [config, conversation] = await Promise.all([
         loadRuntimeConfig(),
@@ -1325,7 +1390,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       if (!primaryBranch) {
         throw new Error(`primary branch plan missing: ${input.promptTabId}`);
       }
-      const streamMessages = buildConversationHistoryThroughUser(conversation, input.messageId, input.content);
+      const streamMessages = buildModelMessages({
+        conversationMessages: buildConversationHistoryThroughUser(conversation, input.messageId, input.content),
+        promptContext: {
+          systemPrompt: config.basic.systemPrompt,
+          pageContent: input.pageContent,
+        },
+      });
       const abortController = new AbortController();
       const removeLoadingStateSafely = async () => {
         try {
@@ -1554,6 +1625,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       promptTabId: string;
       /** 目标用户消息 id。 */
       messageId: string;
+      /** 当前请求真正附带的页面正文。 */
+      pageContent: string;
     }): Promise<MultiBranchStreamSession> {
       const [config, conversation] = await Promise.all([
         loadRuntimeConfig(),
@@ -1591,7 +1664,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
 
       const sessionId = createSessionId();
       const assistantMessageId = createMessageId();
-      const streamMessages = buildConversationHistoryThroughUser(conversation, input.messageId);
+      const streamMessages = buildModelMessages({
+        conversationMessages: buildConversationHistoryThroughUser(conversation, input.messageId),
+        promptContext: {
+          systemPrompt: config.basic.systemPrompt,
+          pageContent: input.pageContent,
+        },
+      });
       const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       const initialBranchPlans = await resolveInitialBranchPlans({
         deps,
@@ -1838,6 +1917,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       messageId: string;
       /** 分支 id。 */
       branchId: string;
+      /** 当前请求真正附带的页面正文。 */
+      pageContent: string;
     }): Promise<BranchStreamSession> {
       const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
       if (!conversation) {
@@ -1859,7 +1940,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`model not found: ${targetBranch.modelId}`);
       }
 
-      const streamMessages = buildConversationHistoryBeforeAssistant(conversation, input.messageId);
+      const config = await loadRuntimeConfig();
+      const streamMessages = buildModelMessages({
+        conversationMessages: buildConversationHistoryBeforeAssistant(conversation, input.messageId),
+        promptContext: {
+          systemPrompt: config.basic.systemPrompt,
+          pageContent: input.pageContent,
+        },
+      });
       await deps.conversationRepository.truncateMessagesAfter({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -1905,8 +1993,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       messageId: string;
       /** 用户选中的模型 id。 */
       modelId: string;
+      /** 当前请求真正附带的页面正文。 */
+      pageContent: string;
     }): Promise<BranchStreamSession[]> {
-      const conversation = await deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId);
+      const [config, conversation] = await Promise.all([
+        loadRuntimeConfig(),
+        deps.conversationRepository.getConversation(input.normalizedUrl, input.promptTabId),
+      ]);
       if (!conversation) {
         throw new Error('conversation not found');
       }
@@ -1923,7 +2016,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`model not found: ${input.modelId}`);
       }
 
-      const branchMessages = buildConversationHistoryBeforeAssistant(conversation, input.messageId);
+      const branchMessages = buildModelMessages({
+        conversationMessages: buildConversationHistoryBeforeAssistant(conversation, input.messageId),
+        promptContext: {
+          systemPrompt: config.basic.systemPrompt,
+          pageContent: input.pageContent,
+        },
+      });
       const branchId = createMessageId();
       const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       await deps.conversationRepository.appendAssistantBranch({

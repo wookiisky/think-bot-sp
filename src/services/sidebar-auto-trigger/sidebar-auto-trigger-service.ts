@@ -51,6 +51,12 @@ type SidebarAutoTriggerDeps = {
         lastClearedAt: number | null;
       }>;
     } | null>;
+    /** 强制打开页面级正文开关。 */
+    setIncludePageContent?: (_input: {
+      normalizedUrl: string;
+      url: string;
+      includePageContent: boolean;
+    }) => Promise<unknown>;
     /** 更新页面级 promptTab 运行态。 */
     setPromptTabState: (_input: {
       normalizedUrl: string;
@@ -172,6 +178,11 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
         }
 
         const triggerAt = now();
+        await deps.pageRepository.setIncludePageContent?.({
+          normalizedUrl: input.normalizedUrl,
+          url: input.pageUrl,
+          includePageContent: true,
+        });
         await deps.pageRepository.setPromptTabState({
           normalizedUrl: input.normalizedUrl,
           url: input.pageUrl,

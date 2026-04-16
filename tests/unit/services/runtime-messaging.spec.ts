@@ -380,7 +380,20 @@ describe('runtime-messaging', () => {
     const handler = createSidebarCommandHandler({
       runtime: { id: 'ext-id' },
       pageRepository: {
-        getPage: vi.fn().mockResolvedValue(null),
+        getPage: vi.fn().mockResolvedValue({
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '分支页面正文',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        }),
       },
       conversationRepository: {
         listPageConversations: vi.fn().mockResolvedValue([]),
@@ -679,7 +692,20 @@ describe('runtime-messaging', () => {
     const handler = createSidebarCommandHandler({
       runtime: { id: 'ext-id' },
       pageRepository: {
-        getPage: vi.fn().mockResolvedValue(null),
+        getPage: vi.fn().mockResolvedValue({
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '分支页面正文',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        }),
       },
       conversationRepository: {
         listPageConversations: vi.fn(),
@@ -788,6 +814,7 @@ describe('runtime-messaging', () => {
       promptTabId: 'chat',
       messageId: 'assistant-1',
       modelId: 'model-2',
+      pageContent: '分支页面正文',
     });
     expect(logger.info).toHaveBeenCalledWith('branch.expand.accepted', {
       browserTabId: 7,
@@ -865,7 +892,20 @@ describe('runtime-messaging', () => {
     const handler = createSidebarCommandHandler({
       runtime: { id: 'ext-id' },
       pageRepository: {
-        getPage: vi.fn().mockResolvedValue(null),
+        getPage: vi.fn().mockResolvedValue({
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '页面缓存正文',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        }),
       },
       conversationRepository: {
         listPageConversations: vi.fn(),
@@ -987,17 +1027,20 @@ describe('runtime-messaging', () => {
       promptTabId: 'chat',
       messageId: 'user-1',
       content: '编辑后的问题',
+      pageContent: '页面缓存正文',
     });
     expect(retryUserMessage).toHaveBeenCalledWith({
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'user-1',
+      pageContent: '页面缓存正文',
     });
     expect(retryMessage).toHaveBeenCalledWith({
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
       branchId: 'branch-retry',
+      pageContent: '页面缓存正文',
     });
   });
 

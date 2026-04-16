@@ -5,6 +5,7 @@ import { createSidebarAutoTriggerService } from '../../../src/services/sidebar-a
 
 describe('sidebar-auto-trigger-service', () => {
   it('提取成功后会自动触发符合条件的 quickInput，并在完成后写回 done', async () => {
+    const setIncludePageContent = vi.fn().mockResolvedValue(undefined);
     const setPromptTabState = vi.fn().mockResolvedValue(undefined);
     const register = vi.fn();
     const dispatchChat = vi.fn();
@@ -82,6 +83,7 @@ describe('sidebar-auto-trigger-service', () => {
               },
             ],
           }),
+        setIncludePageContent,
         setPromptTabState,
       },
       conversationRepository: {
@@ -105,6 +107,11 @@ describe('sidebar-auto-trigger-service', () => {
     });
     await Promise.resolve();
 
+    expect(setIncludePageContent).toHaveBeenCalledWith({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      includePageContent: true,
+    });
     expect(setPromptTabState).toHaveBeenNthCalledWith(1, {
       normalizedUrl: 'https://example.com/article',
       url: 'https://example.com/article',

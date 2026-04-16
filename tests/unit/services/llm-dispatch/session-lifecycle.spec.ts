@@ -278,8 +278,13 @@ describe('chat-dispatch-service session lifecycle', () => {
       model: { kind: 'sdk-model' },
       messages: [
         {
+          role: 'system',
+          content: '# Page Content\nExample Domain 页面正文',
+          images: [],
+        },
+        {
           role: 'user',
-          content: '页面内容：\nExample Domain 页面正文\n\n用户消息：请总结重点',
+          content: '请总结重点',
           images: [],
         },
       ],
@@ -1274,6 +1279,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       promptTabId: 'quick-summary',
       messageId: 'assistant-1',
       modelId: 'model-branch-b',
+      pageContent: '新增分支页面正文',
     });
     expect(sessions).toEqual([
       expect.objectContaining({
@@ -1495,6 +1501,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       promptTabId: 'chat',
       messageId: 'user-1',
       content: '新问题',
+      pageContent: '编辑链路页面正文',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -1505,6 +1512,11 @@ describe('chat-dispatch-service session lifecycle', () => {
     expect(streamText).toHaveBeenCalledWith({
       model: { kind: 'sdk-model' },
       messages: [
+        {
+          role: 'system',
+          content: '# Page Content\n编辑链路页面正文',
+          images: [],
+        },
         {
           role: 'user',
           content: '新问题',
@@ -1706,6 +1718,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       promptTabId: 'chat',
       messageId: 'assistant-1',
       branchId: 'assistant-1:primary',
+      pageContent: '重试链路页面正文',
     });
 
     await expect(session.done).resolves.toMatchObject({
@@ -1716,6 +1729,11 @@ describe('chat-dispatch-service session lifecycle', () => {
     expect(streamText).toHaveBeenCalledWith({
       model: { kind: 'sdk-model' },
       messages: [
+        {
+          role: 'system',
+          content: '# Page Content\n重试链路页面正文',
+          images: [],
+        },
         {
           role: 'user',
           content: '问题',
@@ -1879,6 +1897,7 @@ describe('chat-dispatch-service session lifecycle', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'user-1',
+      pageContent: '用户重试页面正文',
     });
 
     expect(session.branchId).toBe('branch-user-retry');
@@ -1891,6 +1910,11 @@ describe('chat-dispatch-service session lifecycle', () => {
     expect(streamText).toHaveBeenCalledWith({
       model: { kind: 'sdk-model' },
       messages: [
+        {
+          role: 'system',
+          content: '# Page Content\n用户重试页面正文',
+          images: [],
+        },
         {
           role: 'user',
           content: '原问题',

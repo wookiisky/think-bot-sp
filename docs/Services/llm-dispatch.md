@@ -180,6 +180,8 @@ Provider 适配规则：
 - 异常流测试：取消、side panel 关闭重开恢复、loading 清理失败不覆盖主结果。
 - 不变量测试：终态消息不可继续追加 chunk 或覆盖终态结果。
 - 不变量测试：`includePageContent=true/false`、页面正文缓存缺失时，实际发给模型的上下文与请求级开关一致。
+- 页面正文只能追加到最终 system prompt 末尾的 `# Page Content` 段，不能改写用户消息正文。
+- 编辑重发、用户重试、助手重试和继续新增分支，必须复用同一套页面正文拼装规则。
 - 可观测性测试：主流事件顺序固定为 `STARTED -> CHUNK* -> FINISHED | FAILED | CANCELLED`，且主流事件必须携带 `branchId`，`STARTED` 还必须携带 `modelId/modelLabel`。
 - E2E 允许通过 `globalThis.__THINK_BOT_TEST_STREAM__` 注入测试流桩，并通过 `globalThis.__THINK_BOT_TEST_LAST_STREAM_MESSAGES__` 观察最终送入模型的消息体；两者都仅限自动化环境，不得影响正式 provider 调用。
 

@@ -208,6 +208,10 @@ test('includePageContent=true 时会把页面正文注入真实模型上下文',
     )
     .toMatchObject([
       {
+        role: 'system',
+        images: [],
+      },
+      {
         role: 'user',
         images: [],
       },
@@ -217,9 +221,9 @@ test('includePageContent=true 时会把页面正文注入真实模型上下文',
       __THINK_BOT_TEST_LAST_STREAM_MESSAGES__?: Array<{ role: string; content: string; images: string[] }>;
     }).__THINK_BOT_TEST_LAST_STREAM_MESSAGES__ ?? [],
   );
-  expect(streamedMessages[0]?.content).toContain('页面内容：');
+  expect(streamedMessages[0]?.content).toContain('# Page Content');
   expect(streamedMessages[0]?.content).toContain(READABILITY_EXCERPT);
-  expect(streamedMessages[0]?.content).toContain('用户消息：请总结当前页面');
+  expect(streamedMessages[1]?.content).toBe('请总结当前页面');
 });
 
 test('side panel 支持 quickInputs 多标签切换，并隔离草稿与会话', async ({ context, extensionId }) => {
@@ -1238,6 +1242,10 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
     )
     .toMatchObject([
       {
+        role: 'system',
+        images: [],
+      },
+      {
         role: 'user',
         images: [],
       },
@@ -1247,5 +1255,6 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
       __THINK_BOT_TEST_LAST_STREAM_MESSAGES__?: Array<{ role: string; content: string; images: string[] }>;
     }).__THINK_BOT_TEST_LAST_STREAM_MESSAGES__ ?? [],
   );
-  expect(streamedMessages[0]?.content).toContain('用户消息：检查移除后发送');
+  expect(streamedMessages[0]?.content).toContain('# Page Content');
+  expect(streamedMessages[1]?.content).toBe('检查移除后发送');
 });

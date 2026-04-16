@@ -31,6 +31,10 @@ export const sidebarCommandTypes = new Set(sidebarCommandTypeValues);
 export const isSidebarCommandMessage = (input: unknown): input is { type: string } =>
   sidebarCommandEnvelopeSchema.safeParse(input).success;
 
+/** 按页面级配置解析当前请求真正携带的页面正文。 */
+const resolveRequestPageContent = (page: Pick<SidebarPageRecord, 'includePageContent' | 'content'> | null): string =>
+  page?.includePageContent ? page.content ?? '' : '';
+
 type PageRepository = {
   /** 读取页面记录。 */
   getPage(normalizedUrl: string): Promise<SidebarPageRecord | null>;
@@ -165,6 +169,8 @@ type ChatDispatchService = {
     messageId: string;
     /** 编辑后的用户文本。 */
     content: string;
+    /** 当前请求要带给模型的页面正文。 */
+    pageContent: string;
   }) => Promise<ChatSession & {
     /** 本轮初始化创建的分支摘要。 */
     branches: Array<{
@@ -189,6 +195,8 @@ type ChatDispatchService = {
     promptTabId: string;
     /** 目标用户消息 id。 */
     messageId: string;
+    /** 当前请求要带给模型的页面正文。 */
+    pageContent: string;
   }) => Promise<ChatSession & {
     /** 本轮初始化创建的分支摘要。 */
     branches: Array<{
@@ -215,6 +223,8 @@ type ChatDispatchService = {
     messageId: string;
     /** 目标分支 id。 */
     branchId: string;
+    /** 当前请求要带给模型的页面正文。 */
+    pageContent: string;
   }) => Promise<ChatSession & { branchId: string }>;
   /** 为既有助手消息继续新增分支。 */
   expandBranches: (input: {
@@ -226,6 +236,8 @@ type ChatDispatchService = {
     messageId: string;
     /** 用户选中的模型 id。 */
     modelId: string;
+    /** 当前请求要带给模型的页面正文。 */
+    pageContent: string;
   }) => Promise<ChatSession[]>;
 };
 
@@ -446,6 +458,7 @@ export const createSidebarCommandHandler = ({
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const page = await pageRepository.getPage(normalizedUrl);
         await sessionRegistry.cancelPromptTabSessions({
           normalizedUrl,
           promptTabId: command.promptTabId,
@@ -455,6 +468,7 @@ export const createSidebarCommandHandler = ({
           promptTabId: command.promptTabId,
           messageId: command.messageId,
           content: command.text,
+          pageContent: resolveRequestPageContent(page),
         });
         sessionRegistry.register(session, {
           normalizedUrl,
@@ -507,10 +521,12 @@ export const createSidebarCommandHandler = ({
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const page = await pageRepository.getPage(normalizedUrl);
         const session = await chatDispatchService.retryUserMessage({
           normalizedUrl,
           promptTabId: command.promptTabId,
           messageId: command.messageId,
+          pageContent: resolveRequestPageContent(page),
         });
         sessionRegistry.register(session, {
           normalizedUrl,
@@ -564,6 +580,7 @@ export const createSidebarCommandHandler = ({
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const page = await pageRepository.getPage(normalizedUrl);
         await sessionRegistry.cancelPromptTabSessions({
           normalizedUrl,
           promptTabId: command.promptTabId,
@@ -573,6 +590,7 @@ export const createSidebarCommandHandler = ({
           promptTabId: command.promptTabId,
           messageId: command.messageId,
           branchId: command.branchId,
+          pageContent: resolveRequestPageContent(page),
         });
         sessionRegistry.register(session, {
           normalizedUrl,
@@ -647,11 +665,13 @@ export const createSidebarCommandHandler = ({
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const page = await pageRepository.getPage(normalizedUrl);
         const sessions = await chatDispatchService.expandBranches({
           normalizedUrl,
           promptTabId: command.promptTabId,
           messageId: command.messageId,
           modelId: command.modelId,
+          pageContent: resolveRequestPageContent(page),
         });
         for (const session of sessions) {
           sessionRegistry.register(session, {
