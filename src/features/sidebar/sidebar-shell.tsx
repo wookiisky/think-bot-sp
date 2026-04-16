@@ -1289,8 +1289,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       className="flex h-screen min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
       <ToastStack toasts={toast ? [toast] : []} />
-      <header className="shrink-0 border-b border-border bg-card/90 px-3 py-2 backdrop-blur-sm">
-        <div className="flex items-start justify-between gap-4">
+      <header className="shrink-0 border-b border-border bg-card/90 px-3 py-1.5 backdrop-blur-sm">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1">
             <Tooltip content={t('sidebar.method.readability')}>
               <Button
@@ -1368,7 +1368,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
       <section
         data-testid="sidebar-extraction-panel"
-        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-2"
+        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-1.5"
         style={{ height: `${extractionPanelHeight}px` }}
       >
         {normalizedExtractionContent ? (
@@ -1438,8 +1438,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         />
       </div>
 
-      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-1">
-        <div className="flex flex-wrap gap-1.5">
+      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
+        <div className="flex flex-wrap gap-1">
           {promptTabs.map((promptTab) => {
             const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
             const statusKey = getPromptTabStatusLabelKey(status);
@@ -1458,7 +1458,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 type="button"
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
-                  'relative inline-flex items-center gap-2 overflow-hidden border px-3 py-2 text-left text-xs shadow-sm transition-colors',
+                  'relative inline-flex items-center gap-1.5 overflow-hidden border px-2.5 py-1.5 text-left text-[11px] shadow-sm transition-colors',
                   showLoadingRing && 'tab-loading-border border-transparent',
                   isActive
                     ? showLoadingRing
@@ -1500,7 +1500,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       </section>
 
       {activeChatNotice ? (
-        <div className="shrink-0 border-b border-border px-3 py-1.5">
+        <div className="shrink-0 border-b border-border px-3 py-1">
           <Badge variant="outline">{activeChatNotice}</Badge>
         </div>
       ) : null}

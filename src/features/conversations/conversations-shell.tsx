@@ -91,7 +91,7 @@ type BranchPreviewTarget = {
 /** 左侧历史栏最小宽度。 */
 const MIN_SIDEBAR_WIDTH = 280;
 /** 左侧历史栏默认宽度。 */
-const DEFAULT_SIDEBAR_WIDTH = 360;
+const DEFAULT_SIDEBAR_WIDTH = 332;
 /** 左侧历史栏最大宽度。 */
 const MAX_SIDEBAR_WIDTH = 520;
 
@@ -1209,9 +1209,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
       <aside className="flex shrink-0 flex-col border-r border-border bg-card/80 backdrop-blur-sm" style={{ width: `${sidebarWidth}px` }}>
-        <header className="border-b border-border px-3 py-3">
+        <header className="border-b border-border px-3 py-2.5">
           <h1 className="text-lg font-semibold">{t('conversations.title')}</h1>
-          <label className="mt-3 flex items-center gap-2 border border-input bg-input/20 px-3 py-2 text-xs text-muted-foreground">
+          <label className="mt-2 flex items-center gap-2 border border-input bg-input/20 px-2.5 py-1.5 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
             <input
               aria-label={t('conversations.searchLabel')}
@@ -1225,7 +1225,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section data-testid="conversations-page-list" className="min-h-0 flex-1 overflow-y-auto">
           {pages.length === 0 ? (
-            <div className="px-3 py-5 text-sm text-muted-foreground">
+            <div className="px-3 py-4 text-sm text-muted-foreground">
               {searchQuery.trim() ? t('conversations.emptySearch') : t('conversations.empty')}
             </div>
           ) : null}
@@ -1235,7 +1235,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               <div
                 key={page.normalizedUrl}
                 className={cn(
-                  'flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors',
+                  'flex w-full items-start gap-2.5 border-b border-border px-2.5 py-2 text-left transition-colors',
                   isSelected && 'bg-primary/10',
                 )}
               >
@@ -1310,15 +1310,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
+        <header className="shrink-0 border-b border-border bg-card/80 px-3 py-2.5 backdrop-blur-sm">
           {detail.page ? (
-            <div className="space-y-3">
-              <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {isTitleEditing ? (
                     <input
                       aria-label={t('conversations.editTitle')}
-                      className="w-full border border-input bg-background px-3 py-2 text-lg font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                      className="w-full border border-input bg-background px-2.5 py-1.5 text-lg font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                       value={titleDraft}
                       autoFocus
                       onChange={(event) => setTitleDraft(event.target.value)}
@@ -1370,7 +1370,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section
           data-testid="conversations-extraction-panel"
-          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
+          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-2"
           style={{ height: `${extractionPanelHeight}px` }}
         >
           {detailStatus === 'loading' && !detail.page ? (
@@ -1387,8 +1387,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
 
-        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-4 py-1">
-          <div className="flex flex-wrap gap-1.5">
+        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
+          <div className="flex flex-wrap gap-1">
             {promptTabs.map((promptTab) => {
               const isActive = promptTab.id === activePromptTabId;
               const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
@@ -1406,7 +1406,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   type="button"
                   title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                   className={cn(
-                    'relative inline-flex items-center gap-2 overflow-hidden border px-3 py-2 text-left text-xs shadow-sm transition-colors',
+                    'relative inline-flex items-center gap-1.5 overflow-hidden border px-2.5 py-1.5 text-left text-[11px] shadow-sm transition-colors',
                     showLoadingRing && 'tab-loading-border border-transparent',
                     isActive
                       ? showLoadingRing
@@ -1450,7 +1450,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
 
         {activeChatNotice ? (
-          <div className="shrink-0 border-b border-border px-4 py-1.5">
+          <div className="shrink-0 border-b border-border px-3 py-1">
             <Badge variant="outline">{activeChatNotice}</Badge>
           </div>
         ) : null}
@@ -1486,25 +1486,25 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 onRetryUserMessage={(messageId) => handleRetryUserMessage(promptTab.id, messageId)}
                 onRetryAssistantMessage={(messageId, branchId) => handleRetryMessage(promptTab.id, messageId, branchId)}
                 onSelectAssistantBranch={(messageId, branchId) => handleSelectAssistantBranch(promptTab.id, messageId, branchId)}
-              onExpandBranches={(messageId, modelId) => handleExpandBranches(promptTab.id, messageId, modelId)}
-              onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
-              onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
-              onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
-              onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
-              onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
-            />
-          </div>
-        ))}
-      </section>
+                onExpandBranches={(messageId, modelId) => handleExpandBranches(promptTab.id, messageId, modelId)}
+                onStop={() => handleStop(promptTab.id, activeSessionIds[promptTab.id] ?? null)}
+                onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
+                onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
+                onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
+                onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
+              />
+            </div>
+          ))}
+        </section>
 
-      <BranchPreviewOverlay
-        open={branchPreview !== null}
-        preview={branchPreview}
-        t={t}
-        onClose={() => setBranchPreviewTarget(null)}
-      />
+        <BranchPreviewOverlay
+          open={branchPreview !== null}
+          preview={branchPreview}
+          t={t}
+          onClose={() => setBranchPreviewTarget(null)}
+        />
 
-      <ChatInput
+        <ChatInput
           disabled={!selectedPage || !activePromptTab}
           sending={Boolean(activeSessionId)}
           text={activeComposer?.text ?? ''}
@@ -1537,12 +1537,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               return Promise.resolve();
             }
             return handleSend(activePromptTab.id, input);
-          }}
-          onStop={() => {
-            if (!activePromptTab) {
-              return Promise.resolve();
-            }
-            return handleStop(activePromptTab.id, activeSessionId);
           }}
           onExport={() => {
             if (!activePromptTab) {

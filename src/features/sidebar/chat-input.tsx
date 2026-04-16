@@ -9,11 +9,11 @@ import { cn } from '../../lib/utils';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 
 /** 输入区最小高度。 */
-const MIN_COMPOSER_HEIGHT = 92;
+const MIN_COMPOSER_HEIGHT = 82;
 /** 输入区默认高度。 */
-const DEFAULT_COMPOSER_HEIGHT = 108;
+const DEFAULT_COMPOSER_HEIGHT = 96;
 /** 输入区最大高度。 */
-const MAX_COMPOSER_HEIGHT = 240;
+const MAX_COMPOSER_HEIGHT = 220;
 
 /** 限制输入区高度范围。 */
 const clampComposerHeight = (height: number) => Math.min(MAX_COMPOSER_HEIGHT, Math.max(MIN_COMPOSER_HEIGHT, height));
@@ -126,14 +126,14 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section className="shrink-0 border-t border-border bg-card/70 px-4 py-2.5 backdrop-blur-sm">
-      <div className="mb-1 flex justify-center">
+    <section className="shrink-0 border-t border-border bg-card/75 px-3 py-2 backdrop-blur-sm">
+      <div className="mb-0.5 flex justify-center">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label={t('workspace.resizeComposer')}
           data-testid="chat-input-resize-handle"
-          className="h-1.5 w-10 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="h-1 w-8 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setResizeSession({
               startY: event.clientY,
@@ -143,11 +143,11 @@ export const ChatInput = ({
         />
       </div>
 
-      <div data-testid="chat-input-panel" className="flex flex-col gap-1.5" style={{ minHeight: `${composerHeight}px` }}>
-        <div className="flex items-center gap-2">
+      <div data-testid="chat-input-panel" className="flex flex-col gap-1" style={{ minHeight: `${composerHeight}px` }}>
+        <div className="flex items-center gap-1.5">
           <Input
             aria-label={t('workspace.chatInput')}
-            className="h-9 bg-background/90 px-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+            className="h-8 bg-background/90 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
             value={text}
             disabled={disabled}
             onChange={(event) => onTextChange(event.target.value)}
@@ -171,7 +171,7 @@ export const ChatInput = ({
               aria-disabled={disabled || !supportsImages}
               className={cn(
                 buttonVariants({ variant: 'outline', size: 'icon-sm' }),
-                'relative cursor-pointer',
+                'relative size-[22px] cursor-pointer rounded-md',
                 (disabled || !supportsImages) && 'pointer-events-none opacity-50',
               )}
             >
@@ -202,20 +202,27 @@ export const ChatInput = ({
           </Tooltip>
 
           <Tooltip content={t('workspace.send')}>
-            <Button type="button" size="icon-sm" aria-label={t('workspace.send')} disabled={isSendDisabled} onClick={submitCurrentInput}>
+            <Button
+              type="button"
+              size="icon-sm"
+              aria-label={t('workspace.send')}
+              className="size-[22px] rounded-md"
+              disabled={isSendDisabled}
+              onClick={submitCurrentInput}
+            >
               {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
             </Button>
           </Tooltip>
         </div>
 
         {images.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {images.map((image, index) => (
               <figure
                 key={`${image.slice(0, 32)}:${index}`}
                 className="group relative overflow-hidden rounded-md border border-border bg-background shadow-sm"
               >
-                <img src={image} alt={`${t('workspace.selectedImage')} ${index + 1}`} className="size-16 object-cover" />
+                <img src={image} alt={`${t('workspace.selectedImage')} ${index + 1}`} className="size-14 object-cover" />
                 <MiniConfirm
                   message={`${t('workspace.removeImage')} ${index + 1}`}
                   cancelLabel={t('common.cancel')}
@@ -240,38 +247,40 @@ export const ChatInput = ({
           </div>
         ) : null}
 
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 rounded-md border border-input bg-input/20 px-2.5 py-1 text-xs text-muted-foreground">
-              <span>{t('workspace.model')}</span>
-              <select
-                aria-label={t('workspace.selectModel')}
-                className="h-6 rounded-md border border-input bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                disabled={disabled || models.length === 0}
-                value={selectedModelId}
-                onChange={(event) => onSelectModel(event.target.value)}
-              >
-                {models.length === 0 ? <option value="">{t('workspace.noModels')}</option> : null}
-                {models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <div className="mt-auto overflow-x-auto pb-0.5">
+          <div className="flex min-w-max items-center gap-1.5">
+            <span className="shrink-0 text-[11px] text-muted-foreground">{t('workspace.model')}</span>
+            <select
+              aria-label={t('workspace.selectModel')}
+              className="h-7 w-28 shrink-0 rounded-md border border-input/80 bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              disabled={disabled || models.length === 0}
+              value={selectedModelId}
+              onChange={(event) => onSelectModel(event.target.value)}
+            >
+              {models.length === 0 ? <option value="">{t('workspace.noModels')}</option> : null}
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
 
-            <label className="flex h-8 items-center gap-2 rounded-md border border-input bg-input/20 px-2.5 text-xs text-muted-foreground">
-              <input
-                aria-label={t('workspace.includePageContent')}
-                type="checkbox"
-                checked={includePageContent}
-                onChange={(event) => onIncludePageContentChange(event.target.checked)}
-              />
-              <span>{t('workspace.includePageContent')}</span>
-            </label>
-          </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-pressed={includePageContent}
+              className={cn(
+                'h-7 shrink-0 rounded-md px-2.5',
+                includePageContent
+                  ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
+                  : 'border-border bg-background/70 text-muted-foreground hover:text-foreground',
+              )}
+              onClick={() => onIncludePageContentChange(!includePageContent)}
+            >
+              {t('workspace.includePageContent')}
+            </Button>
 
-          <div className="flex flex-wrap items-center gap-2">
             <MiniConfirm
               message={t('workspace.notice.clearTabConfirm')}
               cancelLabel={t('common.cancel')}
@@ -280,14 +289,21 @@ export const ChatInput = ({
               onConfirm={onClear}
             >
               <Tooltip content={t('workspace.clearCurrentTab')}>
-                <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.clearCurrentTab')}>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.clearCurrentTab')} className="size-[22px] rounded-md">
                   <EraserIcon />
                 </Button>
               </Tooltip>
             </MiniConfirm>
 
             <Tooltip content={t('workspace.exportConversation')}>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.exportConversation')} onClick={() => void onExport()}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('workspace.exportConversation')}
+                className="size-[22px] rounded-md"
+                onClick={() => void onExport()}
+              >
                 <DownloadIcon />
               </Button>
             </Tooltip>
