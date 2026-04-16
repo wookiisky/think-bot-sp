@@ -208,7 +208,7 @@ export const ChatThread = ({
   };
 
   return (
-    <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-3 py-2">
+    <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1.5">
       <div>
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
@@ -224,7 +224,7 @@ export const ChatThread = ({
               key={message.id}
               data-testid={`chat-message-${message.id}`}
               data-message-role={message.role}
-              className="group/message relative py-2"
+              className="group/message relative py-1"
               onMouseEnter={() => setHoveredMessageId(message.id)}
               onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
               onFocus={() => setHoveredMessageId(message.id)}
@@ -691,10 +691,10 @@ const AssistantBranchRail = ({
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative px-0.5 py-0.5 pr-12 transition-colors',
-    role === 'assistant' && 'bg-muted/55 text-foreground',
-    role === 'user' && 'text-foreground',
-    role === 'system' && 'text-amber-900',
+    'relative px-0.5 py-0.5 transition-colors',
+    role === 'assistant' && 'pr-0 text-foreground',
+    role === 'user' && 'pr-12 text-foreground',
+    role === 'system' && 'pr-0 text-amber-900',
     status === 'error' && 'text-destructive',
     status === 'cancelled' && 'text-muted-foreground',
   );

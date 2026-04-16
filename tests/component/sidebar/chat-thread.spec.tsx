@@ -116,7 +116,8 @@ describe('ChatThread', () => {
     expect(screen.getByRole('link', { name: '链接' })).toHaveAttribute('href', 'https://example.com');
     expect(screen.getByText('分支结果')).toBeVisible();
     expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支模型');
-    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-muted/55');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('bg-muted/55');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('pr-0');
     expect(screen.queryByText('主分支')).toBeNull();
     expect(screen.queryByText('分支')).toBeNull();
     expect(screen.queryByText('#1')).toBeNull();

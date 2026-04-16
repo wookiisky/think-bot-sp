@@ -1289,7 +1289,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       className="flex h-screen min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
       <ToastStack toasts={toast ? [toast] : []} />
-      <header className="shrink-0 border-b border-border bg-card/90 px-4 py-3 backdrop-blur-sm">
+      <header className="shrink-0 border-b border-border bg-card/90 px-3 py-2 backdrop-blur-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-wrap items-center gap-1">
             <Tooltip content={t('sidebar.method.readability')}>
@@ -1368,7 +1368,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
       <section
         data-testid="sidebar-extraction-panel"
-        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
+        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-2"
         style={{ height: `${extractionPanelHeight}px` }}
       >
         {normalizedExtractionContent ? (
@@ -1422,7 +1422,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ) : null}
       </section>
 
-      <div className="shrink-0 border-b border-border px-4 py-0.5">
+      <div className="shrink-0 border-b border-border px-3 py-0.5">
         <div
           role="separator"
           aria-orientation="horizontal"
@@ -1438,7 +1438,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         />
       </div>
 
-      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-4 py-1.5">
+      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-1">
         <div className="flex flex-wrap gap-1.5">
           {promptTabs.map((promptTab) => {
             const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
@@ -1500,7 +1500,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       </section>
 
       {activeChatNotice ? (
-        <div className="shrink-0 border-b border-border px-4 py-2">
+        <div className="shrink-0 border-b border-border px-3 py-1.5">
           <Badge variant="outline">{activeChatNotice}</Badge>
         </div>
       ) : null}

@@ -1209,7 +1209,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
       <aside className="flex shrink-0 flex-col border-r border-border bg-card/80 backdrop-blur-sm" style={{ width: `${sidebarWidth}px` }}>
-        <header className="border-b border-border px-4 py-4">
+        <header className="border-b border-border px-3 py-3">
           <h1 className="text-lg font-semibold">{t('conversations.title')}</h1>
           <label className="mt-3 flex items-center gap-2 border border-input bg-input/20 px-3 py-2 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
@@ -1225,7 +1225,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section data-testid="conversations-page-list" className="min-h-0 flex-1 overflow-y-auto">
           {pages.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-muted-foreground">
+            <div className="px-3 py-5 text-sm text-muted-foreground">
               {searchQuery.trim() ? t('conversations.emptySearch') : t('conversations.empty')}
             </div>
           ) : null}
@@ -1235,7 +1235,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               <div
                 key={page.normalizedUrl}
                 className={cn(
-                  'flex w-full items-start gap-3 border-b border-border px-4 py-3 text-left transition-colors',
+                  'flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors',
                   isSelected && 'bg-primary/10',
                 )}
               >
@@ -1310,7 +1310,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-border bg-card/80 px-6 py-4 backdrop-blur-sm">
+        <header className="shrink-0 border-b border-border bg-card/80 px-4 py-3 backdrop-blur-sm">
           {detail.page ? (
             <div className="space-y-3">
               <div className="flex items-start justify-between gap-4">
@@ -1370,7 +1370,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section
           data-testid="conversations-extraction-panel"
-          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-6 py-4"
+          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-4 py-3"
           style={{ height: `${extractionPanelHeight}px` }}
         >
           {detailStatus === 'loading' && !detail.page ? (
@@ -1387,7 +1387,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
 
-        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-6 py-1.5">
+        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-4 py-1">
           <div className="flex flex-wrap gap-1.5">
             {promptTabs.map((promptTab) => {
               const isActive = promptTab.id === activePromptTabId;
@@ -1450,7 +1450,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
 
         {activeChatNotice ? (
-          <div className="shrink-0 border-b border-border px-6 py-2">
+          <div className="shrink-0 border-b border-border px-4 py-1.5">
             <Badge variant="outline">{activeChatNotice}</Badge>
           </div>
         ) : null}
