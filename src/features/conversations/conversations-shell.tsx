@@ -1455,13 +1455,13 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           </div>
         ) : null}
 
-        <section className="min-h-0 flex-1 overflow-hidden">
+        <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {promptTabs.map((promptTab) => (
             <div
               key={promptTab.id}
               role="tabpanel"
               hidden={promptTab.id !== activePromptTabId}
-              className={promptTab.id === activePromptTabId ? 'flex h-full min-h-0 flex-col' : 'hidden'}
+              className={promptTab.id === activePromptTabId ? 'flex h-full min-h-0 min-w-0 flex-col' : 'hidden'}
             >
               <ChatThread
                 messages={messageMap[promptTab.id] ?? []}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   CheckIcon,
   ChevronsDownIcon,
@@ -28,6 +28,14 @@ import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 
 type ChatThreadMessage = ChatThreadProps['messages'][number];
 type ChatThreadBranch = ChatThreadMessage['branches'][number];
+type FloatingActionOrientation = 'vertical' | 'horizontal';
+
+const FLOATING_ACTION_GAP_PX = 2;
+const FLOATING_ACTION_BAR_PADDING_PX = 4;
+const USER_MESSAGE_ACTION_BUTTON_SIZE_PX = 24;
+const USER_MESSAGE_ACTION_COUNT = 4;
+const ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX = 20;
+const ASSISTANT_BRANCH_ACTION_COUNT = 9;
 
 type ChatThreadProps = {
   /** 当前消息列表。 */
@@ -150,6 +158,107 @@ type AssistantBranchRailProps = {
   onDeleteBranch: ChatThreadProps['onDeleteBranch'];
 };
 
+type FloatingActionBarProps = {
+  /** 浮层测试标识。 */
+  testId: string;
+  /** 当前是否展示。 */
+  visible: boolean;
+  /** 垂直布局时的按钮数量。 */
+  actionCount: number;
+  /** 单个按钮视觉尺寸。 */
+  buttonSizePx: number;
+  /** 垂直布局容器定位。 */
+  verticalWrapperClassName: string;
+  /** 横向布局容器定位。 */
+  horizontalWrapperClassName: string;
+  /** 按钮内容。 */
+  children: ReactNode;
+};
+
+/** 根据容器高度选择悬浮按钮方向，避免短消息被竖排按钮撑高。 */
+const resolveFloatingActionOrientation = (
+  containerHeight: number,
+  actionCount: number,
+  buttonSizePx: number,
+): FloatingActionOrientation => {
+  if (containerHeight <= 0) {
+    return 'vertical';
+  }
+  const requiredVerticalHeight =
+    actionCount * buttonSizePx +
+    Math.max(actionCount - 1, 0) * FLOATING_ACTION_GAP_PX +
+    FLOATING_ACTION_BAR_PADDING_PX * 2;
+  return containerHeight < requiredVerticalHeight ? 'horizontal' : 'vertical';
+};
+
+/** 统一悬浮按钮条，按宿主高度在横排和竖排之间切换。 */
+const FloatingActionBar = ({
+  testId,
+  visible,
+  actionCount,
+  buttonSizePx,
+  verticalWrapperClassName,
+  horizontalWrapperClassName,
+  children,
+}: FloatingActionBarProps) => {
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [orientation, setOrientation] = useState<FloatingActionOrientation>('vertical');
+
+  useEffect(() => {
+    const overlayElement = overlayRef.current;
+    const ownerElement =
+      overlayElement?.parentElement?.closest<HTMLElement>('[data-testid^="chat-message-bubble-"], [data-testid^="branch-"]') ??
+      overlayElement?.parentElement;
+    if (!ownerElement) {
+      return;
+    }
+
+    const updateOrientation = () => {
+      setOrientation(resolveFloatingActionOrientation(ownerElement.clientHeight, actionCount, buttonSizePx));
+    };
+
+    updateOrientation();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateOrientation);
+      return () => {
+        window.removeEventListener('resize', updateOrientation);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateOrientation();
+    });
+    resizeObserver.observe(ownerElement);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [actionCount, buttonSizePx]);
+
+  return (
+    <div
+      ref={overlayRef}
+      className={cn(
+        'pointer-events-none absolute z-20',
+        orientation === 'vertical' ? verticalWrapperClassName : horizontalWrapperClassName,
+      )}
+    >
+      <div
+        data-testid={testId}
+        data-action-orientation={orientation}
+        className={cn(
+          'rounded-md border border-border/80 bg-background/95 p-0.5 shadow-sm transition-opacity',
+          orientation === 'vertical'
+            ? 'sticky top-1/2 flex -translate-y-1/2 flex-col'
+            : 'ml-auto flex flex-row items-center',
+          visible ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 /** 侧边栏聊天消息区。 */
 export const ChatThread = ({
   messages,
@@ -208,8 +317,8 @@ export const ChatThread = ({
   };
 
   return (
-    <section className="flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1.5">
-      <div>
+    <section className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1">
+      <div className="min-w-0 space-y-0.5">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
           const messageIndex = messages.findIndex((current) => current.id === message.id);
@@ -224,7 +333,7 @@ export const ChatThread = ({
               key={message.id}
               data-testid={`chat-message-${message.id}`}
               data-message-role={message.role}
-              className="group/message relative py-1"
+              className="group/message relative min-w-0 py-0.5"
               onMouseEnter={() => setHoveredMessageId(message.id)}
               onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
               onFocus={() => setHoveredMessageId(message.id)}
@@ -236,7 +345,10 @@ export const ChatThread = ({
                 setHoveredMessageId((current) => (current === message.id ? null : current));
               }}
             >
-              <article data-testid={`chat-message-bubble-${message.id}`} className={resolveMessageBubbleClass(message.role, message.status)}>
+              <article
+                data-testid={`chat-message-bubble-${message.id}`}
+                className={resolveMessageBubbleClass(message.role, message.status)}
+              >
                 {isEditing ? (
                   <div className="grid gap-2">
                     <Textarea
@@ -263,17 +375,15 @@ export const ChatThread = ({
                       </Tooltip>
                     </div>
                   </div>
-                ) : (
-                  <>
-                    {hasAssistantBranches ? null : <ChatMarkdown content={visibleContent} />}
-                  </>
+                ) : hasAssistantBranches ? null : (
+                  <ChatMarkdown content={visibleContent} />
                 )}
 
                 {!hasAssistantBranches && message.status === 'error' ? (
-                  <p className="mt-2 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p>
+                  <p className="mt-1 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p>
                 ) : null}
                 {!hasAssistantBranches && message.status === 'cancelled' ? (
-                  <p className="mt-2 text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
                 ) : null}
 
                 {hasAssistantBranches ? (
@@ -302,14 +412,14 @@ export const ChatThread = ({
                 ) : null}
 
                 {!isEditing && message.status !== 'loading' && message.role === 'user' ? (
-                  <div className="pointer-events-none absolute inset-y-0 right-2 z-20">
-                    <div
-                      data-testid={`chat-message-actions-${message.id}`}
-                      className={cn(
-                        'sticky top-1/2 flex -translate-y-1/2 flex-row rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm transition-opacity',
-                        hoveredMessageId === message.id ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
-                      )}
-                    >
+                  <FloatingActionBar
+                    testId={`chat-message-actions-${message.id}`}
+                    visible={hoveredMessageId === message.id}
+                    actionCount={USER_MESSAGE_ACTION_COUNT}
+                    buttonSizePx={USER_MESSAGE_ACTION_BUTTON_SIZE_PX}
+                    verticalWrapperClassName="inset-y-0 right-1"
+                    horizontalWrapperClassName="-top-1 right-1"
+                  >
                       <Tooltip content={t('workspace.editMessage')}>
                         <Button
                           type="button"
@@ -354,8 +464,7 @@ export const ChatThread = ({
                           <FileCode2Icon />
                         </Button>
                       </Tooltip>
-                    </div>
-                  </div>
+                  </FloatingActionBar>
                 ) : null}
               </article>
             </div>
@@ -452,12 +561,12 @@ const AssistantBranchRail = ({
   const topScrollbarWidth = Math.max(contentWidth, viewportWidth, branches.length * MIN_ASSISTANT_BRANCH_COLUMN_WIDTH);
 
   return (
-    <div className="mt-2">
+    <div className="mt-1 min-w-0 w-full">
       {showTopScrollbar ? (
         <div
           ref={topScrollRef}
           data-testid={`branch-rail-top-scroll-${messageId}`}
-          className="overflow-x-scroll overflow-y-hidden pb-2"
+          className="w-full max-w-full overflow-x-scroll overflow-y-hidden pb-1.5"
           onScroll={() => syncScroll('top')}
         >
           <div style={{ width: topScrollbarWidth, height: 1 }} />
@@ -468,10 +577,10 @@ const AssistantBranchRail = ({
         ref={bottomScrollRef}
         data-testid={`branch-rail-${messageId}`}
         data-reading-layout={resolveBranchRailLayout(branches)}
-        className="overflow-x-scroll pb-3"
+        className={cn(branches.length <= 1 ? 'w-full max-w-full overflow-x-hidden pb-2' : 'w-full max-w-full overflow-x-scroll pb-2')}
         onScroll={() => syncScroll('bottom')}
       >
-        <div ref={contentRef} className="grid gap-3" style={buildBranchRailStyle(branches.length)}>
+        <div ref={contentRef} className="grid min-w-full gap-2" style={buildBranchRailStyle(branches.length)}>
           {branches.map((branch) => (
             <section
               key={branch.id}
@@ -482,7 +591,7 @@ const AssistantBranchRail = ({
               }}
               data-testid={`branch-${branch.id}`}
               className={cn(
-                'group/branch relative shrink-0 border border-border/80 bg-background/70 px-3 py-2 pr-14',
+                'group/branch relative shrink-0 border border-border/80 bg-background/70 px-2.5 py-1.5 pr-12',
                 selectedBranchId === branch.id && 'border-primary bg-primary/5',
               )}
               onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
@@ -503,14 +612,14 @@ const AssistantBranchRail = ({
               }}
             >
               <div className="min-w-0">
-                <div className="pointer-events-none absolute inset-y-0 right-2 z-20">
-                  <div
-                    data-testid={`branch-actions-${branch.id}`}
-                    className={cn(
-                      'sticky top-1/2 flex -translate-y-1/2 flex-col rounded-lg border border-border/80 bg-background/95 p-1 shadow-sm transition-opacity',
-                      activeBranchId === branch.id ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
-                    )}
-                  >
+                <FloatingActionBar
+                  testId={`branch-actions-${branch.id}`}
+                  visible={activeBranchId === branch.id}
+                  actionCount={ASSISTANT_BRANCH_ACTION_COUNT}
+                  buttonSizePx={ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX}
+                  verticalWrapperClassName="inset-y-0 right-1.5"
+                  horizontalWrapperClassName="top-1 right-1.5"
+                >
                     <PopoverPrimitive.Root
                       open={expandBranchPopoverTarget?.messageId === messageId && expandBranchPopoverTarget?.branchId === branch.id}
                       onOpenChange={(open) => onExpandBranchPopoverTarget(open ? { messageId, branchId: branch.id } : null)}
@@ -659,26 +768,25 @@ const AssistantBranchRail = ({
                         </Button>
                       </Tooltip>
                     </MiniConfirm>
-                  </div>
-                </div>
+                </FloatingActionBar>
 
-                <div className="flex items-start gap-3">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span>{branch.modelLabel}</span>
                   </div>
                 </div>
                 {branch.status === 'loading' ? (
-                  <div className="mt-1.5 flex items-center">
+                  <div className="mt-1 flex items-center">
                     <WorkspaceStatusGlyph label={t('workspace.status.loading')} status="loading" className="size-3.5" />
                   </div>
                 ) : null}
-                <div className="mt-1.5">
+                <div className="mt-1">
                   <ChatMarkdown content={branch.content} />
                 </div>
               </div>
-              {branch.status === 'error' ? <p className="mt-2 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
+              {branch.status === 'error' ? <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
               {branch.status === 'cancelled' ? (
-                <p className="mt-2 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
               ) : null}
             </section>
           ))}
@@ -691,9 +799,9 @@ const AssistantBranchRail = ({
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative px-0.5 py-0.5 transition-colors',
+    'relative min-w-0 grid gap-1 px-0.5 py-0.5 transition-colors',
     role === 'assistant' && 'pr-0 text-foreground',
-    role === 'user' && 'pr-12 text-foreground',
+    role === 'user' && 'pr-10 text-foreground',
     role === 'system' && 'pr-0 text-amber-900',
     status === 'error' && 'text-destructive',
     status === 'cancelled' && 'text-muted-foreground',
@@ -735,7 +843,7 @@ const resolveBranchRailLayout = (branches: ChatThreadBranch[]) => {
 const buildBranchRailStyle = (branchCount: number) => {
   if (branchCount <= 1) {
     return {
-      gridTemplateColumns: `minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr)`,
+      gridTemplateColumns: 'minmax(0, 1fr)',
     };
   }
   if (branchCount <= 2) {

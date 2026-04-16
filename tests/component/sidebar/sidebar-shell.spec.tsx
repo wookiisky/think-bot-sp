@@ -148,6 +148,7 @@ describe('SidebarShell', () => {
     await waitFor(() => expect(api.getSidebarBootstrap).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('sidebar-shell').className).toContain('overflow-hidden');
     expect(screen.getByTestId('sidebar-extraction-panel')).toBeVisible();
+    expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(await screen.findByText('提取内容')).toBeVisible();
     expect(screen.queryByText('浏览器标签')).toBeNull();

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -63,6 +63,7 @@ const createBaseProps = () => ({
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 beforeEach(() => {
@@ -141,7 +142,11 @@ describe('ChatThread', () => {
       />,
     );
 
-    expect(screen.getByTestId('branch-rail-assistant-legacy')).toHaveAttribute('data-reading-layout', 'single');
+    const branchRail = screen.getByTestId('branch-rail-assistant-legacy');
+    const branchGrid = branchRail.firstElementChild as HTMLDivElement;
+    expect(branchRail).toHaveAttribute('data-reading-layout', 'single');
+    expect(branchRail.className).toContain('overflow-x-hidden');
+    expect(branchGrid.getAttribute('style')).toContain('minmax(0, 1fr)');
     expect(screen.getByTestId('branch-assistant-legacy:primary')).toHaveTextContent('只有主回答');
     expect(screen.queryByTestId('chat-message-actions-assistant-legacy')).toBeNull();
   });
@@ -175,6 +180,119 @@ describe('ChatThread', () => {
     expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('opacity-100');
     expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('sticky');
     expect(within(messageCard).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
+  });
+
+  it('短消息高度不足时，用户消息和助手分支的悬浮按钮都会切成横排', async () => {
+    const user = userEvent.setup();
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      const testId = this.getAttribute('data-testid');
+      if (testId === 'chat-message-bubble-user-short' || testId === 'branch-branch-short') {
+        return 32;
+      }
+      return 240;
+    });
+
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'user-short',
+            role: 'user',
+            content: '短消息',
+            status: 'done',
+            errorMessage: null,
+            branches: [],
+            selectedBranchId: null,
+          },
+          {
+            id: 'assistant-short',
+            role: 'assistant',
+            content: '短回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-short',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '短回答',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-short',
+          },
+        ]}
+      />,
+    );
+
+    await user.hover(screen.getByTestId('chat-message-user-short'));
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-message-actions-user-short')).toHaveAttribute('data-action-orientation', 'horizontal');
+    });
+    expect(screen.getByTestId('chat-message-actions-user-short').className).toContain('flex-row');
+
+    await user.hover(screen.getByTestId('branch-branch-short'));
+    await waitFor(() => {
+      expect(screen.getByTestId('branch-actions-branch-short')).toHaveAttribute('data-action-orientation', 'horizontal');
+    });
+    expect(screen.getByTestId('branch-actions-branch-short').className).toContain('flex-row');
+    expect(screen.getByTestId('branch-actions-branch-short').parentElement?.className).toContain('top-1');
+    expect(screen.getByTestId('branch-actions-branch-short').parentElement?.className).not.toContain('-top-1');
+
+    clientHeightSpy.mockRestore();
+  });
+
+  it('顶部滚动条和分支区滚动位置保持同步', () => {
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-sync',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '分支一',
+                status: 'done',
+                errorMessage: null,
+              },
+              {
+                id: 'branch-2',
+                modelId: 'model-2',
+                modelLabel: '模型二',
+                isPrimary: false,
+                content: '分支二',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-1',
+          },
+        ]}
+      />,
+    );
+
+    const topScrollbar = screen.getByTestId('branch-rail-top-scroll-assistant-sync');
+    const branchRail = screen.getByTestId('branch-rail-assistant-sync');
+
+    topScrollbar.scrollLeft = 96;
+    fireEvent.scroll(topScrollbar);
+    expect(branchRail.scrollLeft).toBe(96);
+
+    fireEvent.scroll(branchRail);
+    branchRail.scrollLeft = 168;
+    fireEvent.scroll(branchRail);
+    expect(topScrollbar.scrollLeft).toBe(168);
   });
 
   it('分支卡片 hover 后显示统一按钮组，并支持重试、预览和定位', async () => {
@@ -334,7 +452,11 @@ describe('ChatThread', () => {
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
     const branchGrid = branchRail.firstElementChild as HTMLDivElement;
     expect(branchRail).toHaveAttribute('data-reading-layout', 'fixed-multi-columns');
+    expect(branchRail.className).toContain('w-full');
+    expect(branchRail.className).toContain('max-w-full');
+    expect(screen.getByTestId('branch-rail-top-scroll-assistant-1').className).toContain('max-w-full');
     expect(branchGrid.getAttribute('style')).toContain(`repeat(3, ${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px)`);
+    expect(branchGrid.className).toContain('min-w-full');
   });
 
   it('继续新增分支从分支卡片按钮打开模型列表，且不再显示同模型序号', async () => {

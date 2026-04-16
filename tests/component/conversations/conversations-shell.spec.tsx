@@ -194,6 +194,7 @@ describe('ConversationsShell', () => {
     expect(screen.getByTestId('conversations-shell').className).toContain('overflow-hidden');
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
+    expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(screen.getByTestId('conversations-extraction-panel')).toHaveStyle({ height: `${DEFAULT_EXTRACTION_PANEL_HEIGHT}px` });
   });
