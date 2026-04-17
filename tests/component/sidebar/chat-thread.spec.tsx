@@ -40,6 +40,24 @@ const t = (key: string) => translations[key] ?? key;
 let clipboardWriteText: ReturnType<typeof vi.fn>;
 let scrollIntoViewSpy: ReturnType<typeof vi.fn>;
 
+const createRect = (input: { top: number; bottom: number; left?: number; right?: number; width?: number; height?: number }): DOMRect => {
+  const left = input.left ?? 0;
+  const width = input.width ?? Math.max((input.right ?? left) - left, 0);
+  const height = input.height ?? Math.max(input.bottom - input.top, 0);
+  const right = input.right ?? left + width;
+  return {
+    x: left,
+    y: input.top,
+    top: input.top,
+    bottom: input.bottom,
+    left,
+    right,
+    width,
+    height,
+    toJSON: () => ({}),
+  } as DOMRect;
+};
+
 const createBaseProps = () => ({
   restoreMessageId: null,
   availableBranchModels: [] as Array<{ id: string; name: string }>,
@@ -144,10 +162,13 @@ describe('ChatThread', () => {
 
     const branchRail = screen.getByTestId('branch-rail-assistant-legacy');
     const branchGrid = branchRail.firstElementChild as HTMLDivElement;
+    const branchCard = screen.getByTestId('branch-assistant-legacy:primary');
     expect(branchRail).toHaveAttribute('data-reading-layout', 'single');
     expect(branchRail.className).toContain('overflow-x-hidden');
+    expect(branchGrid.className).toContain('w-full');
     expect(branchGrid.getAttribute('style')).toContain('minmax(0, 1fr)');
-    expect(screen.getByTestId('branch-assistant-legacy:primary')).toHaveTextContent('只有主回答');
+    expect(branchCard.className).toContain('w-full');
+    expect(branchCard).toHaveTextContent('只有主回答');
     expect(screen.queryByTestId('chat-message-actions-assistant-legacy')).toBeNull();
   });
 
@@ -234,12 +255,14 @@ describe('ChatThread', () => {
     });
     expect(screen.getByTestId('chat-message-actions-user-short').className).toContain('flex-row');
 
-    await user.hover(screen.getByTestId('branch-branch-short'));
     await waitFor(() => {
       expect(screen.getByTestId('branch-actions-branch-short')).toHaveAttribute('data-action-orientation', 'horizontal');
     });
     expect(screen.getByTestId('branch-actions-branch-short').className).toContain('flex-row');
+    await user.hover(screen.getByTestId('branch-branch-short'));
+    expect(screen.getByTestId('branch-actions-branch-short').className).toContain('opacity-100');
     expect(screen.getByTestId('branch-actions-branch-short').parentElement?.className).toContain('top-1');
+    expect(screen.getByTestId('branch-actions-branch-short').parentElement?.className).toContain('right-px');
     expect(screen.getByTestId('branch-actions-branch-short').parentElement?.className).not.toContain('-top-1');
 
     clientHeightSpy.mockRestore();
@@ -342,7 +365,9 @@ describe('ChatThread', () => {
 
     const branchCard = screen.getByTestId('branch-branch-2');
     await user.hover(branchCard);
-    expect(screen.getByTestId('branch-actions-branch-2').className).toContain('sticky');
+    expect(screen.getByTestId('branch-actions-branch-2').className).toContain('absolute');
+    expect(screen.getByTestId('branch-actions-branch-2')).toHaveStyle({ right: '0px' });
+    expect(screen.getByTestId('branch-actions-branch-2').parentElement?.className).toContain('right-px');
     await user.click(within(branchCard).getByRole('button', { name: '重试回答' }));
     await user.click(within(branchCard).getByRole('button', { name: '打开分支预览' }));
     await user.click(within(branchCard).getByRole('button', { name: '设为后续主分支' }));
@@ -356,6 +381,70 @@ describe('ChatThread', () => {
     expect(onOpenBranchPreview).toHaveBeenCalledWith('assistant-1', 'branch-2');
     expect(onSelectAssistantBranch).toHaveBeenCalledWith('assistant-1', 'branch-2');
     expect(scrollIntoViewSpy).toHaveBeenCalled();
+  });
+
+  it('长分支卡片的按钮按当前可视区域中点更新纵向位置', async () => {
+    const user = userEvent.setup();
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const rectState = {
+      viewport: { top: 0, bottom: 200, left: 0, width: 320 },
+      branch: { top: -100, bottom: 500, left: 0, width: 280 },
+    };
+
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const testId = this.getAttribute('data-testid');
+      if (testId === 'chat-thread-scroll-viewport') {
+        return createRect(rectState.viewport);
+      }
+      if (testId === 'branch-branch-visible-center') {
+        return createRect(rectState.branch);
+      }
+      return originalGetBoundingClientRect.call(this);
+    });
+
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-visible-center',
+            role: 'assistant',
+            content: '主回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-visible-center',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '长回答',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-visible-center',
+          },
+        ]}
+      />,
+    );
+
+    const branchCard = screen.getByTestId('branch-branch-visible-center');
+    const viewport = screen.getByTestId('chat-thread-scroll-viewport');
+    await user.hover(branchCard);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('branch-actions-branch-visible-center')).toHaveStyle({ top: '200px' });
+    });
+    expect(screen.getByTestId('branch-actions-branch-visible-center')).toHaveStyle({ right: '0px' });
+    expect(screen.getByTestId('branch-actions-branch-visible-center').parentElement?.className).toContain('right-px');
+
+    rectState.branch = { top: -250, bottom: 350, left: 0, width: 280 };
+    fireEvent.scroll(viewport);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('branch-actions-branch-visible-center')).toHaveStyle({ top: '350px' });
+    });
   });
 
   it('助手分支在两列模式下保持 2 列并由外层容器承载横向滚动', () => {

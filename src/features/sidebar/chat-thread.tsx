@@ -132,6 +132,8 @@ type AssistantBranchRailProps = {
   expandBranchPopoverTarget: { messageId: string; branchId: string } | null;
   /** 分支节点引用。 */
   branchRefs: RefObject<Record<string, HTMLElement | null>>;
+  /** 聊天滚动视口引用。 */
+  scrollViewportRef: RefObject<HTMLElement | null>;
   /** 文案翻译函数。 */
   t: WorkspaceTranslator;
   /** 更新当前 hover 的分支。 */
@@ -171,9 +173,17 @@ type FloatingActionBarProps = {
   verticalWrapperClassName: string;
   /** 横向布局容器定位。 */
   horizontalWrapperClassName: string;
+  /** 纵向布局定位模式。 */
+  verticalPositionMode?: 'owner-center' | 'visible-center';
+  /** 纵向滚动视口引用。 */
+  scrollViewportRef?: RefObject<HTMLElement | null>;
   /** 按钮内容。 */
   children: ReactNode;
 };
+
+/** 统一计算纵向按钮条高度，供定位逻辑复用。 */
+const resolveFloatingActionBarHeight = (actionCount: number, buttonSizePx: number) =>
+  actionCount * buttonSizePx + Math.max(actionCount - 1, 0) * FLOATING_ACTION_GAP_PX + FLOATING_ACTION_BAR_PADDING_PX * 2;
 
 /** 根据容器高度选择悬浮按钮方向，避免短消息被竖排按钮撑高。 */
 const resolveFloatingActionOrientation = (
@@ -199,10 +209,13 @@ const FloatingActionBar = ({
   buttonSizePx,
   verticalWrapperClassName,
   horizontalWrapperClassName,
+  verticalPositionMode = 'owner-center',
+  scrollViewportRef,
   children,
 }: FloatingActionBarProps) => {
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const [orientation, setOrientation] = useState<FloatingActionOrientation>('vertical');
+  const [visibleCenterOffsetPx, setVisibleCenterOffsetPx] = useState<number | null>(null);
 
   useEffect(() => {
     const overlayElement = overlayRef.current;
@@ -234,6 +247,54 @@ const FloatingActionBar = ({
     };
   }, [actionCount, buttonSizePx]);
 
+  useEffect(() => {
+    const overlayElement = overlayRef.current;
+    const ownerElement =
+      overlayElement?.parentElement?.closest<HTMLElement>('[data-testid^="chat-message-bubble-"], [data-testid^="branch-"]') ??
+      overlayElement?.parentElement;
+    const viewportElement = scrollViewportRef?.current ?? null;
+    if (!overlayElement || !ownerElement || !viewportElement || orientation !== 'vertical' || verticalPositionMode !== 'visible-center') {
+      setVisibleCenterOffsetPx(null);
+      return;
+    }
+
+    const halfActionBarHeight = resolveFloatingActionBarHeight(actionCount, buttonSizePx) / 2;
+    const updateVerticalPosition = () => {
+      const ownerRect = ownerElement.getBoundingClientRect();
+      const viewportRect = viewportElement.getBoundingClientRect();
+      const ownerHeight = ownerRect.height > 0 ? ownerRect.height : Math.max(ownerRect.bottom - ownerRect.top, 0);
+      const visibleTop = Math.max(ownerRect.top, viewportRect.top);
+      const visibleBottom = Math.min(ownerRect.bottom, viewportRect.bottom);
+      const visibleCenterY = visibleBottom > visibleTop ? (visibleTop + visibleBottom) / 2 : ownerRect.top + ownerHeight / 2;
+      const rawOffsetPx = visibleCenterY - ownerRect.top;
+      const maxOffsetPx = Math.max(ownerHeight - halfActionBarHeight, halfActionBarHeight);
+      const nextOffsetPx = Math.min(Math.max(rawOffsetPx, halfActionBarHeight), maxOffsetPx);
+      setVisibleCenterOffsetPx(nextOffsetPx);
+    };
+
+    updateVerticalPosition();
+    viewportElement.addEventListener('scroll', updateVerticalPosition, { passive: true });
+    window.addEventListener('resize', updateVerticalPosition);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        viewportElement.removeEventListener('scroll', updateVerticalPosition);
+        window.removeEventListener('resize', updateVerticalPosition);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateVerticalPosition();
+    });
+    resizeObserver.observe(ownerElement);
+    resizeObserver.observe(viewportElement);
+    return () => {
+      viewportElement.removeEventListener('scroll', updateVerticalPosition);
+      window.removeEventListener('resize', updateVerticalPosition);
+      resizeObserver.disconnect();
+    };
+  }, [actionCount, buttonSizePx, orientation, scrollViewportRef, verticalPositionMode]);
+
   return (
     <div
       ref={overlayRef}
@@ -248,10 +309,17 @@ const FloatingActionBar = ({
         className={cn(
           'rounded-md border border-border/80 bg-background/95 p-0.5 shadow-sm transition-opacity',
           orientation === 'vertical'
-            ? 'sticky top-1/2 flex -translate-y-1/2 flex-col'
+            ? verticalPositionMode === 'visible-center'
+              ? 'absolute right-0 flex -translate-y-1/2 flex-col'
+              : 'sticky top-1/2 flex -translate-y-1/2 flex-col'
             : 'ml-auto flex flex-row items-center',
           visible ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
         )}
+        style={
+          orientation === 'vertical' && verticalPositionMode === 'visible-center' && visibleCenterOffsetPx !== null
+            ? { top: `${visibleCenterOffsetPx}px`, right: 0 }
+            : undefined
+        }
       >
         {children}
       </div>
@@ -282,6 +350,7 @@ export const ChatThread = ({
   onNotice,
 }: ChatThreadProps) => {
   const branchRefs = useRef<Record<string, HTMLElement | null>>({});
+  const threadViewportRef = useRef<HTMLElement | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [hoveredBranchTarget, setHoveredBranchTarget] = useState<{ messageId: string; branchId: string } | null>(null);
   const [expandBranchPopoverTarget, setExpandBranchPopoverTarget] = useState<{ messageId: string; branchId: string } | null>(null);
@@ -317,7 +386,11 @@ export const ChatThread = ({
   };
 
   return (
-    <section className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1">
+    <section
+      ref={threadViewportRef}
+      data-testid="chat-thread-scroll-viewport"
+      className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1"
+    >
       <div className="min-w-0 space-y-0.5">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
@@ -396,6 +469,7 @@ export const ChatThread = ({
                     hoveredBranchTarget={hoveredBranchTarget}
                     expandBranchPopoverTarget={expandBranchPopoverTarget}
                     branchRefs={branchRefs}
+                    scrollViewportRef={threadViewportRef}
                     t={t}
                     onHoverBranch={setHoveredBranchTarget}
                     onExpandBranchPopoverTarget={setExpandBranchPopoverTarget}
@@ -485,6 +559,7 @@ const AssistantBranchRail = ({
   hoveredBranchTarget,
   expandBranchPopoverTarget,
   branchRefs,
+  scrollViewportRef,
   t,
   onHoverBranch,
   onExpandBranchPopoverTarget,
@@ -580,7 +655,7 @@ const AssistantBranchRail = ({
         className={cn(branches.length <= 1 ? 'w-full max-w-full overflow-x-hidden pb-2' : 'w-full max-w-full overflow-x-scroll pb-2')}
         onScroll={() => syncScroll('bottom')}
       >
-        <div ref={contentRef} className="grid min-w-full gap-2" style={buildBranchRailStyle(branches.length)}>
+        <div ref={contentRef} className="grid min-w-full w-full gap-2" style={buildBranchRailStyle(branches.length)}>
           {branches.map((branch) => (
             <section
               key={branch.id}
@@ -591,7 +666,7 @@ const AssistantBranchRail = ({
               }}
               data-testid={`branch-${branch.id}`}
               className={cn(
-                'group/branch relative shrink-0 border border-border/80 bg-background/70 px-2.5 py-1.5 pr-12',
+                'group/branch relative w-full shrink-0 border border-border/80 bg-background/70 px-2.5 py-1.5 pr-4',
                 selectedBranchId === branch.id && 'border-primary bg-primary/5',
               )}
               onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
@@ -617,8 +692,10 @@ const AssistantBranchRail = ({
                   visible={activeBranchId === branch.id}
                   actionCount={ASSISTANT_BRANCH_ACTION_COUNT}
                   buttonSizePx={ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX}
-                  verticalWrapperClassName="inset-y-0 right-1.5"
-                  horizontalWrapperClassName="top-1 right-1.5"
+                  verticalWrapperClassName="inset-y-0 right-px"
+                  horizontalWrapperClassName="top-1 right-px"
+                  verticalPositionMode="visible-center"
+                  scrollViewportRef={scrollViewportRef}
                 >
                     <PopoverPrimitive.Root
                       open={expandBranchPopoverTarget?.messageId === messageId && expandBranchPopoverTarget?.branchId === branch.id}

@@ -1458,7 +1458,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 type="button"
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
-                  'relative inline-flex items-center gap-1.5 overflow-hidden border px-2.5 py-1.5 text-left text-[11px] shadow-sm transition-colors',
+                  'relative inline-flex items-center gap-1.5 overflow-hidden border px-1.5 py-[2px] text-left text-[11px] shadow-sm transition-colors',
                   showLoadingRing && 'tab-loading-border border-transparent',
                   isActive
                     ? showLoadingRing
