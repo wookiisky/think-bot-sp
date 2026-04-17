@@ -24,7 +24,7 @@
 - 正常流：
   - `streamText` 输出主回答。
   - 事件顺序固定为 `STARTED -> CHUNK* -> FINISHED`。
-  - `includePageContent=true` 时，真实发给模型的用户消息包含页面正文与用户消息。
+  - `includePageContent=true` 时，真实发给模型的首条消息通常是 system 消息，页面正文位于其末尾的 `# Page Content` 段；用户消息正文保持原样。
   - 自动触发快捷输入复用同一条主回答调度链路。
   - 快捷输入首轮按“主模型 + 并行模型”触发多分支。
   - 分支完成后写入历史。
@@ -35,7 +35,7 @@
 - 错误流：
   - Provider 认证失败。
   - 不支持图片的模型收到图片输入。
-  - `includePageContent=true` 但页面缓存缺失时，退化为仅发送用户消息。
+  - `includePageContent=true` 但页面缓存缺失时，不补空的 `# Page Content` 段，直接退化为仅发送用户消息。
   - setup 在写入助手占位后失败时，助手消息被补偿为 `error`。
   - 首轮快捷输入开启失败回滚后，流式失败只展示错误提示，不保留用户消息和助手错误态。
   - 某个分支返回错误。

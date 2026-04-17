@@ -186,7 +186,7 @@
 2. UI 通过 `SEND_CHAT` 提交 `promptTabId / modelId / text / images / includePageContent`。
 3. background 先把本次 `includePageContent` 回写到当前 `PageRecord.includePageContent`，再读取 `PageRecord.content`。
 4. background 读取模型配置，校验图片能力，不匹配时在任何持久化前直接失败。
-5. 若 `includePageContent=true` 且页面缓存正文非空，则把页面正文与用户消息拼成同一次用户输入；若缓存缺失，则自动退化为仅发送用户消息。
+5. 若 `includePageContent=true` 且页面缓存正文非空，则把页面正文追加到最终 `system prompt` 末尾的 `# Page Content` 段；用户消息正文保持原样。若缓存缺失，则自动退化为仅发送用户消息。
 6. LLM Dispatch 先写用户消息、助手占位和 `LoadingStateRecord`。
 7. side panel 通过 long-lived port 订阅当前 `promptTab` 的流式事件。
 8. Dispatch 使用 `streamText` 输出主回答，每个 chunk 都先落 `ConversationRecord`，再推 `CHAT_STREAM_CHUNK`。
