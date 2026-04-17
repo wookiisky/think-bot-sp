@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpIcon, DownloadIcon, EraserIcon, ImagePlusIcon, LoaderCircleIcon, Trash2Icon } from 'lucide-react';
+import { ArrowUpIcon, DownloadIcon, EraserIcon, FileTextIcon, ImagePlusIcon, LoaderCircleIcon, Trash2Icon } from 'lucide-react';
 
 import { Button, buttonVariants } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -143,78 +143,11 @@ export const ChatInput = ({
         />
       </div>
 
-      <div data-testid="chat-input-panel" className="flex flex-col gap-1" style={{ minHeight: `${composerHeight}px` }}>
-        <div className="flex items-center gap-1.5">
-          <Input
-            aria-label={t('workspace.chatInput')}
-            className="h-8 bg-background/90 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
-            value={text}
-            disabled={disabled}
-            onChange={(event) => onTextChange(event.target.value)}
-            onCompositionStart={() => setIsComposing(true)}
-            onCompositionEnd={() => setIsComposing(false)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
-                return;
-              }
-              if (isComposing || event.nativeEvent.isComposing) {
-                return;
-              }
-
-              event.preventDefault();
-              submitCurrentInput();
-            }}
-          />
-
-          <Tooltip content={t('workspace.addImage')}>
-            <label
-              aria-disabled={disabled || !supportsImages}
-              className={cn(
-                buttonVariants({ variant: 'outline', size: 'icon-sm' }),
-                'relative size-[22px] cursor-pointer rounded-md',
-                (disabled || !supportsImages) && 'pointer-events-none opacity-50',
-              )}
-            >
-              <ImagePlusIcon />
-              <span className="sr-only">{t('workspace.addImage')}</span>
-              <input
-                aria-label={t('workspace.addImage')}
-                type="file"
-                accept="image/*"
-                multiple
-                className="sr-only"
-                disabled={disabled || !supportsImages}
-                onChange={(event) => {
-                  const files = Array.from(event.target.files ?? []);
-                  if (files.length === 0) {
-                    return;
-                  }
-                  void Promise.all(files.map((file) => fileToDataUrl(file)))
-                    .then((dataUrls) => {
-                      onImagesChange([...images, ...dataUrls]);
-                    })
-                    .finally(() => {
-                      event.currentTarget.value = '';
-                    });
-                }}
-              />
-            </label>
-          </Tooltip>
-
-          <Tooltip content={t('workspace.send')}>
-            <Button
-              type="button"
-              size="icon-sm"
-              aria-label={t('workspace.send')}
-              className="size-[22px] rounded-md"
-              disabled={isSendDisabled}
-              onClick={submitCurrentInput}
-            >
-              {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
-            </Button>
-          </Tooltip>
-        </div>
-
+      <div
+        data-testid="chat-input-panel"
+        className="flex flex-col gap-1"
+        style={{ minHeight: images.length > 0 ? `${composerHeight}px` : 'auto' }}
+      >
         {images.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {images.map((image, index) => (
@@ -247,12 +180,67 @@ export const ChatInput = ({
           </div>
         ) : null}
 
-        <div className="mt-auto overflow-x-auto pb-0.5">
-          <div className="flex min-w-max items-center gap-1.5">
-            <span className="shrink-0 text-[11px] text-muted-foreground">{t('workspace.model')}</span>
+        <div className="overflow-x-auto pb-0.5">
+          <div className="flex min-w-max flex-nowrap items-center gap-1.5">
+            <Input
+              aria-label={t('workspace.chatInput')}
+              className="h-8 min-w-[240px] flex-1 shrink-0 bg-background/90 px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+              value={text}
+              disabled={disabled}
+              onChange={(event) => onTextChange(event.target.value)}
+              onCompositionStart={() => setIsComposing(true)}
+              onCompositionEnd={() => setIsComposing(false)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) {
+                  return;
+                }
+                if (isComposing || event.nativeEvent.isComposing) {
+                  return;
+                }
+
+                event.preventDefault();
+                submitCurrentInput();
+              }}
+            />
+
+            <Tooltip content={t('workspace.addImage')}>
+              <label
+                aria-disabled={disabled || !supportsImages}
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'icon-sm' }),
+                  'relative size-[22px] shrink-0 cursor-pointer rounded-md',
+                  (disabled || !supportsImages) && 'pointer-events-none opacity-50',
+                )}
+              >
+                <ImagePlusIcon />
+                <span className="sr-only">{t('workspace.addImage')}</span>
+                <input
+                  aria-label={t('workspace.addImage')}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  disabled={disabled || !supportsImages}
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    if (files.length === 0) {
+                      return;
+                    }
+                    void Promise.all(files.map((file) => fileToDataUrl(file)))
+                      .then((dataUrls) => {
+                        onImagesChange([...images, ...dataUrls]);
+                      })
+                      .finally(() => {
+                        event.currentTarget.value = '';
+                      });
+                  }}
+                />
+              </label>
+            </Tooltip>
+
             <select
               aria-label={t('workspace.selectModel')}
-              className="h-7 w-28 shrink-0 rounded-md border border-input/80 bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="h-7 w-20 shrink-0 rounded-md border border-input/80 bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
               disabled={disabled || models.length === 0}
               value={selectedModelId}
               onChange={(event) => onSelectModel(event.target.value)}
@@ -265,21 +253,24 @@ export const ChatInput = ({
               ))}
             </select>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-pressed={includePageContent}
-              className={cn(
-                'h-7 shrink-0 rounded-md px-2.5',
-                includePageContent
-                  ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
-                  : 'border-border bg-background/70 text-muted-foreground hover:text-foreground',
-              )}
-              onClick={() => onIncludePageContentChange(!includePageContent)}
-            >
-              {t('workspace.includePageContent')}
-            </Button>
+            <Tooltip content={t('workspace.includePageContent')}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label={t('workspace.includePageContent')}
+                aria-pressed={includePageContent}
+                className={cn(
+                  'size-[22px] shrink-0 rounded-md',
+                  includePageContent
+                    ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
+                    : 'border-border bg-background/70 text-muted-foreground hover:text-foreground',
+                )}
+                onClick={() => onIncludePageContentChange(!includePageContent)}
+              >
+                <FileTextIcon />
+              </Button>
+            </Tooltip>
 
             <MiniConfirm
               message={t('workspace.notice.clearTabConfirm')}
@@ -305,6 +296,19 @@ export const ChatInput = ({
                 onClick={() => void onExport()}
               >
                 <DownloadIcon />
+              </Button>
+            </Tooltip>
+
+            <Tooltip content={t('workspace.send')}>
+              <Button
+                type="button"
+                size="icon-sm"
+                aria-label={t('workspace.send')}
+                className="size-[22px] shrink-0 rounded-md"
+                disabled={isSendDisabled}
+                onClick={submitCurrentInput}
+              >
+                {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
               </Button>
             </Tooltip>
           </div>
