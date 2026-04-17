@@ -14,7 +14,7 @@ type ChatMarkdownProps = {
   /** 聊天消息 Markdown 渲染器。 */
 export const ChatMarkdown = ({ content, className }: ChatMarkdownProps) => {
   if (!content.trim()) {
-    return <span className="text-sm leading-5 text-muted-foreground">...</span>;
+    return null;
   }
 
   return (

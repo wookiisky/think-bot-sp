@@ -5,7 +5,7 @@ import {
   ChevronsUpIcon,
   CopyIcon,
   Edit3Icon,
-  ExternalLinkIcon,
+  EyeIcon,
   FileCode2Icon,
   GitBranchPlusIcon,
   RotateCcwIcon,
@@ -35,7 +35,7 @@ const FLOATING_ACTION_BAR_PADDING_PX = 4;
 const USER_MESSAGE_ACTION_BUTTON_SIZE_PX = 24;
 const USER_MESSAGE_ACTION_COUNT = 4;
 const ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX = 20;
-const ASSISTANT_BRANCH_ACTION_COUNT = 9;
+const ASSISTANT_BRANCH_ACTION_COUNT = 8;
 
 type ChatThreadProps = {
   /** 当前消息列表。 */
@@ -765,17 +765,6 @@ const AssistantBranchRail = ({
                         </Button>
                       </Tooltip>
                     ) : null}
-                    <Tooltip content={t('workspace.openBranchPreview')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.openBranchPreview')}
-                        onClick={() => onOpenBranchPreview(messageId, branch.id)}
-                      >
-                        <ExternalLinkIcon />
-                      </Button>
-                    </Tooltip>
                     <Tooltip content={t('workspace.selectPrimaryBranch')}>
                       <Button
                         type="button"
@@ -847,10 +836,22 @@ const AssistantBranchRail = ({
                     </MiniConfirm>
                 </FloatingActionBar>
 
-                <div className="flex items-start gap-2">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span>{branch.modelLabel}</span>
-                  </div>
+                <div
+                  data-testid={`branch-header-${branch.id}`}
+                  className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"
+                >
+                  <span className="min-w-0 truncate">{branch.modelLabel}</span>
+                  <Tooltip content={t('workspace.openBranchPreview')}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t('workspace.openBranchPreview')}
+                      onClick={() => onOpenBranchPreview(messageId, branch.id)}
+                    >
+                      <EyeIcon />
+                    </Button>
+                  </Tooltip>
                 </div>
                 {branch.status === 'loading' ? (
                   <div className="mt-1 flex items-center">

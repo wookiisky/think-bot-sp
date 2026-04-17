@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
@@ -118,7 +118,9 @@ describe('SidebarShell loading restore', () => {
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
     expect(await screen.findByText('部分回答')).toBeVisible();
-    expect(screen.getAllByRole('button', { name: '停止' }).length).toBeGreaterThan(0);
+    const branchCard = screen.getByTestId('branch-assistant-1:primary');
+    expect(branchCard).toHaveTextContent('部分回答');
+    expect(within(branchCard).queryByRole('button', { name: '停止' })).not.toBeNull();
     expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 
@@ -264,7 +266,9 @@ describe('SidebarShell loading restore', () => {
 
     expect(await screen.findByText('快捷标签恢复内容')).toBeVisible();
     expect(screen.getByRole('tab', { name: /问题拆解/ })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getAllByRole('button', { name: '停止' }).length).toBeGreaterThan(0);
+    const branchCard = screen.getByTestId('branch-assistant-quick-1:primary');
+    expect(branchCard).toHaveTextContent('快捷标签恢复内容');
+    expect(within(branchCard).queryByRole('button', { name: '停止' })).not.toBeNull();
     expect(screen.queryByText('恢复生成中')).toBeNull();
   });
 });

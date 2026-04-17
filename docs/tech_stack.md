@@ -17,6 +17,13 @@
 - 不设计需要常驻后台内存的能力。
 - side panel 首屏初始化按“挂载后主动拉取 bootstrap”设计，不依赖 background 主动推送首屏消息。
 
+开发约束：
+
+- 本项目默认通过 `wxt.config.ts` 关闭 WXT 自动拉起浏览器，避免 Chromium 调试连接异常直接中断 `pnpm dev`。
+- 本项目在 dev server 上显式开启轮询监听，处理当前环境下文件事件监听不稳定的问题；代价是开发时会多一点 CPU 占用。
+- 本地开发时先执行 `pnpm dev`，再到 `chrome://extensions` 手动以“加载已解压的扩展程序”方式加载 `.output/chrome-mv3-dev`。
+- 代码变更后由 WXT 持续 watch 并重建产物，不依赖自动打开临时浏览器 profile。
+
 ## 2. UI 与交互库
 
 - `shadcn/ui`

@@ -1262,7 +1262,9 @@ describe('SidebarShell', () => {
 
     const dialog = await screen.findByTestId('branch-preview-dialog');
     expect(dialog).toHaveStyle({ width: '760px', height: '560px' });
-    expect(screen.getByRole('heading', { name: '分支内容预览' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: '主模型' })).toBeVisible();
+    expect(screen.queryByText('分支内容预览')).toBeNull();
+    expect(screen.queryByText('预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。')).toBeNull();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览标题')).toBeVisible();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览内容')).toBeVisible();
 

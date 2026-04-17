@@ -1,13 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from 'lucide-react';
 
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from './chat-markdown';
 import type { BranchPreviewDetail, WorkspaceTranslator } from './workspace-state';
-import { WorkspaceStatusGlyph, type WorkspaceVisualStatus } from './workspace-status';
 
 type BranchPreviewOverlayProps = {
   /** 当前是否打开。 */
@@ -58,40 +56,9 @@ const clampPreviewSize = (size: PreviewSize): PreviewSize => {
   };
 };
 
-/** 把分支状态映射成统一视觉状态。 */
-const toPreviewVisualStatus = (status: BranchPreviewDetail['status']): WorkspaceVisualStatus => {
-  switch (status) {
-    case 'loading':
-      return 'loading';
-    case 'error':
-      return 'error';
-    case 'cancelled':
-      return 'cancelled';
-    case 'done':
-    default:
-      return 'done';
-  }
-};
-
-/** 解析分支状态文案。 */
-const resolvePreviewStatusLabel = (status: BranchPreviewDetail['status'], t: WorkspaceTranslator) => {
-  switch (status) {
-    case 'loading':
-      return t('workspace.status.loading');
-    case 'error':
-      return t('workspace.status.error');
-    case 'cancelled':
-      return t('workspace.status.cancelled');
-    case 'done':
-    default:
-      return t('workspace.status.done');
-  }
-};
-
 /** 分支内容独立预览层。 */
 export const BranchPreviewOverlay = ({ open, preview, t, onClose }: BranchPreviewOverlayProps) => {
   const titleId = useId();
-  const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<PreviewSize>(() =>
     clampPreviewSize({
@@ -100,11 +67,6 @@ export const BranchPreviewOverlay = ({ open, preview, t, onClose }: BranchPrevie
     }),
   );
   const [resizeState, setResizeState] = useState<PreviewResizeState | null>(null);
-
-  const statusLabel = useMemo(
-    () => (preview ? resolvePreviewStatusLabel(preview.status, t) : ''),
-    [preview, t],
-  );
 
   useEffect(() => {
     if (!open) {
@@ -190,29 +152,15 @@ export const BranchPreviewOverlay = ({ open, preview, t, onClose }: BranchPrevie
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={descriptionId}
         data-testid="branch-preview-dialog"
         tabIndex={-1}
         className="relative flex max-w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-background shadow-2xl outline-none"
         style={size}
       >
-        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border/80 px-5 py-4">
-          <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 id={titleId} className="text-base font-semibold text-foreground">
-                {t('workspace.branchPreviewTitle')}
-              </h2>
-              <Badge variant="outline">{t(preview.isPrimary ? 'workspace.status.primaryBranch' : 'workspace.status.branch')}</Badge>
-              <Badge variant="secondary">{preview.modelLabel}</Badge>
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <WorkspaceStatusGlyph label={statusLabel} status={toPreviewVisualStatus(preview.status)} className="size-3.5" />
-                {statusLabel}
-              </span>
-            </div>
-            <p id={descriptionId} className="text-sm text-muted-foreground">
-              {t('workspace.branchPreviewDescription')}
-            </p>
-          </div>
+        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border/80 px-5 py-4">
+          <h2 id={titleId} className="min-w-0 truncate text-base font-semibold text-foreground">
+            {preview.modelLabel}
+          </h2>
           <Button type="button" variant="ghost" size="icon-sm" aria-label={t('workspace.closeBranchPreview')} onClick={onClose}>
             <XIcon />
           </Button>

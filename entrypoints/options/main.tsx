@@ -1,9 +1,7 @@
-import { createRoot } from 'react-dom/client';
-
 import '../../assets/styles/globals.css';
 import '../../assets/styles/material-symbols.css';
 
 import { SettingsShell } from '../../src/features/settings/settings-shell';
+import { renderEntrypointApp } from '../../src/shared/react-entrypoint-root';
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<SettingsShell />);
+renderEntrypointApp(<SettingsShell />);

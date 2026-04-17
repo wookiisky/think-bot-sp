@@ -74,6 +74,7 @@
 - 使用 persistent context。
 - 失败默认保留 trace、video、screenshot。
 - 通过测试桩控制模型与同步返回，避免依赖真实外部服务。
+- MV3 扩展 E2E 依赖真实桌面浏览器环境；如果运行容器或沙箱会拦截 Chromium 启动，优先把问题归类为环境故障，不要先怀疑业务代码。
 
 基线约束：
 
@@ -81,6 +82,10 @@
 - extension page 路由断言应优先复用 shared 常量，避免测试写死构建产物文件名。
 - 当前 E2E 会在 `globalSetup` 中写入共享 `.output/chrome-mv3` 目录，不应并行启动多个独立 `pnpm test:e2e -- ...` 进程。
 - 需要区分“业务入口复用测试”和“浏览器真实时序测试”：前者验证 handler 分支，后者验证单击打开、自动隐藏和预配置是否符合真实浏览器行为。
+- 如果 `launchPersistentContext` 或 `chromium.launch` 还没进入业务断言就直接失败，先做最小复现：先跑最小 `chromium.launch()`，再跑最小 `launchPersistentContext()`，最后再跑仓库 E2E，用来区分“浏览器启动问题”和“业务断言问题”。
+- 如果最小浏览器启动在受限环境里直接 `SIGABRT` 或类似崩溃，但在真实桌面环境可启动，后续仓库 E2E 应改到真实桌面环境执行，不要继续在当前受限环境里消耗时间。
+- 任何依赖 hover 才出现的按钮、Popover 或浮层，都必须先触发真实 hover，再断言可见或可点击。
+- 定位器应优先收窄到真实业务节点，比如真实分支卡片 `section[data-testid^="branch-"]`，不要直接用过宽的 `[data-testid^="branch-"]` 把 `branch-actions-*`、`branch-header-*` 之类辅助节点一起匹配进去。
 
 ## 6. 必须长期回归的高风险场景
 

@@ -1,12 +1,11 @@
-import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
 
 import '../../assets/styles/globals.css';
 
 import { createSidebarApi } from '../../src/features/sidebar/sidebar-api';
 import { SidebarShell } from '../../src/features/sidebar/sidebar-shell';
+import { renderEntrypointApp } from '../../src/shared/react-entrypoint-root';
 
-const root = createRoot(document.getElementById('root')!);
 type SidebarContext = {
   /** 目标浏览器标签页 id。 */
   tabId: number;
@@ -55,4 +54,4 @@ const App = () => {
   return <SidebarShell api={api} tabId={context.tabId} pageUrl={context.pageUrl} />;
 };
 
-root.render(<App />);
+renderEntrypointApp(<App />);

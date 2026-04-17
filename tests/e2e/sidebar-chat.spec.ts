@@ -870,11 +870,12 @@ test('助手消息支持继续新增分支，并展示分支结果', async ({ co
 
   await sidepanel.locator('[data-testid^="chat-message-"]').filter({ hasText: '分支测试响应' }).first().hover();
   await sidepanel.getByRole('button', { name: '继续新增分支' }).click();
-  const branchCard = sidepanel.locator('[data-testid^="branch-"]').filter({ hasText: '分支模型' }).first();
+  await sidepanel.getByRole('button', { name: '分支模型' }).click();
+  const branchCard = sidepanel.locator('section[data-testid^="branch-"]').filter({ hasText: '分支模型' }).first();
   await expect(branchCard).toBeVisible({ timeout: 20_000 });
   await expect(branchCard).toContainText('分支模型');
   await branchCard.hover();
-  await expect(sidepanel.getByRole('button', { name: '删除分支' })).toBeVisible({ timeout: 20_000 });
+  await expect(branchCard.getByRole('button', { name: '删除分支' })).toBeVisible({ timeout: 20_000 });
 });
 
 test('用户消息支持编辑重发，助手消息支持重试并替换旧结果', async ({ context, extensionId }) => {

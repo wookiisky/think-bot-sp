@@ -377,6 +377,9 @@ describe('ConversationsShell', () => {
     await user.click(screen.getByRole('button', { name: '打开分支预览' }));
 
     expect(await screen.findByTestId('branch-preview-dialog')).toBeVisible();
+    expect(screen.getByRole('heading', { name: '模型一' })).toBeVisible();
+    expect(screen.queryByText('分支内容预览')).toBeNull();
+    expect(screen.queryByText('预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。')).toBeNull();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('历史分支')).toBeVisible();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览项')).toBeVisible();
 

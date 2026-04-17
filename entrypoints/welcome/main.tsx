@@ -1,14 +1,11 @@
-import { createRoot } from 'react-dom/client';
-
 import '../../assets/styles/globals.css';
 
 import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
 import { PageShell } from '../../src/ui/page-shell';
+import { renderEntrypointApp } from '../../src/shared/react-entrypoint-root';
 
 const localeParam = new URLSearchParams(window.location.search).get('locale') ?? 'en';
-const root = createRoot(document.getElementById('root')!);
-
-root.render(
+renderEntrypointApp(
   <div>
     <PageShell
       title="Welcome"

@@ -5,6 +5,16 @@ import { createChromeLocalAdapter } from '../../../src/repositories/chrome-local
 import { createConversationRepository } from '../../../src/repositories/conversation-repository';
 import { createFakeStorageArea } from '../../helpers/fake-storage';
 
+/** 构造单主分支初始种子，保持测试契约与仓库实现一致。 */
+const createPrimaryBranchSeed = (id: string) => [
+  {
+    id,
+    modelId: 'model-1',
+    modelLabel: '主模型',
+    isPrimary: true,
+  },
+];
+
 describe('conversation-repository editing', () => {
   it('支持主聊天流按顺序追加用户消息、助手占位、chunk、完成并清理 loading', async () => {
     const storage = createFakeStorageArea();
@@ -31,9 +41,8 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
-      primaryBranchId: 'assistant-1:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-1:primary'),
+      selectedBranchId: 'assistant-1:primary',
       now: 11,
     });
     await repo.appendAssistantChunk({
@@ -132,9 +141,8 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
-      primaryBranchId: 'assistant-1:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-1:primary'),
+      selectedBranchId: 'assistant-1:primary',
       now: 21,
     });
     await repo.appendAssistantChunk({
@@ -216,9 +224,8 @@ describe('conversation-repository editing', () => {
       messageId: 'user-auto-1',
       content: '请总结当前页面，并列出风险',
       newAssistantMessageId: 'assistant-auto-1',
-      newPrimaryBranchId: 'assistant-auto-1:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-auto-1:primary'),
+      selectedBranchId: 'assistant-auto-1:primary',
       now: 31,
     });
 
@@ -250,9 +257,8 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-2',
-      primaryBranchId: 'assistant-2:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-2:primary'),
+      selectedBranchId: 'assistant-2:primary',
       now: 30,
     });
     await repo.finishAssistantMessage({
@@ -281,9 +287,8 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-3',
-      primaryBranchId: 'assistant-3:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-3:primary'),
+      selectedBranchId: 'assistant-3:primary',
       now: 40,
     });
     await repo.failAssistantMessage({
@@ -395,9 +400,8 @@ describe('conversation-repository editing', () => {
       messageId: 'user-1',
       content: '新问题',
       newAssistantMessageId: 'assistant-edit',
-      newPrimaryBranchId: 'assistant-edit:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-edit:primary'),
+      selectedBranchId: 'assistant-edit:primary',
       now: 10,
     });
 
@@ -537,9 +541,8 @@ describe('conversation-repository editing', () => {
       promptTabId: 'chat',
       messageId: 'assistant-1',
       newAssistantMessageId: 'assistant-retry',
-      newPrimaryBranchId: 'assistant-retry:primary',
-      modelId: 'model-1',
-      modelLabel: '主模型',
+      initialBranches: createPrimaryBranchSeed('assistant-retry:primary'),
+      selectedBranchId: 'assistant-retry:primary',
       now: 20,
     });
 

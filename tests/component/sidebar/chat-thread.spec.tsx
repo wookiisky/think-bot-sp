@@ -103,10 +103,13 @@ beforeEach(() => {
 });
 
 describe('ChatThread', () => {
-  it('助手分支按 Markdown 渲染，头部只保留模型名称', () => {
+  it('助手分支按 Markdown 渲染，头部模型名和预览按钮作为整体居中显示', () => {
+    const onOpenBranchPreview = vi.fn();
+
     render(
       <ChatThread
         {...createBaseProps()}
+        onOpenBranchPreview={onOpenBranchPreview}
         messages={[
           {
             id: 'assistant-1',
@@ -140,6 +143,8 @@ describe('ChatThread', () => {
     expect(screen.queryByText('主分支')).toBeNull();
     expect(screen.queryByText('分支')).toBeNull();
     expect(screen.queryByText('#1')).toBeNull();
+    expect(screen.getByTestId('branch-header-branch-1').className).toContain('justify-center');
+    expect(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '打开分支预览' })).toBeVisible();
   });
 
   it('旧助手消息也统一按分支卡片展示', () => {
@@ -318,7 +323,7 @@ describe('ChatThread', () => {
     expect(topScrollbar.scrollLeft).toBe(168);
   });
 
-  it('分支卡片 hover 后显示统一按钮组，并支持重试、预览和定位', async () => {
+  it('分支卡片 hover 后显示统一按钮组，并支持重试和定位；预览按钮常驻显示', async () => {
     const user = userEvent.setup();
     const onRetryAssistantMessage = vi.fn().mockResolvedValue(undefined);
     const onSelectAssistantBranch = vi.fn().mockResolvedValue(undefined);
@@ -364,12 +369,12 @@ describe('ChatThread', () => {
     );
 
     const branchCard = screen.getByTestId('branch-branch-2');
+    await user.click(within(branchCard).getByRole('button', { name: '打开分支预览' }));
     await user.hover(branchCard);
     expect(screen.getByTestId('branch-actions-branch-2').className).toContain('absolute');
     expect(screen.getByTestId('branch-actions-branch-2')).toHaveStyle({ right: '0px' });
     expect(screen.getByTestId('branch-actions-branch-2').parentElement?.className).toContain('right-px');
     await user.click(within(branchCard).getByRole('button', { name: '重试回答' }));
-    await user.click(within(branchCard).getByRole('button', { name: '打开分支预览' }));
     await user.click(within(branchCard).getByRole('button', { name: '设为后续主分支' }));
     expect(within(branchCard).getByRole('button', { name: '复制纯文本' })).toBeVisible();
     expect(within(branchCard).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
@@ -381,6 +386,38 @@ describe('ChatThread', () => {
     expect(onOpenBranchPreview).toHaveBeenCalledWith('assistant-1', 'branch-2');
     expect(onSelectAssistantBranch).toHaveBeenCalledWith('assistant-1', 'branch-2');
     expect(scrollIntoViewSpy).toHaveBeenCalled();
+  });
+
+  it('助手分支内容为空时不再渲染省略号占位', () => {
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-loading',
+            role: 'assistant',
+            content: '',
+            status: 'loading',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-loading',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-loading',
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('...')).toBeNull();
+    expect(screen.getByTestId('branch-branch-loading')).toHaveTextContent('模型一');
   });
 
   it('长分支卡片的按钮按当前可视区域中点更新纵向位置', async () => {

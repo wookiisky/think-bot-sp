@@ -137,7 +137,9 @@ test('worker 重启后仍能恢复持久化 loading', async ({ context, extensio
   );
 
   await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('恢复测试正文');
-  await expect(sidepanel.getByText('生成中')).toBeVisible();
-  await expect(sidepanel.getByRole('button', { name: '停止' })).toBeVisible();
+  const branchCard = sidepanel.getByTestId('branch-branch-1');
+  await expect(branchCard).toContainText('恢复测试模型');
+  await branchCard.hover();
+  await expect(branchCard.getByRole('button', { name: '停止' })).toBeVisible();
   await expect(sidepanel.getByText('恢复生成中…')).toHaveCount(0);
 });

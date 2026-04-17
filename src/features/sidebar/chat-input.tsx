@@ -11,7 +11,7 @@ import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 /** 输入区最小高度。 */
 const MIN_COMPOSER_HEIGHT = 82;
 /** 输入区默认高度。 */
-const DEFAULT_COMPOSER_HEIGHT = 96;
+const DEFAULT_COMPOSER_HEIGHT = 108;
 /** 输入区最大高度。 */
 const MAX_COMPOSER_HEIGHT = 220;
 
@@ -146,7 +146,7 @@ export const ChatInput = ({
       <div
         data-testid="chat-input-panel"
         className="flex flex-col gap-1"
-        style={{ minHeight: images.length > 0 ? `${composerHeight}px` : 'auto' }}
+        style={{ minHeight: `${composerHeight}px` }}
       >
         {images.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
