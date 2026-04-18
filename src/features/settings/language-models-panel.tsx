@@ -97,14 +97,14 @@ const SortableModelCard = ({
     >
       <section
         className={[
-          'grid gap-3 rounded-2xl border px-4 py-3 transition-colors',
+          'grid gap-2.5 rounded-2xl border px-3 py-2.5 transition-colors',
           expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`${t('settings.dragModel')}:${model.name}`}
             disabled={disabled}
             {...attributes}
@@ -119,11 +119,11 @@ const SortableModelCard = ({
             data-testid={`language-model-summary-${model.id}`}
             onClick={onSelect}
           >
-            <span className="truncate text-sm font-semibold">{model.name}</span>
+            <span className="truncate text-xs font-semibold">{model.name}</span>
             <span className="truncate text-xs text-muted-foreground">{summary}</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Tooltip content={t('settings.copyModel')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.copyModel')} onClick={onCopy} disabled={disabled}>
                 <CopyIcon />
@@ -150,7 +150,7 @@ const SortableModelCard = ({
                 <Trash2Icon />
               </Button>
             </MiniConfirm>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-1.5 text-xs/relaxed">
               <input
                 aria-label={`${t('settings.enableModel')}:${model.name}`}
                 type="checkbox"
@@ -163,7 +163,7 @@ const SortableModelCard = ({
           </div>
         </div>
 
-        {expanded ? <div className="grid gap-4 border-t border-border/70 pt-4">{children}</div> : null}
+        {expanded ? <div className="grid gap-3 border-t border-border/70 pt-3">{children}</div> : null}
       </section>
     </li>
   );
@@ -369,26 +369,26 @@ export const LanguageModelsPanel = ({
       id="settings-panel-models"
       role="tabpanel"
       aria-labelledby="settings-tab-models"
-      className="grid gap-6"
+      className="grid gap-4"
     >
-      <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
+        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="grid gap-1">
               <CardTitle className="text-base">{t('settings.languageModels')}</CardTitle>
               <CardDescription>{t('settings.modelsDescription')}</CardDescription>
             </div>
 
-            <Button type="button" variant="outline" onClick={handleAddModel} disabled={disabled}>
+            <Button size="sm" type="button" variant="outline" onClick={handleAddModel} disabled={disabled}>
               {t('settings.addModel')}
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 px-5 py-5">
+        <CardContent className="grid gap-3 px-4 py-4">
           {visibleModels.length > 0 ? (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={visibleModels.map((model) => model.id)} strategy={verticalListSortingStrategy}>
-                <ul className="grid gap-3">
+                <ul className="grid gap-2.5">
                   {visibleModels.map((model) => (
                     <SortableModelCard
                       key={model.id}

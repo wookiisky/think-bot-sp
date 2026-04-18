@@ -21,11 +21,11 @@ export type SettingsSectionMeta = {
 
 export const settingsSections: SettingsSectionMeta[] = [
   { id: 'basic', labelKey: 'settings.basic', icon: 'settings' },
-  { id: 'promptTabs', labelKey: 'settings.promptTabs', icon: 'menu' },
-  { id: 'models', labelKey: 'settings.languageModels', icon: 'language' },
-  { id: 'display', labelKey: 'settings.display', icon: 'menu' },
-  { id: 'sync', labelKey: 'settings.syncPanel', icon: 'cache' },
-  { id: 'blacklist', labelKey: 'settings.blacklistSettings', icon: 'menu' },
+  { id: 'promptTabs', labelKey: 'settings.promptTabs', icon: 'bolt' },
+  { id: 'models', labelKey: 'settings.languageModels', icon: 'provider' },
+  { id: 'display', labelKey: 'settings.display', icon: 'palette' },
+  { id: 'sync', labelKey: 'settings.syncPanel', icon: 'sync' },
+  { id: 'blacklist', labelKey: 'settings.blacklistSettings', icon: 'block' },
 ];
 
 /** 比较已保存配置和草稿配置是否存在差异。 */

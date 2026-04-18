@@ -86,23 +86,23 @@ export const BasicSettingsPanel = ({
       id="settings-panel-basic"
       role="tabpanel"
       aria-labelledby="settings-tab-basic"
-      className="grid gap-6"
+      className="grid gap-4"
     >
-      <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
+      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
+        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
           <CardTitle className="text-base">{t('settings.basic')}</CardTitle>
           <CardDescription>{t('settings.basicDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 px-5 py-5">
-          <div className="grid gap-4 lg:grid-cols-2">
-            <label className="grid gap-2">
+        <CardContent className="grid gap-3.5 px-4 py-4">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.language')}</span>
               <Select
                 value={config.basic.language}
                 disabled={disabled}
                 onValueChange={(value) => updateBasic({ language: value as ExtensionConfig['basic']['language'] })}
               >
-                <SelectTrigger aria-label={t('settings.language')} className="w-full">
+                <SelectTrigger aria-label={t('settings.language')} size="sm" className="w-full">
                   <SelectValue placeholder={t('settings.language')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -112,14 +112,14 @@ export const BasicSettingsPanel = ({
               </Select>
             </label>
 
-            <label className="grid gap-2">
+            <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.theme')}</span>
               <Select
                 value={config.basic.theme}
                 disabled={disabled}
                 onValueChange={(value) => updateBasic({ theme: value as ExtensionConfig['basic']['theme'] })}
               >
-                <SelectTrigger aria-label={t('settings.theme')} className="w-full">
+                <SelectTrigger aria-label={t('settings.theme')} size="sm" className="w-full">
                   <SelectValue placeholder={t('settings.theme')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -131,14 +131,14 @@ export const BasicSettingsPanel = ({
             </label>
           </div>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">{t('settings.defaultModel')}</span>
             <Select
               value={config.basic.defaultModelId ?? '__none__'}
               disabled={disabled}
               onValueChange={(value) => updateBasic({ defaultModelId: value === '__none__' ? null : value })}
             >
-              <SelectTrigger aria-label={t('settings.defaultModel')} className="w-full">
+              <SelectTrigger aria-label={t('settings.defaultModel')} size="sm" className="w-full">
                 <SelectValue placeholder={t('settings.defaultModel')} />
               </SelectTrigger>
               <SelectContent>
@@ -152,7 +152,7 @@ export const BasicSettingsPanel = ({
             </Select>
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">{t('settings.branchModels')}</span>
             <MultiSelectPopover
               label={t('settings.branchModels')}
@@ -170,18 +170,19 @@ export const BasicSettingsPanel = ({
             {hasMissingParallelModels ? <p className="m-0 text-sm text-amber-700 dark:text-amber-300">{t('settings.branchModelsMissing')}</p> : null}
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">System Prompt</span>
             <Textarea
               aria-label="System Prompt"
               value={config.basic.systemPrompt}
               disabled={disabled}
+              className="min-h-20"
               onChange={(event) => updateBasic({ systemPrompt: event.target.value })}
             />
           </label>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <label className="grid gap-2">
+          <div className="grid gap-3 lg:grid-cols-2">
+            <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.extractionMethod')}</span>
               <Select
                 value={config.basic.extractionMethod}
@@ -190,7 +191,7 @@ export const BasicSettingsPanel = ({
                   updateBasic({ extractionMethod: value as ExtensionConfig['basic']['extractionMethod'] })
                 }
               >
-                <SelectTrigger aria-label={t('settings.extractionMethod')} className="w-full">
+                <SelectTrigger aria-label={t('settings.extractionMethod')} size="sm" className="w-full">
                   <SelectValue placeholder={t('settings.extractionMethod')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -200,7 +201,7 @@ export const BasicSettingsPanel = ({
               </Select>
             </label>
 
-            <label className="grid gap-2">
+            <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.extractionPanelHeight')}</span>
               <Input
                 aria-label={t('settings.extractionPanelHeight')}
@@ -227,7 +228,7 @@ export const BasicSettingsPanel = ({
             </label>
           </div>
 
-          <label className="grid gap-3">
+          <label className="grid gap-2.5">
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm font-medium">{t('settings.extractionTextFontSize')}</span>
               <span
@@ -268,7 +269,7 @@ export const BasicSettingsPanel = ({
             </div>
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">{t('settings.jinaApiKey')}</span>
             <Input
               aria-label={t('settings.jinaApiKey')}
@@ -279,12 +280,13 @@ export const BasicSettingsPanel = ({
             />
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">{t('settings.jinaResponseTemplate')}</span>
             <Textarea
               aria-label={t('settings.jinaResponseTemplate')}
               value={config.basic.jinaResponseTemplate}
               disabled={disabled}
+              className="min-h-20"
               onChange={(event) => updateBasic({ jinaResponseTemplate: event.target.value })}
             />
           </label>
@@ -313,13 +315,13 @@ export const BasicSettingsPanel = ({
         </CardContent>
       </Card>
 
-      <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
+      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
+        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
           <CardTitle className="text-base">{t('settings.cache')}</CardTitle>
           <CardDescription>{t('settings.cacheDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 px-5 py-5">
-          <div className="grid gap-2 text-sm text-foreground">
+        <CardContent className="grid gap-3 px-4 py-4">
+          <div className="grid gap-1.5 text-sm text-foreground">
             <span data-testid="cache-page-count">
               {t('settings.savedPages')}：{pageCount} 个页面
             </span>
@@ -329,7 +331,7 @@ export const BasicSettingsPanel = ({
           </div>
           <button
             type="button"
-            className="inline-flex w-fit items-center rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-6 w-fit items-center rounded-md border border-border px-2.5 text-xs/relaxed hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             disabled={disabled}
             onClick={onClearCache}
           >

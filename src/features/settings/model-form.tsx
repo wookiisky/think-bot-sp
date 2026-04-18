@@ -70,10 +70,10 @@ export const ModelForm = ({
   ];
 
   return (
-    <section className="grid gap-4 md:grid-cols-2" aria-label="模型表单">
-      {showHeader ? <h3 className="text-base font-semibold md:col-span-2">{model.name}</h3> : null}
+    <section className="grid gap-3 md:grid-cols-2" aria-label="模型表单">
+      {showHeader ? <h3 className="text-sm font-semibold md:col-span-2">{model.name}</h3> : null}
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">模型名称</span>
         <Input
           aria-label="模型名称"
@@ -83,7 +83,7 @@ export const ModelForm = ({
         />
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">提供方</span>
         <Select
           value={model.provider}
@@ -98,7 +98,7 @@ export const ModelForm = ({
             });
           }}
         >
-          <SelectTrigger aria-label="Provider" className="w-full">
+          <SelectTrigger aria-label="Provider" size="sm" className="w-full">
             <SelectValue placeholder="选择 Provider" />
           </SelectTrigger>
           <SelectContent>
@@ -125,7 +125,7 @@ export const ModelForm = ({
         </label>
       ) : null}
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">Base URL</span>
         <Input
           aria-label="Base URL"
@@ -135,7 +135,7 @@ export const ModelForm = ({
         />
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">API Key</span>
         <div className="flex items-center gap-2">
           <Input
@@ -146,13 +146,13 @@ export const ModelForm = ({
             onChange={(event) => updateModel({ apiKey: event.target.value })}
             autoComplete="off"
           />
-          <Button type="button" variant="outline" onClick={() => setShowApiKey((value) => !value)} disabled={disabled}>
+          <Button size="sm" type="button" variant="outline" onClick={() => setShowApiKey((value) => !value)} disabled={disabled}>
             {showApiKey ? '隐藏' : '显示'}
           </Button>
         </div>
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">{showDeployment ? 'Deployment' : 'Model'}</span>
         <Input
           aria-label={showDeployment ? 'Deployment' : 'Model'}
@@ -165,7 +165,7 @@ export const ModelForm = ({
       </label>
 
       {showRegion ? (
-        <label className="grid gap-2">
+        <label className="grid gap-1.5">
           <span className="text-sm font-medium">Region</span>
           <Input
             aria-label="Region"
@@ -177,7 +177,7 @@ export const ModelForm = ({
       ) : null}
 
       {showVertexFields ? (
-        <label className="grid gap-2">
+        <label className="grid gap-1.5">
           <span className="text-sm font-medium">Project</span>
           <Input
             aria-label="Project"
@@ -189,7 +189,7 @@ export const ModelForm = ({
       ) : null}
 
       {showVertexFields ? (
-        <label className="grid gap-2">
+        <label className="grid gap-1.5">
           <span className="text-sm font-medium">Location</span>
           <Input
             aria-label="Location"
@@ -200,7 +200,7 @@ export const ModelForm = ({
         </label>
       ) : null}
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">Max Output Tokens</span>
         <Input
           aria-label="Max Output Tokens"
@@ -215,7 +215,7 @@ export const ModelForm = ({
         />
       </label>
 
-      <label className="grid gap-2">
+      <label className="grid gap-1.5">
         <span className="text-sm font-medium">Temperature</span>
         <Input
           aria-label="Temperature"
@@ -228,14 +228,14 @@ export const ModelForm = ({
       </label>
 
       {showReasoningEffort ? (
-        <label className="grid gap-2">
+        <label className="grid gap-1.5">
           <span className="text-sm font-medium">Reasoning Effort</span>
           <Select
             value={getResolvedReasoningEffort(model)}
             disabled={disabled}
             onValueChange={(value) => updateModel({ reasoningEffort: value as ModelConfig['reasoningEffort'] })}
           >
-            <SelectTrigger aria-label="Reasoning Effort" className="w-full">
+            <SelectTrigger aria-label="Reasoning Effort" size="sm" className="w-full">
               <SelectValue placeholder="Reasoning Effort" />
             </SelectTrigger>
             <SelectContent>
@@ -249,7 +249,7 @@ export const ModelForm = ({
       ) : null}
 
       {showGoogleTools ? (
-        <label className="grid gap-2 md:col-span-2">
+        <label className="grid gap-1.5 md:col-span-2">
           <span className="text-sm font-medium">Tools</span>
           <MultiSelectPopover
             label="Tools"
@@ -276,7 +276,7 @@ export const ModelForm = ({
       </label>
 
       <div className="flex items-center justify-end md:col-span-2">
-        <Button type="button" variant="outline" onClick={onTest} disabled={disabled || !onTest}>
+        <Button size="sm" type="button" variant="outline" onClick={onTest} disabled={disabled || !onTest}>
           {testing ? '测试中...' : '测试模型'}
         </Button>
       </div>

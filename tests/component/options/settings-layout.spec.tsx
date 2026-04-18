@@ -52,19 +52,21 @@ describe('SettingsLayout', () => {
     mocks.getRecentError.mockResolvedValue(null);
   });
 
-  it('左侧导航固定为五个栏目并展示顶部动作区', async () => {
+  it('左侧导航展示六个栏目并为每个栏目提供独立图标', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
 
     render(<SettingsShell />);
 
     expect(await screen.findByRole('tab', { name: '基础设置' })).toBeInTheDocument();
-    expect(screen.getAllByRole('tab')).toHaveLength(5);
+    expect(screen.getAllByRole('tab')).toHaveLength(6);
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: '快捷输入' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '语言模型' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '云同步' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '黑名单设置' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('data-section-icon', 'settings');
+    expect(screen.getByRole('tab', { name: '快捷输入' })).toHaveAttribute('data-section-icon', 'bolt');
+    expect(screen.getByRole('tab', { name: '语言模型' })).toHaveAttribute('data-section-icon', 'provider');
+    expect(screen.getByRole('tab', { name: '展示配置' })).toHaveAttribute('data-section-icon', 'palette');
+    expect(screen.getByRole('tab', { name: '云同步' })).toHaveAttribute('data-section-icon', 'sync');
+    expect(screen.getByRole('tab', { name: '黑名单设置' })).toHaveAttribute('data-section-icon', 'block');
     expect(screen.getByTestId('settings-shell-actions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保存并同步' })).toBeInTheDocument();

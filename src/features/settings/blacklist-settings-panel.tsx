@@ -152,30 +152,30 @@ export const BlacklistSettingsPanel = ({
       id="settings-panel-blacklist"
       role="tabpanel"
       aria-labelledby="settings-tab-blacklist"
-      className="grid gap-6"
+      className="grid gap-4"
     >
-      <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
+        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <div className="grid gap-1">
               <CardTitle className="text-base">{t('settings.blacklistSettings')}</CardTitle>
               <CardDescription>{t('settings.blacklistDescription')}</CardDescription>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={handleResetDefaults} disabled={disabled}>
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" type="button" variant="outline" onClick={handleResetDefaults} disabled={disabled}>
                 {t('settings.blacklistResetDefaults')}
               </Button>
-              <Button type="button" variant="outline" onClick={handleAddRule} disabled={disabled}>
+              <Button size="sm" type="button" variant="outline" onClick={handleAddRule} disabled={disabled}>
                 {t('settings.addBlacklistRule')}
               </Button>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="grid gap-4 px-5 py-5">
+        <CardContent className="grid gap-3 px-4 py-4">
           {visibleRules.length > 0 ? (
-            <ul className="grid gap-3">
+            <ul className="grid gap-2.5">
               {visibleRules.map((rule) => {
                 const selected = rule.id === activeRule?.id;
                 return (
@@ -183,7 +183,7 @@ export const BlacklistSettingsPanel = ({
                     <button
                       type="button"
                       className={[
-                        'grid w-full gap-1 rounded-2xl border px-4 py-3 text-left transition-colors',
+                        'grid w-full gap-1 rounded-2xl border px-3 py-2.5 text-left transition-colors',
                         selected ? 'border-primary bg-primary/8' : 'border-border/70 bg-muted/30 hover:bg-muted/60',
                       ].join(' ')}
                       onClick={() => setSelectedRuleId(rule.id)}
@@ -209,8 +209,8 @@ export const BlacklistSettingsPanel = ({
           )}
 
           {activeRule ? (
-            <section className="grid gap-4 rounded-2xl border border-border/70 bg-muted/20 px-4 py-4">
-              <div className="flex flex-wrap gap-2">
+            <section className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
+              <div className="flex flex-wrap gap-1.5">
                 <MiniConfirm
                   message={t('settings.deleteBlacklistRule')}
                   cancelLabel={t('common.cancel')}
@@ -226,14 +226,14 @@ export const BlacklistSettingsPanel = ({
                 </MiniConfirm>
               </div>
 
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.blacklistRuleType')}</span>
                 <Select
                   value={activeRule.type}
                   disabled={disabled}
                   onValueChange={(value) => updateActiveRule({ type: value as RuleType })}
                 >
-                  <SelectTrigger aria-label={t('settings.blacklistRuleType')} className="w-full">
+                  <SelectTrigger aria-label={t('settings.blacklistRuleType')} size="sm" className="w-full">
                     <SelectValue placeholder={t('settings.blacklistRuleType')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -244,7 +244,7 @@ export const BlacklistSettingsPanel = ({
                 </Select>
               </label>
 
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.blacklistRulePattern')}</span>
                 <Input
                   aria-label={t('settings.blacklistRulePattern')}
@@ -265,9 +265,9 @@ export const BlacklistSettingsPanel = ({
                 <span className="font-medium">{t('settings.blacklistRuleEnabled')}</span>
               </label>
 
-              <fieldset className="grid gap-3 rounded-2xl border border-border/70 px-4 py-3">
+              <fieldset className="grid gap-2.5 rounded-2xl border border-border/70 px-3 py-2.5">
                 <legend className="px-1 text-sm font-medium">{t('settings.blacklistRuleTest')}</legend>
-                <label className="grid gap-2">
+                <label className="grid gap-1.5">
                   <span className="text-sm font-medium">{t('settings.blacklistRuleTestUrl')}</span>
                   <Input
                     aria-label={t('settings.blacklistRuleTestUrl')}
@@ -278,6 +278,7 @@ export const BlacklistSettingsPanel = ({
                   />
                 </label>
                 <Button
+                  size="sm"
                   type="button"
                   variant="outline"
                   disabled={disabled || testUrl.trim().length === 0}

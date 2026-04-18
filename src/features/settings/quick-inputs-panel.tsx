@@ -96,14 +96,14 @@ const SortableQuickInputCard = ({
     >
       <section
         className={[
-          'grid gap-3 rounded-2xl border px-4 py-3 transition-colors',
+          'grid gap-2.5 rounded-2xl border px-3 py-2.5 transition-colors',
           expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
         ].join(' ')}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`${t('settings.dragQuickInput')}:${item.name}`}
             disabled={disabled}
             {...attributes}
@@ -118,11 +118,11 @@ const SortableQuickInputCard = ({
             data-testid={`quick-input-summary-${item.id}`}
             onClick={onToggle}
           >
-            <span className="truncate text-sm font-semibold">{item.name}</span>
+            <span className="truncate text-xs font-semibold">{item.name}</span>
             <span className="truncate text-xs text-muted-foreground">{preview}</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Tooltip content={t('settings.moveUp')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveUp')} onClick={onMoveUp} disabled={disabled}>
                 <ArrowUpIcon />
@@ -144,7 +144,7 @@ const SortableQuickInputCard = ({
                 <Trash2Icon />
               </Button>
             </MiniConfirm>
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-1.5 text-xs/relaxed">
               <input
                 aria-label={`${t('settings.quickInputAutoTrigger')}:${item.name}`}
                 type="checkbox"
@@ -157,7 +157,7 @@ const SortableQuickInputCard = ({
           </div>
         </div>
 
-        {expanded ? <div className="grid gap-4 border-t border-border/70 pt-4">{children}</div> : null}
+        {expanded ? <div className="grid gap-3 border-t border-border/70 pt-3">{children}</div> : null}
       </section>
     </li>
   );
@@ -300,30 +300,30 @@ export const QuickInputsPanel = ({
   };
 
   return (
-    <Card aria-label={t('settings.promptTabs')} className="rounded-3xl bg-card/90 py-0 shadow-xl ring-1 ring-foreground/8">
-      <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <Card size="sm" aria-label={t('settings.promptTabs')} className="rounded-[26px] bg-card/90 py-0 shadow-xl ring-1 ring-foreground/8">
+      <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="grid gap-1">
             <CardTitle className="text-base">{t('settings.promptTabs')}</CardTitle>
             <CardDescription>{t('settings.quickInputsDescription')}</CardDescription>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={onImportTemplates} disabled={disabled || importingTemplates}>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" type="button" variant="outline" onClick={onImportTemplates} disabled={disabled || importingTemplates}>
               {importingTemplates ? t('settings.importingQuickInputTemplates') : t('settings.importQuickInputTemplates')}
             </Button>
-            <Button type="button" variant="outline" onClick={handleAddQuickInput} disabled={disabled}>
+            <Button size="sm" type="button" variant="outline" onClick={handleAddQuickInput} disabled={disabled}>
               {t('settings.addQuickInput')}
             </Button>
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="grid gap-4 px-5 py-5">
+      <CardContent className="grid gap-3 px-4 py-4">
         {visibleQuickInputs.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={visibleQuickInputs.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-              <ul className="grid gap-3">
+              <ul className="grid gap-2.5">
                 {visibleQuickInputs.map((item) => {
                   const expanded = item.id === expandedQuickInputId;
                   const hasMissingModelReference =
@@ -346,7 +346,7 @@ export const QuickInputsPanel = ({
                       onToggleAutoTrigger={(autoTrigger) => updateQuickInput(item.id, { autoTrigger })}
                       t={t}
                     >
-                      <label className="grid gap-2">
+                      <label className="grid gap-1.5">
                         <span className="text-sm font-medium">{t('settings.quickInputName')}</span>
                         <Input
                           aria-label={t('settings.quickInputName')}
@@ -356,19 +356,20 @@ export const QuickInputsPanel = ({
                         />
                       </label>
 
-                      <label className="grid gap-2">
+                      <label className="grid gap-1.5">
                         <span className="text-sm font-medium">{t('settings.quickInputPrompt')}</span>
                         <Textarea
                           aria-label={t('settings.quickInputPrompt')}
                           value={item.prompt}
                           disabled={disabled}
+                          className="min-h-20"
                           onChange={(event) => updateQuickInput(item.id, { prompt: event.target.value })}
                         />
                       </label>
 
-                      <div className="grid gap-2">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <label className="grid gap-2">
+                      <div className="grid gap-1.5">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="grid gap-1.5">
                             <span className="text-sm font-medium">{t('settings.quickInputModel')}</span>
                             <Select
                               value={modelSelectValue}
@@ -384,7 +385,7 @@ export const QuickInputsPanel = ({
                                 })
                               }
                             >
-                              <SelectTrigger aria-label={t('settings.quickInputModel')} className="w-full">
+                              <SelectTrigger aria-label={t('settings.quickInputModel')} size="sm" className="w-full">
                                 <SelectValue placeholder={t('settings.quickInputModel')} />
                               </SelectTrigger>
                               <SelectContent>
@@ -402,7 +403,7 @@ export const QuickInputsPanel = ({
                             ) : null}
                           </label>
 
-                          <label className="grid gap-2">
+                          <label className="grid gap-1.5">
                             <span className="text-sm font-medium">{t('settings.quickInputBranchModels')}</span>
                             <MultiSelectPopover
                               label={t('settings.quickInputBranchModels')}

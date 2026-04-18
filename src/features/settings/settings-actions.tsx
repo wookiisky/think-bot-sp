@@ -36,19 +36,19 @@ export const SettingsActions = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-end gap-2" data-testid="settings-shell-actions">
-        <Button type="button" onClick={onSave} disabled={disabled}>
-          <Icon name="save" size={14} />
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="settings-shell-actions">
+        <Button type="button" size="sm" onClick={onSave} disabled={disabled}>
+          <Icon name="save" size={12} />
           {t('settings.save')}
         </Button>
-        <Button type="button" variant="outline" onClick={onSaveAndSync} disabled={disabled}>
+        <Button type="button" size="sm" variant="outline" onClick={onSaveAndSync} disabled={disabled}>
           {t('settings.saveAndSync')}
         </Button>
-        <Button type="button" variant="outline" onClick={onReset} disabled={disabled}>
+        <Button type="button" size="sm" variant="outline" onClick={onReset} disabled={disabled}>
           {t('settings.reset')}
         </Button>
-        <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
+        <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
           {t('settings.import')}
         </Button>
         <input
@@ -66,12 +66,12 @@ export const SettingsActions = ({
             onImport(file);
           }}
         />
-        <Button type="button" variant="outline" onClick={onExport} disabled={disabled}>
+        <Button type="button" size="sm" variant="outline" onClick={onExport} disabled={disabled}>
           {t('settings.export')}
         </Button>
       </div>
       {hasUnsavedChanges ? (
-        <p className="m-0 rounded-full bg-amber-500/10 px-3 py-1 text-right text-sm text-amber-700 dark:text-amber-300">
+        <p className="m-0 justify-self-end rounded-full bg-amber-500/10 px-2.5 py-1 text-right text-xs/relaxed text-amber-700 dark:text-amber-300">
           {t('settings.unsavedChanges')}
         </p>
       ) : null}

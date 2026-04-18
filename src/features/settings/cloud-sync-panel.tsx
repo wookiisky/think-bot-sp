@@ -58,13 +58,13 @@ export const CloudSyncPanel = ({
   const showWebdavFields = config.sync.provider === 'webdav';
 
   return (
-    <section id="settings-panel-sync" role="tabpanel" aria-labelledby="settings-tab-sync" className="grid gap-6">
-      <Card className="rounded-3xl bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-2 border-b border-border/70 px-5 py-4">
+    <section id="settings-panel-sync" role="tabpanel" aria-labelledby="settings-tab-sync" className="grid gap-4">
+      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
+        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
           <CardTitle className="text-base">{t('settings.syncPanel')}</CardTitle>
           <CardDescription>{t('settings.syncDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 px-5 py-5">
+        <CardContent className="grid gap-3.5 px-4 py-4">
           <label className="flex items-center gap-2 text-sm">
             <input
               aria-label={t('settings.syncEnabled')}
@@ -76,14 +76,14 @@ export const CloudSyncPanel = ({
             <span className="font-medium">{t('settings.syncEnabled')}</span>
           </label>
 
-          <label className="grid gap-2">
+          <label className="grid gap-1.5">
             <span className="text-sm font-medium">{t('settings.syncProvider')}</span>
             <Select
               value={config.sync.provider}
               disabled={disabled}
               onValueChange={(value) => updateSync({ provider: value as ExtensionConfig['sync']['provider'] })}
             >
-              <SelectTrigger aria-label={t('settings.syncProvider')} className="w-full">
+              <SelectTrigger aria-label={t('settings.syncProvider')} size="sm" className="w-full">
                 <SelectValue placeholder={t('settings.syncProvider')} />
               </SelectTrigger>
               <SelectContent>
@@ -96,7 +96,7 @@ export const CloudSyncPanel = ({
 
           {showGistFields ? (
             <>
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.gistToken')}</span>
                 <Input
                   aria-label={t('settings.gistToken')}
@@ -105,7 +105,7 @@ export const CloudSyncPanel = ({
                   onChange={(event) => updateSync({ gistToken: event.target.value })}
                 />
               </label>
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.gistId')}</span>
                 <Input
                   aria-label={t('settings.gistId')}
@@ -119,7 +119,7 @@ export const CloudSyncPanel = ({
 
           {showWebdavFields ? (
             <>
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.webdavUrl')}</span>
                 <Input
                   aria-label={t('settings.webdavUrl')}
@@ -128,7 +128,7 @@ export const CloudSyncPanel = ({
                   onChange={(event) => updateSync({ webdavUrl: event.target.value })}
                 />
               </label>
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.webdavUsername')}</span>
                 <Input
                   aria-label={t('settings.webdavUsername')}
@@ -137,7 +137,7 @@ export const CloudSyncPanel = ({
                   onChange={(event) => updateSync({ webdavUsername: event.target.value })}
                 />
               </label>
-              <label className="grid gap-2">
+              <label className="grid gap-1.5">
                 <span className="text-sm font-medium">{t('settings.webdavPassword')}</span>
                 <Input
                   aria-label={t('settings.webdavPassword')}
@@ -150,11 +150,11 @@ export const CloudSyncPanel = ({
             </>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => void onTestConnection()} disabled={disabled || testing}>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" type="button" variant="outline" onClick={() => void onTestConnection()} disabled={disabled || testing}>
               {testing ? `${t('settings.syncTest')}...` : t('settings.syncTest')}
             </Button>
-            <Button type="button" onClick={() => void onSyncNow()} disabled={disabled || syncing}>
+            <Button size="sm" type="button" onClick={() => void onSyncNow()} disabled={disabled || syncing}>
               {syncing ? `${t('settings.syncNow')}...` : t('settings.syncNow')}
             </Button>
           </div>
@@ -167,7 +167,7 @@ export const CloudSyncPanel = ({
             <section
               role="status"
               className={[
-                'rounded-2xl px-4 py-3 text-sm',
+                'rounded-2xl px-3 py-2.5 text-sm',
                 feedback.tone === 'success'
                   ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                   : 'border border-destructive/20 bg-destructive/10 text-destructive',

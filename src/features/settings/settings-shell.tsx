@@ -392,24 +392,24 @@ export const SettingsShell = () => {
       data-layout="tab-page"
       data-theme={draftConfig.basic.theme}
       className={cn(
-        'min-h-screen px-4 py-6 text-foreground sm:px-6 sm:py-8',
+        'min-h-screen px-3 py-4 text-foreground sm:px-4 sm:py-6',
         'bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-background)_82%,white)_0%,color-mix(in_oklch,var(--color-muted)_66%,white)_52%,var(--color-background)_100%)]',
-        'before:pointer-events-none before:fixed before:inset-x-0 before:top-0 before:h-72 before:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_72%)] before:content-[\'\']',
+        'before:pointer-events-none before:fixed before:inset-x-0 before:top-0 before:h-56 before:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_72%)] before:content-[\'\']',
         draftConfig.basic.theme === 'dark' && 'dark',
       )}
     >
       <ToastStack toasts={toast ? [toast] : []} />
 
-      <section className="relative mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="grid gap-6 rounded-[32px] border border-border/70 bg-card/85 p-5 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur md:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <section className="relative mx-auto flex w-full max-w-7xl flex-col gap-4">
+        <header className="grid gap-4 rounded-[28px] border border-border/70 bg-card/85 p-4 shadow-[0_20px_64px_rgba(15,23,42,0.08)] backdrop-blur md:p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <span className="inline-flex size-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--color-primary),color-mix(in_oklch,var(--color-primary)_72%,white))] text-primary-foreground shadow-lg shadow-primary/20">
-                <Icon name="settings" size={18} />
+              <span className="inline-flex size-10 items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,var(--color-primary),color-mix(in_oklch,var(--color-primary)_72%,white))] text-primary-foreground shadow-lg shadow-primary/20">
+                <Icon name="settings" size={16} />
               </span>
               <div>
-                <p className="m-0 text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">Think Bot SP</p>
-                <h1 className="mt-1 text-3xl font-semibold tracking-tight">{t('settings.title')}</h1>
+                <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Think Bot SP</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
               </div>
             </div>
 
@@ -426,10 +426,10 @@ export const SettingsShell = () => {
           </div>
         </header>
 
-        <section className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
+        <section className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
           <SettingsNav activeSection={activeSection} onSectionChange={setActiveSection} t={t} />
 
-          <section className="grid gap-6 lg:col-start-2">
+          <section className="grid gap-4 lg:col-start-2">
             {activeSection === 'basic' ? (
               <BasicSettingsPanel
                 config={draftConfig}
