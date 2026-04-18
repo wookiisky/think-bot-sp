@@ -11,6 +11,7 @@ settings.import: 导入配置
 settings.export: 导出配置
 settings.models: 模型
 settings.promptTabs: 快捷输入
+settings.display: 展示配置
 settings.blacklist: 黑名单
 settings.sync: 同步
 settings.cache: 本地缓存
@@ -59,6 +60,23 @@ settings.recentErrorSource.conversations: 历史页
 settings.recentErrorSource.sync: 同步
 settings.recentErrorSource.settings: 设置页
 settings.basicDescription: 管理主题、语言、默认模型、并行模型和提取默认行为。
+settings.displayDescription: 配置助手消息 Markdown 的标题和正文样式。
+settings.displayPreset1: 默认配置 1
+settings.displayPreset2: 默认配置 2
+settings.displayPreset3: 默认配置 3
+settings.displayFieldDescription: 可分别调整字号、颜色和下划线。
+settings.displayFontSize: 字号
+settings.displayColor: 颜色
+settings.displayUnderline: 下划线
+settings.displayPreview: 预览
+settings.displayPreviewBody: 这是一段正文示例，用来预览当前样式。
+settings.displaySampleTitle: 整体示例
+settings.displaySampleDescription: 下面的示例会按当前展示配置实时更新。
+settings.assistantMarkdownH1: 一级标题
+settings.assistantMarkdownH2: 二级标题
+settings.assistantMarkdownH3: 三级标题
+settings.assistantMarkdownH4: 四级标题
+settings.assistantMarkdownBody: 正文
 settings.defaultModel: 默认模型
 settings.noDefaultModel: 不设置默认模型
 settings.branchModels: 并行模型
@@ -69,6 +87,10 @@ settings.multiSelectPlaceholder: 请选择
 settings.multiSelectSummary: "已选 {count} 项"
 settings.extractionMethod: 默认提取方式
 settings.extractionPanelHeight: 默认提取区高度
+settings.extractionTextFontSize: 提取区文本字体大小
+settings.extractionTextFontSizePreview: 示例文本
+settings.extractionTextFontSizeMin: 最小
+settings.extractionTextFontSizeMax: 最大
 settings.jinaApiKey: Jina API Key
 settings.jinaResponseTemplate: Jina 响应模板
 settings.filterCot: 过滤 COT 内容

@@ -13,7 +13,8 @@
 
 - 点击扩展图标：
   - 普通网页进入 side panel 工作流。
-  - 受限页面退化到 conversations 页面。
+  - 浏览器内部受限页退化到 conversations 页面。
+  - 当前已在 conversations 页面时，再次点击进入设置页。
 - 扩展图标右键菜单：
   - 直接打开 conversations 页面。
 - 首次安装：
@@ -88,9 +89,9 @@
 ### 4.3 受限页面退化
 
 1. 用户点击扩展图标。
-2. background 判断当前页面为 Chrome 内部页、扩展页或其他不可注入页面。
-3. 不尝试执行脚本注入。
-4. 直接打开 conversations 页面，并在需要时带上受限页提示。
+2. background 判断当前页面为不可注入页面。
+3. 若当前页是 `conversations.html`，则直接打开 `options.html`。
+4. 否则不尝试执行脚本注入，直接打开 conversations 页面，并在需要时带上受限页提示。
 
 ### 4.4 扩展图标右键菜单
 
@@ -131,6 +132,7 @@
 - 右键菜单入口只能打开 conversations，不能隐式进入 side panel。
 - 首次安装只负责打开快速上手文档，不预热页面提取和模型调用。
 - 受限页判断失败不能降级为“先尝试注入，失败再说”。
+- `conversations.html` 再次点击扩展图标时，必须进入 `options.html`，不能回环打开自己。
 - side panel 首屏初始化必须由 side panel 主动拉取 bootstrap，background 不主动推送首屏命令。
 - 黑名单未放行前，不能开始提取或自动触发。
 - side panel 再次打开时，有缓存不重复提取；已有会话或 loading 的 `promptTab` 不重复自动触发。

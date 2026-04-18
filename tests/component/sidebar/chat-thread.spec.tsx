@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG } from '../../../src/domain/config/assistant-markdown-display-config';
 import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../../src/domain/config/config-schema';
 import { ChatThread } from '../../../src/features/sidebar/chat-thread';
 
@@ -64,6 +65,7 @@ const createBaseProps = () => ({
   editingMessageId: null,
   editingText: '',
   t,
+  assistantMarkdownDisplayConfig: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   onStartEdit: vi.fn(),
   onEditingTextChange: vi.fn(),
   onCancelEdit: vi.fn(),
@@ -145,6 +147,51 @@ describe('ChatThread', () => {
     expect(screen.queryByText('#1')).toBeNull();
     expect(screen.getByTestId('branch-header-branch-1').className).toContain('justify-center');
     expect(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '打开分支预览' })).toBeVisible();
+  });
+
+  it('助手消息 Markdown 会按展示配置渲染标题和正文样式', () => {
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        assistantMarkdownDisplayConfig={{
+          h1: {
+            fontSizePx: 30,
+            color: '#1d4ed8',
+            underline: true,
+          },
+          h2: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.h2,
+          h3: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.h3,
+          h4: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.h4,
+          body: {
+            fontSizePx: 16,
+            color: '#111827',
+            underline: false,
+          },
+        }}
+        messages={[
+          {
+            id: 'assistant-styled',
+            role: 'assistant',
+            content: '# 标题\n\n正文',
+            status: 'done',
+            errorMessage: null,
+            branches: [],
+            selectedBranchId: null,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: '标题', level: 1 })).toHaveStyle({
+      fontSize: '30px',
+      color: 'rgb(29, 78, 216)',
+      textDecoration: 'underline',
+    });
+    expect(screen.getByText('正文')).toHaveStyle({
+      fontSize: '16px',
+      color: 'rgb(17, 24, 39)',
+      textDecoration: 'none',
+    });
   });
 
   it('旧助手消息也统一按分支卡片展示', () => {

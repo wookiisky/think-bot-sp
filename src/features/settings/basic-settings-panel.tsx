@@ -7,9 +7,13 @@ import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import {
   MAX_EXTRACTION_PANEL_HEIGHT,
+  MAX_EXTRACTION_TEXT_FONT_SIZE,
   MIN_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_TEXT_FONT_SIZE,
   sanitizeParallelModelIds,
 } from '../../domain/config/config-schema';
+import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
+import { cn } from '../../lib/utils';
 
 type CacheStats = {
   /** 本地缓存页面数。 */
@@ -65,6 +69,7 @@ export const BasicSettingsPanel = ({
   const parallelModelIds = sanitizeParallelModelIds(config, config.basic.parallelModelIds);
   const hasMissingParallelModels = parallelModelIds.length !== config.basic.parallelModelIds.length;
   const pageCount = cacheStats.pageCount ?? cacheStats.entryCount;
+  const extractionTextClassName = getExtractionTextClassName(config.basic.extractionTextFontSize);
 
   const updateBasic = (patch: Partial<ExtensionConfig['basic']>) => {
     onChange({
@@ -220,8 +225,48 @@ export const BasicSettingsPanel = ({
                 }}
               />
             </label>
-
           </div>
+
+          <label className="grid gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{t('settings.extractionTextFontSize')}</span>
+              <span
+                className={cn(
+                  'whitespace-nowrap text-muted-foreground transition-[font-size,line-height] duration-150',
+                  extractionTextClassName,
+                )}
+              >
+                {t('settings.extractionTextFontSizePreview')}
+              </span>
+            </div>
+            <input
+              aria-label={t('settings.extractionTextFontSize')}
+              type="range"
+              min={MIN_EXTRACTION_TEXT_FONT_SIZE}
+              max={MAX_EXTRACTION_TEXT_FONT_SIZE}
+              step={1}
+              value={config.basic.extractionTextFontSize}
+              disabled={disabled}
+              className="w-full"
+              onChange={(event) => {
+                const value = Number.parseInt(event.target.value, 10);
+                if (Number.isNaN(value)) {
+                  return;
+                }
+
+                updateBasic({
+                  extractionTextFontSize: Math.min(
+                    MAX_EXTRACTION_TEXT_FONT_SIZE,
+                    Math.max(MIN_EXTRACTION_TEXT_FONT_SIZE, value),
+                  ) as ExtensionConfig['basic']['extractionTextFontSize'],
+                });
+              }}
+            />
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>{t('settings.extractionTextFontSizeMin')}</span>
+              <span>{t('settings.extractionTextFontSizeMax')}</span>
+            </div>
+          </label>
 
           <label className="grid gap-2">
             <span className="text-sm font-medium">{t('settings.jinaApiKey')}</span>

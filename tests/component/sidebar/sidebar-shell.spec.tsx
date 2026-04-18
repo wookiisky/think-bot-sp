@@ -185,6 +185,48 @@ describe('SidebarShell', () => {
     expect(extractionPanel).toHaveStyle({ height: '340px' });
   });
 
+  it('按基础设置字号渲染提取区文本', async () => {
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            extractionTextFontSize: 7,
+          },
+        }),
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    expect(await screen.findByTestId('sidebar-extraction-content')).toHaveClass('text-2xl', 'leading-10');
+  });
+
   it('黑名单命中时先显示确认层，不自动提取', async () => {
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({

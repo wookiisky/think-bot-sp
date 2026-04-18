@@ -62,6 +62,12 @@
       - 默认值：`240`
       - 含义：侧边栏提取区默认高度。
       - 约束：范围固定在 `160 ~ 420`。
+    - `extractionTextFontSize`
+      - 类型：`1 | 2 | 3 | 4 | 5 | 6 | 7`
+      - 必填：是
+      - 默认值：`4`
+      - 含义：提取区文本字体大小档位，同时作用于侧边栏和历史页提取区。
+      - 约束：只允许 7 档滑块值，运行时映射为固定字号样式。
     - `jinaApiKey`
       - 类型：`string`
       - 必填：是
@@ -209,6 +215,30 @@
   - 类型：`SyncConfig`
   - 必填：是
   - 含义：同步开关、Provider、连接信息、最近同步时间。
+- `display`
+  - 类型：`DisplayConfig`
+  - 必填：是
+  - 含义：展示层配置，当前只包含助手消息 Markdown 样式。
+  - 字段约束：
+    - `assistantMarkdown`
+      - 类型：`object`
+      - 必填：是
+      - 含义：助手消息 Markdown 的标题与正文样式。
+      - 子字段：`h1 / h2 / h3 / h4 / body`
+      - 每个子字段都包含：
+        - `fontSizePx`
+          - 类型：`number`
+          - 必填：是
+          - 默认值：按层级递减，正文与 `h4` 一致。
+          - 约束：范围固定在 `12 ~ 48`。
+        - `color`
+          - 类型：`#RRGGBB`
+          - 必填：是
+          - 含义：当前层级文字颜色。
+        - `underline`
+          - 类型：`boolean`
+          - 必填：是
+          - 含义：当前层级是否显示下划线。
 - `blacklist`
   - 类型：`BlacklistRule[]`
   - 必填：是
@@ -222,7 +252,7 @@
 - 模型、快捷输入、黑名单内部对象必须带稳定 `id`。
 - 删除模型和快捷输入采用软删除标记，不直接丢失历史引用。
 - 系统内置快捷输入和系统内置黑名单规则都使用稳定 id，迁移时只补缺失项，不覆盖已有同 id 项。
-- 兼容旧配置时，缺失的 `extractionPanelHeight / jinaApiKey / jinaResponseTemplate / parallelModelIds` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
+- 兼容旧配置时，缺失的 `extractionPanelHeight / extractionTextFontSize / jinaApiKey / jinaResponseTemplate / parallelModelIds / display` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
 - 设置页中的模型项采用“列表摘要 + 展开编辑”形态，但持久化仍以完整对象保存，不拆分多 key。
 - 设置页中的模型列表与快捷输入列表都支持拖拽排序，但持久化仍只写回 `order`，不引入额外排序元数据。
 - Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。

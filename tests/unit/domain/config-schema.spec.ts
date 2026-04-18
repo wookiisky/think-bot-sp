@@ -16,6 +16,7 @@ import {
 } from '../../../src/shared/storage-keys';
 import {
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_JINA_RESPONSE_TEMPLATE,
   DEFAULT_BLACKLIST_RULES,
   DEFAULT_QUICK_INPUTS,
@@ -42,6 +43,7 @@ describe('config schema', () => {
     expect(config.basic.defaultModelId).toBeNull();
     expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+    expect(config.basic.extractionTextFontSize).toBe(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.models).toEqual([]);
@@ -70,6 +72,7 @@ describe('config schema', () => {
 
     expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+    expect(config.basic.extractionTextFontSize).toBe(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.quickInputs[0]?.parallelModelIds).toEqual([]);

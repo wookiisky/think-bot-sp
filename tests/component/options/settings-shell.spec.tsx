@@ -110,6 +110,73 @@ describe('SettingsShell', () => {
     expect(screen.getByRole('button', { name: '导出配置' })).toBeInTheDocument();
   });
 
+  it('展示配置分栏支持切换并保留未保存草稿', async () => {
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('tab', { name: '展示配置' }));
+    fireEvent.change(screen.getByLabelText('一级标题字号'), {
+      target: {
+        value: '30',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: '基础设置' }));
+    fireEvent.click(screen.getByRole('tab', { name: '展示配置' }));
+
+    expect(screen.getByLabelText('一级标题字号')).toHaveValue(30);
+  });
+
+  it('展示配置预设会写入助手消息 Markdown 样式', async () => {
+    const config = createDefaultConfig();
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getRecentError.mockResolvedValueOnce(null);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+    mocks.saveConfig.mockResolvedValueOnce({
+      ...config,
+      display: {
+        assistantMarkdown: {
+          h1: { fontSizePx: 18, color: '#1d4ed8', underline: false },
+          h2: { fontSizePx: 18, color: '#2563eb', underline: false },
+          h3: { fontSizePx: 16, color: '#3b82f6', underline: false },
+          h4: { fontSizePx: 14, color: '#60a5fa', underline: false },
+          body: { fontSizePx: 14, color: '#111827', underline: false },
+        },
+      },
+    });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('tab', { name: '展示配置' }));
+    fireEvent.click(screen.getByRole('button', { name: '默认配置 1' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(mocks.saveConfig).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        display: expect.objectContaining({
+          assistantMarkdown: expect.objectContaining({
+            h1: expect.objectContaining({
+              fontSizePx: 18,
+              color: '#1d4ed8',
+            }),
+            body: expect.objectContaining({
+              fontSizePx: 14,
+              color: '#111827',
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('设置页使用完整 tab 页面布局而不是弹窗式卡片壳层', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);

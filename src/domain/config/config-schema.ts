@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+import {
+  DEFAULT_DISPLAY_CONFIG,
+  displayConfigSchema,
+  fillDisplayConfigDefaults,
+} from './assistant-markdown-display-config';
 import { CONFIG_SCHEMA_VERSION } from '../../shared/schema-version';
 
 /** 提取区最小默认高度。 */
@@ -8,10 +13,20 @@ export const MIN_EXTRACTION_PANEL_HEIGHT = 1;
 export const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
 /** 提取区最大默认高度。 */
 export const MAX_EXTRACTION_PANEL_HEIGHT = 420;
+/** 提取区文本字号最小档位。 */
+export const MIN_EXTRACTION_TEXT_FONT_SIZE = 1;
+/** 提取区文本字号默认档位。 */
+export const DEFAULT_EXTRACTION_TEXT_FONT_SIZE = 4;
+/** 提取区文本字号最大档位。 */
+export const MAX_EXTRACTION_TEXT_FONT_SIZE = 7;
+/** 提取区文本字号支持的档位。 */
+export const EXTRACTION_TEXT_FONT_SIZE_VALUES = [1, 2, 3, 4, 5, 6, 7] as const;
 /** 分支阅读列最小宽度。 */
 export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 300;
 /** Jina 响应模板默认占位符。 */
 export const DEFAULT_JINA_RESPONSE_TEMPLATE = '{{content}}';
+
+export type ExtractionTextFontSize = (typeof EXTRACTION_TEXT_FONT_SIZE_VALUES)[number];
 
 export const MODEL_PROVIDER_VALUES = [
   'openai-compatible',
@@ -28,6 +43,14 @@ export const REASONING_EFFORT_VALUES = ['low', 'medium', 'high', 'max'] as const
 
 const modelProviderSchema = z.enum(MODEL_PROVIDER_VALUES);
 const reasoningEffortSchema = z.enum(REASONING_EFFORT_VALUES);
+const extractionTextFontSizeSchema = z
+  .number()
+  .int()
+  .refine(
+    (value): value is ExtractionTextFontSize => EXTRACTION_TEXT_FONT_SIZE_VALUES.includes(value as ExtractionTextFontSize),
+    'invalid extraction text font size',
+  )
+  .transform((value) => value as ExtractionTextFontSize);
 
 /** 兼容旧字段 branchModelIds，统一迁移到 parallelModelIds。 */
 const migrateLegacyParallelModelIds = <T extends { parallelModelIds?: string[]; branchModelIds?: string[] }>(value: T): T => {
@@ -108,7 +131,9 @@ export const modelConfigSchema = z
       'google-vertex': ['apiKey', 'model'],
     };
 
-    for (const field of requiredFields[value.provider]) {
+    const providerRequiredFields = requiredFields[value.provider] ?? [];
+
+    for (const field of providerRequiredFields) {
       if (!value[field].trim()) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -319,6 +344,7 @@ export const extensionConfigSchema = z
         basic?: { parallelModelIds?: string[]; branchModelIds?: string[] };
         quickInputs?: Array<{ parallelModelIds?: string[]; branchModelIds?: string[] }>;
         sync?: Partial<z.input<typeof syncConfigSchema>>;
+        display?: Partial<z.input<typeof displayConfigSchema>>;
       };
 
       return {
@@ -337,6 +363,7 @@ export const extensionConfigSchema = z
                 ...input.sync,
               }
             : DEFAULT_SYNC_CONFIG,
+        display: fillDisplayConfigDefaults(input.display),
       };
     },
     z.object({
@@ -356,6 +383,7 @@ export const extensionConfigSchema = z
           .min(MIN_EXTRACTION_PANEL_HEIGHT)
           .max(MAX_EXTRACTION_PANEL_HEIGHT)
           .default(DEFAULT_EXTRACTION_PANEL_HEIGHT),
+        extractionTextFontSize: extractionTextFontSizeSchema.default(DEFAULT_EXTRACTION_TEXT_FONT_SIZE),
         jinaApiKey: z.string().default(''),
         jinaResponseTemplate: z.string().default(DEFAULT_JINA_RESPONSE_TEMPLATE),
         includePageContentByDefault: z.boolean(),
@@ -363,6 +391,7 @@ export const extensionConfigSchema = z
       models: z.array(modelConfigSchema),
       quickInputs: z.array(quickInputSchema),
       sync: syncConfigSchema,
+      display: displayConfigSchema,
       blacklist: z.array(blacklistRuleSchema),
     }),
   )
@@ -455,6 +484,7 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
       filterCot: false,
       extractionMethod: 'readability',
       extractionPanelHeight: DEFAULT_EXTRACTION_PANEL_HEIGHT,
+      extractionTextFontSize: DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
       jinaApiKey: '',
       jinaResponseTemplate: DEFAULT_JINA_RESPONSE_TEMPLATE,
       includePageContentByDefault: true,
@@ -462,12 +492,12 @@ export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): E
     },
     models: overrides.models ?? [],
     quickInputs: (overrides.quickInputs ?? DEFAULT_QUICK_INPUTS).map((quickInput) => ({
-      parallelModelIds: [],
       ...quickInput,
     })),
     sync: {
       ...DEFAULT_SYNC_CONFIG,
       ...(overrides.sync ?? {}),
     },
+    display: fillDisplayConfigDefaults(overrides.display ?? DEFAULT_DISPLAY_CONFIG),
     blacklist: overrides.blacklist ?? DEFAULT_BLACKLIST_RULES,
   });

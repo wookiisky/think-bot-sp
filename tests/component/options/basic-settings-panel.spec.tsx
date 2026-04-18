@@ -5,8 +5,11 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   MAX_EXTRACTION_PANEL_HEIGHT,
+  MAX_EXTRACTION_TEXT_FONT_SIZE,
   MIN_EXTRACTION_PANEL_HEIGHT,
+  MIN_EXTRACTION_TEXT_FONT_SIZE,
   createDefaultConfig,
 } from '../../../src/domain/config/config-schema';
 import { BasicSettingsPanel } from '../../../src/features/settings/basic-settings-panel';
@@ -29,6 +32,10 @@ const t = (key: string) =>
     'settings.cacheSize': '总大小',
     'settings.extractionMethod': '默认提取方式',
     'settings.extractionPanelHeight': '默认提取区高度',
+    'settings.extractionTextFontSize': '提取区文本字体大小',
+    'settings.extractionTextFontSizePreview': '示例文本',
+    'settings.extractionTextFontSizeMin': '最小',
+    'settings.extractionTextFontSizeMax': '最大',
     'settings.jinaApiKey': 'Jina API Key',
     'settings.jinaResponseTemplate': 'Jina 响应模板',
     'settings.previewHint': '即时预览',
@@ -151,20 +158,33 @@ describe('BasicSettingsPanel', () => {
 
     const user = userEvent.setup();
     const heightInput = screen.getByRole('spinbutton', { name: '默认提取区高度' });
+    const fontSizeSlider = screen.getByRole('slider', { name: '提取区文本字体大小' });
+    const fontSizePreview = screen.getByText('示例文本');
     const jinaApiKeyInput = screen.getByLabelText('Jina API Key');
     const jinaTemplateInput = screen.getByLabelText('Jina 响应模板');
 
+    expect(fontSizeSlider).toHaveValue(String(DEFAULT_EXTRACTION_TEXT_FONT_SIZE));
+    expect(fontSizePreview).toHaveClass('text-base', 'leading-7');
+    expect(screen.getByText('最小')).toBeInTheDocument();
+    expect(screen.getByText('最大')).toBeInTheDocument();
+
     fireEvent.change(heightInput, { target: { value: '999' } });
+    fireEvent.change(fontSizeSlider, { target: { value: '999' } });
     await user.clear(jinaApiKeyInput);
     await user.type(jinaApiKeyInput, 'jina-secret');
     fireEvent.change(jinaTemplateInput, { target: { value: '包装{{content}}' } });
 
     expect(heightInput).toHaveValue(MAX_EXTRACTION_PANEL_HEIGHT);
+    expect(fontSizeSlider).toHaveValue(String(MAX_EXTRACTION_TEXT_FONT_SIZE));
+    expect(fontSizePreview).toHaveClass('text-2xl', 'leading-10');
     expect(jinaApiKeyInput).toHaveValue('jina-secret');
     expect(jinaTemplateInput).toHaveValue('包装{{content}}');
 
     fireEvent.change(heightInput, { target: { value: '1' } });
+    fireEvent.change(fontSizeSlider, { target: { value: '0' } });
 
     expect(heightInput).toHaveValue(MIN_EXTRACTION_PANEL_HEIGHT);
+    expect(fontSizeSlider).toHaveValue(String(MIN_EXTRACTION_TEXT_FONT_SIZE));
+    expect(fontSizePreview).toHaveClass('text-xs', 'leading-5');
   });
 });

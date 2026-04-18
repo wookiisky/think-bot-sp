@@ -43,11 +43,12 @@
   - `Readability` 正文按原始 Markdown 纯文本展示，标题、列表等语法不再渲染成富文本结构。
   - side panel 首屏初始化采用主动拉取 bootstrap，首屏不依赖 background 主动推送命令。
   - `promptTab` 数量较多时支持多行换行，标签宽度按名称自适应，激活 `promptTab` 和状态标记仍可辨认。
-  - 已有文本的 `promptTab` 底部显示彩色线，loading 的 `promptTab` 显示彩色边框流动效果，且两者都不改变按钮尺寸。
+  - 已有文本的 `promptTab` 底部显示彩色线，loading 的 `promptTab` 显示彩色边框流动效果，且两者都不改变按钮尺寸，也不再叠加额外状态 icon。
   - 顶部控制区复制提取内容、打开设置页、打开历史页、打开 GitHub 正常；页面级反馈通过 toast 展示。
   - icon button hover / focus 时立即展示 tooltip，不依赖原生 `title`。
   - 切换提取方式并刷新。
   - 提取区高度拖拽后布局稳定。
+  - 输入区首次打开按实际内容高度展示，不会在输入框下方留下大块空白；拖拽放大后仍可正常发送。
   - side panel 再次打开时，已有缓存不重复提取。
   - 文本发送、图片发送成功。
   - `Enter` 发送、`Shift + Enter` 换行、composition 期间不误发送。
@@ -86,7 +87,7 @@
 
 阶段 3 当前复核现状：
 
-- 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、受限页退化、`browserTab` 切换隐藏后不自动展示且当前活动页重新预配置。
+- 已覆盖自动化：两阶段 bootstrap、黑名单确认后提取、普通网页入口、浏览器内部页退化到 conversations、conversations 再进入设置页、`browserTab` 切换隐藏后不自动展示且当前活动页重新预配置。
 - 已知问题：无。
 
 阶段 4 当前复核现状：

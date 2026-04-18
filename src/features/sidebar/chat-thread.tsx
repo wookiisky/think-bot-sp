@@ -20,6 +20,7 @@ import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Textarea } from '../../components/ui/textarea';
 import { Tooltip } from '../../components/ui/tooltip';
+import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
 import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from '../workspace/chat-markdown';
@@ -87,6 +88,8 @@ type ChatThreadProps = {
   editingText: string;
   /** 文案翻译函数。 */
   t: WorkspaceTranslator;
+  /** 助手消息 Markdown 展示配置。 */
+  assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
   /** 开始编辑用户消息。 */
   onStartEdit: (...input: [messageId: string, content: string]) => void;
   /** 更新编辑草稿。 */
@@ -136,6 +139,8 @@ type AssistantBranchRailProps = {
   scrollViewportRef: RefObject<HTMLElement | null>;
   /** 文案翻译函数。 */
   t: WorkspaceTranslator;
+  /** 助手消息 Markdown 展示配置。 */
+  assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
   /** 更新当前 hover 的分支。 */
   onHoverBranch: (target: { messageId: string; branchId: string } | null) => void;
   /** 更新分支模型弹层目标。 */
@@ -335,6 +340,7 @@ export const ChatThread = ({
   editingMessageId,
   editingText,
   t,
+  assistantMarkdownDisplayConfig,
   onStartEdit,
   onEditingTextChange,
   onCancelEdit,
@@ -448,7 +454,9 @@ export const ChatThread = ({
                       </Tooltip>
                     </div>
                   </div>
-                ) : hasAssistantBranches ? null : (
+                ) : hasAssistantBranches ? null : message.role === 'assistant' ? (
+                  <ChatMarkdown content={visibleContent} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
+                ) : (
                   <ChatMarkdown content={visibleContent} />
                 )}
 
@@ -471,6 +479,7 @@ export const ChatThread = ({
                     branchRefs={branchRefs}
                     scrollViewportRef={threadViewportRef}
                     t={t}
+                    assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
                     onHoverBranch={setHoveredBranchTarget}
                     onExpandBranchPopoverTarget={setExpandBranchPopoverTarget}
                     onExpandBranches={onExpandBranches}
@@ -561,6 +570,7 @@ const AssistantBranchRail = ({
   branchRefs,
   scrollViewportRef,
   t,
+  assistantMarkdownDisplayConfig,
   onHoverBranch,
   onExpandBranchPopoverTarget,
   onExpandBranches,
@@ -859,7 +869,7 @@ const AssistantBranchRail = ({
                   </div>
                 ) : null}
                 <div className="mt-1">
-                  <ChatMarkdown content={branch.content} />
+                  <ChatMarkdown content={branch.content} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
                 </div>
               </div>
               {branch.status === 'error' ? <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}

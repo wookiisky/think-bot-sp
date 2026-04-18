@@ -21,16 +21,34 @@ test('普通网页通过 __E2E_BROWSER_ACTION_CLICK__ 协议打开 side panel', 
   await driverPage.close();
 });
 
-test('受限页通过 __E2E_BROWSER_ACTION_CLICK__ 协议退化到 conversations', async ({ context, extensionId }) => {
+test('浏览器内部页通过 __E2E_BROWSER_ACTION_CLICK__ 协议退化到 conversations', async ({ context, extensionId }) => {
   const restricted = await context.newPage();
-  await restricted.goto(`chrome-extension://${extensionId}/${EXTENSION_PAGES.options}`);
+  await restricted.goto('chrome://extensions');
+  const driverPage = await context.newPage();
 
   await expect(
-    openBrowserActionForTab({ context, extensionId, page: restricted, driverPage: restricted }),
+    openBrowserActionForTab({ context, extensionId, page: restricted, driverPage }),
   ).resolves.toEqual({
     kind: 'conversations-opened',
     url: `chrome-extension://${extensionId}/${EXTENSION_PAGES.conversations}`,
   });
+
+  await driverPage.close();
+});
+
+test('conversations 页通过 __E2E_BROWSER_ACTION_CLICK__ 协议继续进入设置页', async ({ context, extensionId }) => {
+  const conversations = await context.newPage();
+  await conversations.goto(`chrome-extension://${extensionId}/${EXTENSION_PAGES.conversations}`);
+  const driverPage = await context.newPage();
+
+  await expect(
+    openBrowserActionForTab({ context, extensionId, page: conversations, driverPage }),
+  ).resolves.toEqual({
+    kind: 'options-opened',
+    url: `chrome-extension://${extensionId}/${EXTENSION_PAGES.options}`,
+  });
+
+  await driverPage.close();
 });
 
 test('browserTab 切换后会为当前活动页预配置 side panel，保证下一次点击可直接打开', async ({ context, extensionId }) => {

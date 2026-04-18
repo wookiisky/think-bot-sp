@@ -5,7 +5,6 @@ import {
   LoaderCircleIcon,
   SearchIcon,
   Settings2Icon,
-  SparklesIcon,
   Trash2Icon,
 } from 'lucide-react';
 
@@ -14,7 +13,13 @@ import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Tooltip } from '../../components/ui/tooltip';
 import {
+  DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+  type AssistantMarkdownDisplayConfig,
+} from '../../domain/config/assistant-markdown-display-config';
+import {
+  DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  type ExtractionTextFontSize,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
   getEnabledCompleteModels,
@@ -54,8 +59,8 @@ import {
   type WorkspaceLocaleCode,
 } from '../workspace/workspace-copy';
 import { normalizeExtractionText } from '../workspace/extraction-text';
-import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 import type { ConversationsApi } from './conversations-api';
+import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
 
 type ConversationsShellProps = {
   /** conversations 页 API。 */
@@ -127,6 +132,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [chatNotices, setChatNotices] = useState<Record<string, string>>({});
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+  const [extractionTextFontSize, setExtractionTextFontSize] = useState<ExtractionTextFontSize>(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
+  const [assistantMarkdownDisplayConfig, setAssistantMarkdownDisplayConfig] = useState<AssistantMarkdownDisplayConfig>(
+    DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+  );
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
   const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
@@ -140,6 +149,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
+  const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const branchPreview =
     branchPreviewTarget
       ? findBranchPreviewDetail(
@@ -285,6 +295,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setPages(pagesResponse.pages);
       setModels(nextModels);
       setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
+      setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
+      setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
       setConfigLoaded(true);
 
       const initialPage = pagesResponse.pages[0] ?? null;
@@ -358,6 +370,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         setLocaleCode(nextLocaleCode);
         setModels(nextModels);
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
+        setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
+        setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
         applyDetailState({
           detail: {
             page: detailResponse.page,
@@ -1380,7 +1394,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             </div>
           ) : null}
           {normalizedExtractionContent ? (
-            <article data-testid="conversations-extraction-content" className="whitespace-pre-wrap text-sm leading-6">
+            <article
+              data-testid="conversations-extraction-content"
+              className={cn('whitespace-pre-wrap', extractionTextClassName)}
+            >
               {normalizedExtractionContent}
             </article>
           ) : null}
@@ -1431,12 +1448,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   ) : null}
 
                   <span className="relative z-10 truncate">{promptTab.name}</span>
-                  {promptTab.autoTrigger ? (
-                    <SparklesIcon className={cn('relative z-10 size-3', isActive ? 'text-primary' : 'text-amber-600')} />
-                  ) : null}
-                  {!showLoadingRing && status !== 'idle' ? (
-                    <WorkspaceStatusGlyph label={statusLabel} status={toPromptVisualStatus(status)} className="relative z-10 size-3.5" />
-                  ) : null}
                   {hasPromptTabText && !showLoadingRing ? (
                     <span
                       data-testid={`prompt-tab-line-${promptTab.id}`}
@@ -1470,6 +1481,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 editingText={editingMap[promptTab.id]?.text ?? ''}
                 availableBranchModels={models.map((model) => ({ id: model.id, name: model.name }))}
                 t={t}
+                assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
                 onStartEdit={(messageId, content) => setPromptTabEditing(promptTab.id, { messageId, text: content })}
                 onEditingTextChange={(text) => {
                   const currentEditing = editingMap[promptTab.id];
@@ -1501,6 +1513,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           open={branchPreview !== null}
           preview={branchPreview}
           t={t}
+          assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
           onClose={() => setBranchPreviewTarget(null)}
         />
 

@@ -47,6 +47,12 @@ type BrowserEntryActionResult =
     }
   | {
       /** 结果类型。 */
+      kind: 'options-opened';
+      /** 新开页面 URL。 */
+      url: string;
+    }
+  | {
+      /** 结果类型。 */
       kind: 'conversations-opened';
       /** 新开页面 URL。 */
       url: string;
@@ -94,6 +100,17 @@ export const createBrowserEntryService = ({
     return query ? `${baseUrl}?${query}` : baseUrl;
   };
 
+  /** 判断当前 URL 是否就是本扩展的指定页面。 */
+  const isCurrentExtensionPage = (rawUrl: string, route: string) => {
+    try {
+      const currentUrl = new URL(rawUrl);
+      const targetUrl = new URL(toExtensionUrl(route));
+      return currentUrl.origin === targetUrl.origin && currentUrl.pathname === targetUrl.pathname;
+    } catch {
+      return false;
+    }
+  };
+
   /** 打开欢迎页。 */
   const openWelcomePage = async () => {
     const locale = resolveWelcomeLocale(getUiLocale());
@@ -109,6 +126,17 @@ export const createBrowserEntryService = ({
     await tabs.create({ url });
     return {
       kind: 'conversations-opened',
+      url,
+    };
+  };
+
+  /** 打开设置页。 */
+  const openOptionsPage = async (): Promise<BrowserEntryActionResult> => {
+    const url = toExtensionUrl(EXTENSION_PAGES.options);
+    logger.info('options.open.requested', { url });
+    await tabs.create({ url });
+    return {
+      kind: 'options-opened',
       url,
     };
   };
@@ -175,6 +203,14 @@ export const createBrowserEntryService = ({
         url: tab?.url,
       });
       return openConversationsPage();
+    }
+
+    if (isCurrentExtensionPage(tab.url ?? '', EXTENSION_PAGES.conversations)) {
+      logger.info('action.conversations.redirect_to_options', {
+        browserTabId: tab.id,
+        url: tab.url,
+      });
+      return openOptionsPage();
     }
 
     if (isRestrictedUrl(tab.url ?? '')) {

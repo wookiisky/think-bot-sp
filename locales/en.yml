@@ -11,6 +11,7 @@ settings.import: Import Config
 settings.export: Export Config
 settings.models: Models
 settings.promptTabs: Quick Inputs
+settings.display: Display Settings
 settings.blacklist: Blacklist
 settings.sync: Sync
 settings.cache: Local Cache
@@ -59,6 +60,23 @@ settings.recentErrorSource.conversations: History
 settings.recentErrorSource.sync: Sync
 settings.recentErrorSource.settings: Settings
 settings.basicDescription: Manage theme, language, default model, parallel models, and extraction defaults.
+settings.displayDescription: Configure heading and body styles for assistant Markdown messages.
+settings.displayPreset1: Preset 1
+settings.displayPreset2: Preset 2
+settings.displayPreset3: Preset 3
+settings.displayFieldDescription: Adjust font size, color, and underline separately.
+settings.displayFontSize: Font Size
+settings.displayColor: Color
+settings.displayUnderline: Underline
+settings.displayPreview: Preview
+settings.displayPreviewBody: This is a sample paragraph for previewing the current style.
+settings.displaySampleTitle: Full Preview
+settings.displaySampleDescription: The sample below updates in real time with the current display settings.
+settings.assistantMarkdownH1: Heading 1
+settings.assistantMarkdownH2: Heading 2
+settings.assistantMarkdownH3: Heading 3
+settings.assistantMarkdownH4: Heading 4
+settings.assistantMarkdownBody: Body
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
 settings.branchModels: Parallel Models
@@ -69,6 +87,10 @@ settings.multiSelectPlaceholder: Please Select
 settings.multiSelectSummary: "{count} selected"
 settings.extractionMethod: Default Extraction Method
 settings.extractionPanelHeight: Default Extraction Panel Height
+settings.extractionTextFontSize: Extraction Text Font Size
+settings.extractionTextFontSizePreview: Preview Text
+settings.extractionTextFontSizeMin: Smallest
+settings.extractionTextFontSizeMax: Largest
 settings.jinaApiKey: Jina API Key
 settings.jinaResponseTemplate: Jina Response Template
 settings.filterCot: Filter COT Content

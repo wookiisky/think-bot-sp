@@ -1,7 +1,7 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { IconName } from '../../ui/icon';
 
-export type SettingsSection = 'basic' | 'promptTabs' | 'models' | 'sync' | 'blacklist';
+export type SettingsSection = 'basic' | 'promptTabs' | 'models' | 'display' | 'sync' | 'blacklist';
 
 export type SettingsViewError = {
   /** 展示给用户的错误标题。 */
@@ -23,6 +23,7 @@ export const settingsSections: SettingsSectionMeta[] = [
   { id: 'basic', labelKey: 'settings.basic', icon: 'settings' },
   { id: 'promptTabs', labelKey: 'settings.promptTabs', icon: 'menu' },
   { id: 'models', labelKey: 'settings.languageModels', icon: 'language' },
+  { id: 'display', labelKey: 'settings.display', icon: 'menu' },
   { id: 'sync', labelKey: 'settings.syncPanel', icon: 'cache' },
   { id: 'blacklist', labelKey: 'settings.blacklistSettings', icon: 'menu' },
 ];

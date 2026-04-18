@@ -102,7 +102,7 @@ describe('browser-entry service', () => {
     expect(sidePanel.open).not.toHaveBeenCalled();
   });
 
-  it('受限页点击扩展图标时退化到 conversations 页面', async () => {
+  it('浏览器内部页点击扩展图标时退化到 conversations 页面', async () => {
     const logger = {
       info: vi.fn(),
       warn: vi.fn(),
@@ -152,6 +152,59 @@ describe('browser-entry service', () => {
     expect(sidePanel.open).not.toHaveBeenCalled();
     expect(tabs.create).toHaveBeenCalledWith({
       url: 'chrome-extension://ext-id/conversations.html',
+    });
+  });
+
+  it('conversations 页面点击扩展图标时会打开设置页', async () => {
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+    const runtime = {
+      getURL: vi.fn((route: string) => `chrome-extension://ext-id/${route}`),
+    } as unknown as typeof chrome.runtime;
+    const tabs = {
+      create: vi.fn().mockResolvedValue(undefined),
+    } as unknown as typeof chrome.tabs;
+    const sidePanel = {
+      setOptions: vi.fn(),
+      open: vi.fn(),
+      setPanelBehavior: vi.fn(),
+    } as unknown as typeof chrome.sidePanel;
+    const contextMenus = {
+      removeAll: vi.fn(),
+      create: vi.fn(),
+    } as unknown as typeof chrome.contextMenus;
+    const panelState = {
+      getEnabledTabIds: vi.fn().mockResolvedValue([]),
+      addEnabledTabId: vi.fn().mockResolvedValue(undefined),
+      removeEnabledTabId: vi.fn().mockResolvedValue(undefined),
+    };
+    const service = createBrowserEntryService({
+      logger,
+      runtime,
+      tabs,
+      sidePanel,
+      contextMenus,
+      panelState,
+      getUiLocale: () => 'zh-CN',
+    });
+
+    await expect(
+      service.handleActionClick({
+        id: 10,
+        url: 'chrome-extension://ext-id/conversations.html',
+      }),
+    ).resolves.toEqual({
+      kind: 'options-opened',
+      url: 'chrome-extension://ext-id/options.html',
+    });
+
+    expect(sidePanel.setOptions).not.toHaveBeenCalled();
+    expect(sidePanel.open).not.toHaveBeenCalled();
+    expect(tabs.create).toHaveBeenCalledWith({
+      url: 'chrome-extension://ext-id/options.html',
     });
   });
 

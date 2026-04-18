@@ -15,6 +15,7 @@ import { Icon } from '../../ui/icon';
 import { BlacklistSettingsPanel } from './blacklist-settings-panel';
 import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
+import { DisplaySettingsPanel } from './display-settings-panel';
 import { LanguageModelsPanel } from './language-models-panel';
 import { appendQuickInputTemplates, fetchQuickInputTemplates } from './quick-input-template-service';
 import { QuickInputsPanel } from './quick-inputs-panel';
@@ -468,6 +469,15 @@ export const SettingsShell = () => {
                 onChange={updateDraftConfig}
                 onTestModel={(model) => void handleTestModel(model.id)}
                 testingModelId={testingModelId}
+                t={t}
+              />
+            ) : null}
+
+            {activeSection === 'display' ? (
+              <DisplaySettingsPanel
+                config={draftConfig}
+                disabled={saving}
+                onChange={updateDraftConfig}
                 t={t}
               />
             ) : null}

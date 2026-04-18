@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { XIcon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
+import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from './chat-markdown';
 import type { BranchPreviewDetail, WorkspaceTranslator } from './workspace-state';
@@ -14,6 +15,8 @@ type BranchPreviewOverlayProps = {
   preview: BranchPreviewDetail | null;
   /** 工作台翻译函数。 */
   t: WorkspaceTranslator;
+  /** 助手消息 Markdown 展示配置。 */
+  assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
   /** 关闭预览层。 */
   onClose: () => void;
 };
@@ -57,7 +60,7 @@ const clampPreviewSize = (size: PreviewSize): PreviewSize => {
 };
 
 /** 分支内容独立预览层。 */
-export const BranchPreviewOverlay = ({ open, preview, t, onClose }: BranchPreviewOverlayProps) => {
+export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDisplayConfig, onClose }: BranchPreviewOverlayProps) => {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<PreviewSize>(() =>
@@ -167,7 +170,11 @@ export const BranchPreviewOverlay = ({ open, preview, t, onClose }: BranchPrevie
         </header>
 
         <div data-testid="branch-preview-content" className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <ChatMarkdown content={preview.content} className="text-sm leading-6" />
+          <ChatMarkdown
+            content={preview.content}
+            className="text-sm leading-6"
+            assistantDisplayConfig={assistantMarkdownDisplayConfig}
+          />
           {preview.status === 'error' ? (
             <p className="mt-4 text-xs text-destructive">{preview.errorMessage ?? t('workspace.status.error')}</p>
           ) : null}

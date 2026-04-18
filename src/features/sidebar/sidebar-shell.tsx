@@ -17,7 +17,13 @@ import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { ToastStack } from '../../components/ui/toast-stack';
 import { Tooltip } from '../../components/ui/tooltip';
 import {
+  DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+  type AssistantMarkdownDisplayConfig,
+} from '../../domain/config/assistant-markdown-display-config';
+import {
+  DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  type ExtractionTextFontSize,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
   getEnabledCompleteModels,
@@ -59,6 +65,7 @@ import { downloadTextFile } from '../../shared/download-file';
 import { ChatInput } from './chat-input';
 import { ChatThread } from './chat-thread';
 import type { SidebarApi } from './sidebar-api';
+import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
 
 type ExtractionMethod = 'readability' | 'jina';
 type SidebarState = 'bootstrapping' | 'blocked' | 'extracting' | 'ready' | 'error';
@@ -137,6 +144,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   });
   const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
+  const [extractionTextFontSize, setExtractionTextFontSize] = useState<ExtractionTextFontSize>(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
+  const [assistantMarkdownDisplayConfig, setAssistantMarkdownDisplayConfig] = useState<AssistantMarkdownDisplayConfig>(
+    DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+  );
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const t = createWorkspaceTranslator(localeResources, localeCode);
 
@@ -150,6 +161,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(content);
+  const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const branchPreview =
     branchPreviewTarget
       ? findBranchPreviewDetail(
@@ -723,6 +735,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setActivePromptTabId(pickInitialPromptTabId(nextPromptTabs, bootstrap.loadingStates));
         setIncludePageContent(bootstrap.page?.includePageContent ?? configResponse.config.basic.includePageContentByDefault);
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
+        setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
+        setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
 
         if (bootstrap.blockedByBlacklist) {
           setState('blocked');
@@ -1374,7 +1388,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         {normalizedExtractionContent ? (
           <pre
             data-testid="sidebar-extraction-content"
-            className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-foreground"
+            className={cn('m-0 whitespace-pre-wrap break-words text-foreground', extractionTextClassName)}
           >
             {normalizedExtractionContent}
           </pre>
@@ -1522,6 +1536,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               editingText={editingMap[promptTab.id]?.text ?? ''}
               availableBranchModels={models.map((model) => ({ id: model.id, name: model.name }))}
               t={t}
+              assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
               onStartEdit={(messageId, content) => setPromptTabEditing(promptTab.id, { messageId, text: content })}
               onEditingTextChange={(text) => {
                 const currentEditing = editingMap[promptTab.id];
@@ -1553,6 +1568,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         open={branchPreview !== null}
         preview={branchPreview}
         t={t}
+        assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
         onClose={() => setBranchPreviewTarget(null)}
       />
 

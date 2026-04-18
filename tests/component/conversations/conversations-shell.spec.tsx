@@ -243,6 +243,34 @@ describe('ConversationsShell', () => {
       writable: true,
     });
     const api = createConversationsApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            extractionTextFontSize: 1,
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '模型一',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'test-model',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'key',
+              deployment: '',
+              temperature: 0.2,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: 1024,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
       getPageDetail: vi.fn().mockResolvedValue({
         type: 'GET_PAGE_DETAIL_SUCCESS',
         page: {
@@ -298,6 +326,7 @@ describe('ConversationsShell', () => {
     expect(await screen.findByTestId('conversations-extraction-content')).toHaveTextContent('## 正文标题');
     expect(screen.getByTestId('conversations-extraction-content')).toHaveTextContent('- 要点一');
     expect(screen.getByTestId('conversations-extraction-content')).toHaveTextContent('结论');
+    expect(screen.getByTestId('conversations-extraction-content')).toHaveClass('text-xs', 'leading-5');
     expect(screen.getByTestId('prompt-tab-line-chat').className).toContain('inset-x-0');
 
     await user.click(screen.getByRole('button', { name: '复制提取内容' }));
@@ -449,9 +478,10 @@ describe('ConversationsShell', () => {
 
     render(<ConversationsShell api={api} />);
 
-    await screen.findByRole('tab', { name: /快速审阅/ });
+    const quickInputTab = await screen.findByRole('tab', { name: /快速审阅/ });
     await screen.findByText('正文 A');
 
+    expect(quickInputTab.querySelector('svg')).toBeNull();
     expect(api.sendChat).not.toHaveBeenCalled();
   });
 
