@@ -21,6 +21,7 @@
 
 - 本项目默认通过 `wxt.config.ts` 关闭 WXT 自动拉起浏览器，避免 Chromium 调试连接异常直接中断 `pnpm dev`。
 - 本项目在 dev server 上显式开启轮询监听，处理当前环境下文件事件监听不稳定的问题；代价是开发时会多一点 CPU 占用。
+- WXT 开发态的扩展页既要通过本地 websocket 做热更新，也要继续允许 background 发真实模型、同步和 Jina 请求；因此开发态 `connect-src` 不能只收窄到 localhost，而要至少覆盖 `http: https: ws: wss:`，否则会出现 side panel 能打开、但远端模型请求被 CSP 拦截的假修复。
 - 本地开发时先执行 `pnpm dev`，再到 `chrome://extensions` 手动以“加载已解压的扩展程序”方式加载 `.output/chrome-mv3-dev`。
 - 代码变更后由 WXT 持续 watch 并重建产物，不依赖自动打开临时浏览器 profile。
 

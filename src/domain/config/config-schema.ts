@@ -9,7 +9,7 @@ export const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
 /** 提取区最大默认高度。 */
 export const MAX_EXTRACTION_PANEL_HEIGHT = 420;
 /** 分支阅读列最小宽度。 */
-export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 350;
+export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 300;
 /** Jina 响应模板默认占位符。 */
 export const DEFAULT_JINA_RESPONSE_TEMPLATE = '{{content}}';
 

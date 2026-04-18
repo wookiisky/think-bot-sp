@@ -22,6 +22,7 @@
 ## 2.1 阶段 3 已落地约束
 
 - side panel 扩展页路由固定为 `sidebar.html`，避免触发 WXT 对保留 `sidepanel.html` 入口的全局 `default_path` 自动注入。
+- 本地开发时 `sidebar.html` 作为扩展页会加载 WXT 热更新脚本，因此开发态 CSP 既要允许本地 HMR 连接，也不能拦住 background 发真实远端请求；若把 `connect-src` 锁死到 localhost，会出现热更新恢复了，但模型请求、同步请求被 CSP 拦掉的新问题。
 - 浏览器入口测试驱动只允许走 `tests/e2e/helpers` 中的显式 `__E2E_BROWSER_ACTION_CLICK__` 协议，正式命令集合不混入测试指令。
 - `sidebar.html` 支持通过 `tabId` 和 `pageUrl` query 显式恢复上下文，仅用于 E2E 和调试复现，不改变正式按钮点击链路。
 - 已启用的 `browserTab` 集合保存在 `chrome.storage.session`，只用于 service worker 休眠或重启后的旧 tab 清理，不属于业务持久化数据。
