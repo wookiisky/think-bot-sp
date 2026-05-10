@@ -1207,8 +1207,8 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
   await sidepanel.mouse.up();
 
   const composerHeightBefore = await sidepanel
-    .getByTestId('chat-input-panel')
-    .evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight));
+    .getByLabel('聊天输入')
+    .evaluate((element) => element.getBoundingClientRect().height);
   const composerHandleBox = await sidepanel.getByTestId('chat-input-resize-handle').boundingBox();
   if (!composerHandleBox) {
     throw new Error('未找到输入区拖拽手柄');
@@ -1222,7 +1222,7 @@ test('图片预览可移除，提取区和输入区支持拖拽后仍可发送',
     .poll(async () => sidepanel.getByTestId('sidebar-extraction-panel').evaluate((element) => element.getBoundingClientRect().height))
     .toBeGreaterThan(extractionHeightBefore + 20);
   await expect
-    .poll(async () => sidepanel.getByTestId('chat-input-panel').evaluate((element) => Number.parseFloat(getComputedStyle(element).minHeight)))
+    .poll(async () => sidepanel.getByLabel('聊天输入').evaluate((element) => element.getBoundingClientRect().height))
     .toBeGreaterThan(composerHeightBefore + 20);
 
   await sidepanel.getByRole('button', { name: '移除图片 1' }).click();

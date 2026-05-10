@@ -215,33 +215,8 @@ describe('ChatInput', () => {
       />,
     );
 
-    const panel = screen.getByTestId('chat-input-panel');
-    const content = screen.getByTestId('chat-input-content');
-    expect(panel.style.minHeight).toBe('');
-
-    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 40,
-      top: 0,
-      right: 320,
-      bottom: 40,
-      left: 0,
-      toJSON: () => ({}),
-    });
-    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue({
-      x: 0,
-      y: 0,
-      width: 320,
-      height: 40,
-      top: 0,
-      right: 320,
-      bottom: 40,
-      left: 0,
-      toJSON: () => ({}),
-    });
-    window.dispatchEvent(new Event('resize'));
+    const textarea = screen.getByLabelText('聊天输入');
+    expect(textarea).toHaveStyle({ height: '32px' });
 
     fireEvent.pointerDown(screen.getByTestId('chat-input-resize-handle'), {
       clientY: 260,
@@ -251,7 +226,7 @@ describe('ChatInput', () => {
     });
     fireEvent.pointerUp(window);
 
-    expect(panel).toHaveStyle({ minHeight: '80px' });
+    expect(textarea).toHaveStyle({ height: '72px' });
   });
 
   it('按 Enter 会直接发送当前输入', () => {
