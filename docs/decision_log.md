@@ -1,6 +1,35 @@
 # 决策记录
 
-## 2026-04-04：阶段 2 同步先落“配置快照手动推送”最小闭环
+## 2026-05-10：输入区改为 Textarea 横向布局，拖拽直接调整 textarea 高度
+
+- 背景：
+  - 输入区原为单行 `<Input>` + 按钮同行布局，但保留了外层面板 `minHeight` 拖拽机制，导致拖拽后输入框下方出现大片空白，输入框本身不变高。
+  - 用户期望拖拽手柄直接放大输入框本体，支持多行输入和阅读，而不是在下方预留无用空间。
+- 决策：
+  - 把单行 `<Input>` 替换为多行 `<Textarea>`，采用横向布局：`textarea` 占据左侧主区（`flex-1 min-w-[240px]`），图片按钮、模型选择、页面内容开关、清空、导出、发送按钮紧贴 `textarea` 右侧同行（`items-end` 底部对齐）。
+  - 拖拽手柄直接调整 `textarea` 的 `style.height`（32px 起，最大 220px），不再调整外层面板 `minHeight`。
+  - 默认单行贴底、下方零空白；向上拖可放大 `textarea` 显示多行内容；Shift+Enter 换行，内容超出时 `textarea` 内部滚动。
+  - 移除外层面板的 `minHeight` 内联样式、`composerHeight` 状态、`ResizeObserver` 测量逻辑和相关工具函数。
+- 原因：
+  - 让拖拽语义与用户预期一致：拖拽 = 放大输入框，而不是在输入框下方留白。
+  - 支持多行输入和阅读长文本，提升输入体验。
+  - 消除下方空白，让输入区紧贴底部，消息区自动填满剩余空间。
+- 影响范围：
+  - `src/features/sidebar/chat-input.tsx` — 主要重构
+  - `src/features/conversations/conversations-shell.tsx` — 自动生效（共用同一组件）
+  - `docs/Workspace/sidebar.md`
+  - `docs/Workspace/conversations.md`
+  - `docs/test/sidebar-core.md`
+  - `docs/test/conversations-core.md`
+  - `prd_docs/product-functional-spec.md`
+- 放弃方案：
+  - 保持单行 `<Input>` 并只调整其 `height`（输入框变胖但不支持多行）。
+  - 彻底移除拖拽手柄（失去高度调整能力）。
+  - 把 `textarea` 和按钮分成两行（占用更多纵向空间）。
+- 后续同步：
+  - 测试已通过，文档已更新。
+
+## 2026-04-04：阶段 2 同步先落”配置快照手动推送”最小闭环
 
 - 背景：
   - 设置页已经具备本地配置闭环，但“云同步”一直停留在导航占位，文档和代码口径开始分叉。
