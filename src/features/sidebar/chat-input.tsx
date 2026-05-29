@@ -12,6 +12,11 @@ import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 const SINGLE_LINE_HEIGHT = 32;
 /** 输入区最大高度。 */
 const MAX_COMPOSER_HEIGHT = 220;
+/** 输入区工具控件统一尺寸。 */
+const COMPOSER_CONTROL_SIZE_CLASS = 'size-8 shrink-0 rounded-none';
+/** 输入区模型选择控件样式。 */
+const COMPOSER_MODEL_SELECT_CLASS =
+  'h-8 w-40 shrink-0 rounded-none border border-input/80 bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30';
 
 /** 限制输入区高度范围。 */
 const clampTextareaHeight = (height: number) => Math.min(MAX_COMPOSER_HEIGHT, Math.max(SINGLE_LINE_HEIGHT, height));
@@ -124,14 +129,14 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section className="shrink-0 border-t border-border bg-card/75 px-3 py-2 backdrop-blur-sm">
-      <div className="mb-0.5 flex justify-center">
+    <section data-testid="chat-input-section" className="shrink-0 border-t border-border bg-card/75 px-2 py-1 backdrop-blur-sm">
+      <div className="mb-0 flex justify-center">
         <div
           role="separator"
           aria-orientation="horizontal"
           aria-label={t('workspace.resizeComposer')}
           data-testid="chat-input-resize-handle"
-          className="h-1 w-8 cursor-row-resize rounded-full bg-border transition-colors hover:bg-primary/40"
+          className="h-0.5 w-8 cursor-row-resize rounded-none bg-border transition-colors hover:bg-primary/40"
           onPointerDown={(event) => {
             setResizeSession({
               startY: event.clientY,
@@ -141,13 +146,13 @@ export const ChatInput = ({
         />
       </div>
 
-      <div data-testid="chat-input-panel" className="flex flex-col gap-1.5">
+      <div data-testid="chat-input-panel" className="flex flex-col gap-1">
         {images.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {images.map((image, index) => (
               <figure
                 key={`${image.slice(0, 32)}:${index}`}
-                className="group relative overflow-hidden rounded-md border border-border bg-background shadow-sm"
+                className="group relative overflow-hidden rounded-none border border-border bg-background shadow-sm"
               >
                 <img src={image} alt={`${t('workspace.selectedImage')} ${index + 1}`} className="size-14 object-cover" />
                 <MiniConfirm
@@ -163,7 +168,7 @@ export const ChatInput = ({
                       variant="secondary"
                       size="icon-xs"
                       aria-label={`${t('workspace.removeImage')} ${index + 1}`}
-                      className="absolute right-1 top-1 opacity-90 shadow-sm"
+                      className="absolute right-0.5 top-0.5 rounded-none opacity-90 shadow-sm"
                     >
                       <Trash2Icon />
                     </Button>
@@ -174,11 +179,11 @@ export const ChatInput = ({
           </div>
         ) : null}
 
-        <div className="overflow-x-auto pb-0.5">
-          <div className="flex min-w-max flex-nowrap items-end gap-1.5">
+        <div className="overflow-x-auto pb-0">
+          <div data-testid="chat-input-control-row" className="flex w-full min-w-max flex-nowrap items-center gap-1">
             <Textarea
               aria-label={t('workspace.chatInput')}
-              className="min-h-0 min-w-[240px] flex-1 shrink-0 resize-none bg-background/90 px-2.5 py-1.5 leading-snug shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
+              className="min-h-0 min-w-[240px] flex-1 shrink-0 resize-none rounded-none bg-background/90 px-2 py-1 leading-snug shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]"
               style={{ height: `${textareaHeight}px` }}
               value={text}
               disabled={disabled}
@@ -201,9 +206,11 @@ export const ChatInput = ({
             <Tooltip content={t('workspace.addImage')}>
               <label
                 aria-disabled={disabled || !supportsImages}
+                data-testid="chat-input-add-image-control"
                 className={cn(
                   buttonVariants({ variant: 'outline', size: 'icon-sm' }),
-                  'relative size-[22px] shrink-0 cursor-pointer rounded-md',
+                  'relative cursor-pointer',
+                  COMPOSER_CONTROL_SIZE_CLASS,
                   (disabled || !supportsImages) && 'pointer-events-none opacity-50',
                 )}
               >
@@ -235,7 +242,7 @@ export const ChatInput = ({
 
             <select
               aria-label={t('workspace.selectModel')}
-              className="h-7 w-20 shrink-0 rounded-md border border-input/80 bg-background/80 px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              className={COMPOSER_MODEL_SELECT_CLASS}
               disabled={disabled || models.length === 0}
               value={selectedModelId}
               onChange={(event) => onSelectModel(event.target.value)}
@@ -256,7 +263,7 @@ export const ChatInput = ({
                 aria-label={t('workspace.includePageContent')}
                 aria-pressed={includePageContent}
                 className={cn(
-                  'size-[22px] shrink-0 rounded-md',
+                  COMPOSER_CONTROL_SIZE_CLASS,
                   includePageContent
                     ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
                     : 'border-border bg-background/70 text-muted-foreground hover:text-foreground',
@@ -280,7 +287,7 @@ export const ChatInput = ({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={t('workspace.clearCurrentTab')}
-                  className="size-[22px] rounded-md"
+                  className={COMPOSER_CONTROL_SIZE_CLASS}
                 >
                   <EraserIcon />
                 </Button>
@@ -293,7 +300,7 @@ export const ChatInput = ({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t('workspace.exportConversation')}
-                className="size-[22px] rounded-md"
+                className={COMPOSER_CONTROL_SIZE_CLASS}
                 onClick={() => void onExport()}
               >
                 <DownloadIcon />
@@ -305,7 +312,7 @@ export const ChatInput = ({
                 type="button"
                 size="icon-sm"
                 aria-label={t('workspace.send')}
-                className="size-[22px] shrink-0 rounded-md"
+                className={COMPOSER_CONTROL_SIZE_CLASS}
                 disabled={isSendDisabled}
                 onClick={submitCurrentInput}
               >

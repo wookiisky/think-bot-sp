@@ -352,7 +352,7 @@ describe('ChatInput', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
-  it('输入区重排为两行，首行保留图片和发送按钮，次行保留模型和会话动作', () => {
+  it('输入区工具控件使用统一高度、无圆角并紧凑排列', () => {
     render(
       <ChatInput
         disabled={false}
@@ -379,12 +379,16 @@ describe('ChatInput', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: '发送' })).toBeVisible();
-    expect(screen.getByLabelText('添加图片')).toBeVisible();
-    expect(screen.getByLabelText('选择模型')).toBeVisible();
-    expect(screen.getByLabelText('包含页面内容')).toBeVisible();
-    expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
-    expect(screen.getByRole('button', { name: '清空当前标签' })).toBeVisible();
-    expect(screen.getByRole('button', { name: '导出' })).toBeVisible();
+    expect(screen.getByTestId('chat-input-section')).toHaveClass('px-2', 'py-1');
+    expect(screen.getByTestId('chat-input-panel')).toHaveClass('gap-1');
+    expect(screen.getByTestId('chat-input-control-row')).toHaveClass('items-center');
+    expect(screen.getByTestId('chat-input-control-row')).toHaveClass('gap-1');
+    expect(screen.getByLabelText('聊天输入')).toHaveClass('rounded-none');
+    expect(screen.getByTestId('chat-input-add-image-control')).toHaveClass('size-8', 'rounded-none');
+    expect(screen.getByLabelText('选择模型')).toHaveClass('h-8', 'rounded-none');
+    expect(screen.getByLabelText('包含页面内容')).toHaveClass('size-8', 'rounded-none');
+    expect(screen.getByRole('button', { name: '清空当前标签' })).toHaveClass('size-8', 'rounded-none');
+    expect(screen.getByRole('button', { name: '导出' })).toHaveClass('size-8', 'rounded-none');
+    expect(screen.getByRole('button', { name: '发送' })).toHaveClass('size-8', 'rounded-none');
   });
 });
