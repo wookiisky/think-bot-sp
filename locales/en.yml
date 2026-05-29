@@ -229,17 +229,18 @@ sidebar.state.blockedTitle: This page is blocked by the blacklist
 sidebar.state.blockedDescription: Waiting for confirmation
 sidebar.state.extracting: Extracting page content
 sidebar.state.error: Extraction failed. Please retry.
-conversations.title: History Workspace
 conversations.searchLabel: Search History Pages
-conversations.searchPlaceholder: Search title or URL
+conversations.searchPlaceholder: Search
 conversations.empty: No history pages yet.
 conversations.emptySearch: No history pages match the query.
+conversations.untitledPage: Untitled page
 conversations.action.openSource: Open Source Page
 conversations.action.deletePage: Delete Page
 conversations.action.copyExtraction: Copy Extracted Content
 conversations.action.openSettings: Open Settings
 conversations.tablistLabel: History Workspace Tabs
 conversations.resizeSidebar: Resize History Sidebar
+conversations.resizeExtraction: Resize Extraction Panel
 conversations.editTitle: Edit Page Title
 conversations.notice.emptyExtraction: No extracted content to copy
 conversations.notice.copySuccess: Extracted content copied

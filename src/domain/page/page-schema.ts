@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
 const TRACKING_PARAMS = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content']);
+const DOMAIN_TRACKING_PARAMS = new Map<string, ReadonlySet<string>>([
+  ['mp.weixin.qq.com', new Set(['poc_token'])],
+]);
 
 const promptTabStateSchema = z.object({
   promptTabId: z.string().min(1),
@@ -48,9 +51,10 @@ export const pageRecordSchema = z
 export const normalizePageUrl = (rawUrl: string): string => {
   const url = new URL(rawUrl);
   url.hash = '';
+  const domainTrackingParams = DOMAIN_TRACKING_PARAMS.get(url.hostname) ?? new Set<string>();
 
   for (const key of Array.from(url.searchParams.keys())) {
-    if (TRACKING_PARAMS.has(key)) {
+    if (TRACKING_PARAMS.has(key) || domainTrackingParams.has(key)) {
       url.searchParams.delete(key);
     }
   }

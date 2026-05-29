@@ -86,6 +86,7 @@
 - 主 key：`page:{normalizedUrl}`
 - 列表索引来源：页面记录自身，不从聊天反推。
 - `normalizedUrl` 唯一。
+- URL 归一化会删除全局 `utm_*` 追踪参数；精确域名 `mp.weixin.qq.com` 会额外删除 `poc_token`，保留 `__biz / mid / idx / sn` 等文章标识参数。
 - 页面记录删除时必须级联清理其会话和 loading 数据。
 
 ## 4. 读写路径
@@ -98,7 +99,7 @@
   - 仅 background 的页面服务和标题编辑命令。
 - 典型查询：
   - 按最近更新时间获取页面列表。
-  - 按标题或 URL 搜索。
+  - 按标题、URL 或提取正文搜索。
 - 典型更新：
   - 提取成功后更新内容与方法。
   - 用户发送消息时回写页面级 `includePageContent`。

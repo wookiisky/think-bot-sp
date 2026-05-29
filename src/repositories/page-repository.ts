@@ -170,7 +170,7 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       return sortRecentPages(await getAllPages());
     },
 
-    /** 按标题和 URL 搜索页面。 */
+    /** 按标题、URL 和提取正文搜索页面。 */
     async searchPages(query: string) {
       const normalizedQuery = query.trim().toLowerCase();
       const pages = await getAllPages();
@@ -179,7 +179,12 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       }
 
       return sortRecentPages(
-        pages.filter((page) => page.title.toLowerCase().includes(normalizedQuery) || page.url.toLowerCase().includes(normalizedQuery)),
+        pages.filter(
+          (page) =>
+            page.title.toLowerCase().includes(normalizedQuery) ||
+            page.url.toLowerCase().includes(normalizedQuery) ||
+            page.content.toLowerCase().includes(normalizedQuery),
+        ),
       );
     },
 

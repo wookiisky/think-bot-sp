@@ -77,6 +77,13 @@ type SidebarResizeState = {
   startWidth: number;
 };
 
+type ExtractionResizeState = {
+  /** 拖拽开始时的鼠标纵坐标。 */
+  startY: number;
+  /** 拖拽开始时的提取区高度。 */
+  startHeight: number;
+};
+
 type PageDetailState = {
   /** 当前页面记录。 */
   page: SidebarPageRecord | null;
@@ -138,6 +145,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   );
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
+  const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [isTitleEditing, setIsTitleEditing] = useState(false);
@@ -151,6 +159,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
+  const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
   const branchPreview =
     branchPreviewTarget
       ? findBranchPreviewDetail(
@@ -274,6 +283,26 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       window.removeEventListener('pointerup', handlePointerUp);
     };
   }, [sidebarResizeState]);
+
+  useEffect(() => {
+    if (!extractionResizeState) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      setExtractionPanelHeight(clampExtractionPanelHeight(extractionResizeState.startHeight + (event.clientY - extractionResizeState.startY)));
+    };
+    const handlePointerUp = () => {
+      setExtractionResizeState(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [extractionResizeState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1229,9 +1258,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
       <aside className="flex shrink-0 flex-col border-r border-border bg-card/80 backdrop-blur-sm" style={{ width: `${sidebarWidth}px` }}>
-        <header className="border-b border-border px-3 py-2.5">
-          <h1 className="text-lg font-semibold">{t('conversations.title')}</h1>
-          <label className="mt-2 flex items-center gap-2 border border-input bg-input/20 px-2.5 py-1.5 text-xs text-muted-foreground">
+        <header className="border-b border-border px-3 py-2">
+          <label className="flex items-center gap-2 border border-input bg-input/20 px-2.5 py-1.5 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
             <input
               aria-label={t('conversations.searchLabel')}
@@ -1251,27 +1279,27 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           ) : null}
           {pages.map((page) => {
             const isSelected = page.normalizedUrl === selectedPageUrl;
+            const displayTitle = page.title.trim() || t('conversations.untitledPage');
             return (
               <div
                 key={page.normalizedUrl}
                 className={cn(
-                  'flex w-full items-start gap-2.5 border-b border-border px-2.5 py-2 text-left transition-colors',
+                  'flex w-full items-center gap-2 border-b border-border px-2.5 py-1.5 text-left transition-colors',
                   isSelected && 'bg-primary/10',
                 )}
               >
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   onClick={() => setSelectedPageUrl(page.normalizedUrl)}
                 >
                   {page.faviconUrl ? (
-                    <img src={page.faviconUrl} alt="" className="mt-1 size-4 rounded-sm" />
+                    <img src={page.faviconUrl} alt="" className="size-4 rounded-sm" />
                   ) : (
-                    <span className="mt-1 size-4 rounded-sm bg-border" />
+                    <span className="size-4 rounded-sm bg-border" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{page.title || page.url}</p>
-                    <p className="truncate text-xs text-muted-foreground">{page.url}</p>
+                    <p className="truncate text-sm font-medium leading-5">{displayTitle}</p>
                   </div>
                 </button>
                 <div className="flex shrink-0 gap-1">
@@ -1280,7 +1308,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      aria-label={`${t('conversations.action.openSource')} ${page.title || page.url}`}
+                      aria-label={`${t('conversations.action.openSource')} ${displayTitle}`}
                       onClick={() => {
                         void api.openSourcePage(page.url);
                       }}
@@ -1300,7 +1328,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                         type="button"
                         variant="ghost"
                         size="icon-xs"
-                        aria-label={`${t('conversations.action.deletePage')} ${page.title || page.url}`}
+                        aria-label={`${t('conversations.action.deletePage')} ${displayTitle}`}
                       >
                         <Trash2Icon />
                       </Button>
@@ -1355,7 +1383,12 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                       }}
                     />
                   ) : (
-                    <button type="button" className="text-left text-xl font-semibold" onClick={() => setIsTitleEditing(true)}>
+                    <button
+                      type="button"
+                      aria-label={t('conversations.editTitle')}
+                      className="text-left text-xl font-semibold"
+                      onClick={() => setIsTitleEditing(true)}
+                    >
                       {detail.page.title || detail.page.url}
                     </button>
                   )}
@@ -1390,7 +1423,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section
           data-testid="conversations-extraction-panel"
-          className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-2"
+          className={cn(
+            'box-border shrink-0 border-b border-border bg-background/80',
+            isExtractionPanelCollapsed ? 'overflow-hidden px-0 py-0' : 'overflow-y-auto px-3 py-2',
+          )}
           style={{ height: `${extractionPanelHeight}px` }}
         >
           {detailStatus === 'loading' && !detail.page ? (
@@ -1409,6 +1445,22 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           ) : null}
           {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
+
+        <div className="shrink-0 border-b border-border px-3 py-0.5">
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t('conversations.resizeExtraction')}
+            data-testid="conversations-extraction-resize-handle"
+            className="mx-auto h-1.5 w-10 cursor-row-resize bg-border transition-colors hover:bg-primary/40"
+            onPointerDown={(event) => {
+              setExtractionResizeState({
+                startY: event.clientY,
+                startHeight: extractionPanelHeight,
+              });
+            }}
+          />
+        </div>
 
         <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
           <div className="flex flex-wrap gap-1">

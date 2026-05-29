@@ -193,8 +193,10 @@ describe('ConversationsShell', () => {
 
     await waitFor(() => expect(api.listPages).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('conversations-shell').className).toContain('overflow-hidden');
+    expect(screen.queryByText('历史对话')).toBeNull();
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
+    expect(within(screen.getByTestId('conversations-page-list')).queryByText('https://example.com/article-a')).toBeNull();
     expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(screen.getByTestId('conversations-extraction-panel')).toHaveStyle({ height: `${DEFAULT_EXTRACTION_PANEL_HEIGHT}px` });
@@ -206,9 +208,54 @@ describe('ConversationsShell', () => {
 
     render(<ConversationsShell api={api} />);
 
-    await user.type(await screen.findByLabelText('搜索历史页面'), 'B');
+    const searchInput = await screen.findByLabelText('搜索历史页面');
+    expect(searchInput).toHaveAttribute('placeholder', '搜索');
+    await user.type(searchInput, 'B');
 
     await waitFor(() => expect(api.searchPages).toHaveBeenCalledWith('B'));
+  });
+
+  it('支持拖拽调整提取区高度', async () => {
+    const api = createConversationsApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            extractionPanelHeight: 280,
+          },
+        }),
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    const extractionPanel = await screen.findByTestId('conversations-extraction-panel');
+    await waitFor(() => {
+      expect(extractionPanel).toHaveStyle({ height: '280px' });
+    });
+
+    fireEvent.pointerDown(screen.getByTestId('conversations-extraction-resize-handle'), {
+      clientY: 200,
+    });
+    fireEvent.pointerMove(window, {
+      clientY: 260,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(extractionPanel).toHaveStyle({ height: '340px' });
+
+    fireEvent.pointerDown(screen.getByTestId('conversations-extraction-resize-handle'), {
+      clientY: 260,
+    });
+    fireEvent.pointerMove(window, {
+      clientY: -200,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(extractionPanel).toHaveStyle({ height: '1px' });
+    expect(extractionPanel).toHaveClass('overflow-hidden', 'px-0', 'py-0');
+    expect(extractionPanel).not.toHaveClass('overflow-y-auto');
   });
 
   it('支持标题编辑和页面删除', async () => {
@@ -217,7 +264,7 @@ describe('ConversationsShell', () => {
 
     render(<ConversationsShell api={api} />);
 
-    await user.click(await screen.findByRole('button', { name: '页面 A' }));
+    await user.click(await screen.findByRole('button', { name: '编辑页面标题' }));
     const input = await screen.findByLabelText('编辑页面标题');
     await user.clear(input);
     await user.type(input, '页面 A 新标题');

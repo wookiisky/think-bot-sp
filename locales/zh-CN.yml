@@ -229,17 +229,18 @@ sidebar.state.blockedTitle: 当前页面命中黑名单
 sidebar.state.blockedDescription: 等待放行
 sidebar.state.extracting: 正在提取页面正文
 sidebar.state.error: 提取失败，请重试
-conversations.title: 历史工作台
 conversations.searchLabel: 搜索历史页面
-conversations.searchPlaceholder: 搜索标题或 URL
+conversations.searchPlaceholder: 搜索
 conversations.empty: 还没有历史页面。
 conversations.emptySearch: 没有匹配的历史页面。
+conversations.untitledPage: 未命名页面
 conversations.action.openSource: 打开原网页
 conversations.action.deletePage: 删除页面
 conversations.action.copyExtraction: 复制提取内容
 conversations.action.openSettings: 打开设置页
 conversations.tablistLabel: 历史工作台标签
 conversations.resizeSidebar: 调整历史栏宽度
+conversations.resizeExtraction: 调整提取区高度
 conversations.editTitle: 编辑页面标题
 conversations.notice.emptyExtraction: 当前没有可复制的提取内容
 conversations.notice.copySuccess: 已复制提取内容

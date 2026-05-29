@@ -15,6 +15,22 @@ describe('page schema', () => {
     );
   });
 
+  it('归一化微信文章 URL 时删除临时令牌并保留文章标识参数', () => {
+    expect(
+      normalizePageUrl(
+        'https://mp.weixin.qq.com/s?__biz=MzE5ODg1MTY4Mw==&mid=2247484903&idx=1&sn=b6bdb775de8455680a7f70dd21de9df1&poc_token=HGk0GWqjXLXFsTIuw9rKI7Q0qZy8ifq4KP-lOpWp',
+      ),
+    ).toBe(
+      'https://mp.weixin.qq.com/s?__biz=MzE5ODg1MTY4Mw%3D%3D&mid=2247484903&idx=1&sn=b6bdb775de8455680a7f70dd21de9df1',
+    );
+  });
+
+  it('归一化其他域名 URL 时不删除同名参数', () => {
+    expect(normalizePageUrl('https://example.com/a?poc_token=keep&q=1')).toBe(
+      'https://example.com/a?poc_token=keep&q=1',
+    );
+  });
+
   it('创建页面记录时默认开启页面内容并写入过期时间', () => {
     const page = buildPageRecord({
       url: 'https://example.com/a?utm_source=ads&q=1#hash',

@@ -190,6 +190,18 @@ describe('SidebarShell', () => {
     fireEvent.pointerUp(window);
 
     expect(extractionPanel).toHaveStyle({ height: '340px' });
+
+    fireEvent.pointerDown(screen.getByTestId('sidebar-extraction-resize-handle'), {
+      clientY: 260,
+    });
+    fireEvent.pointerMove(window, {
+      clientY: -200,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(extractionPanel).toHaveStyle({ height: '1px' });
+    expect(extractionPanel).toHaveClass('overflow-hidden', 'px-0', 'py-0');
+    expect(extractionPanel).not.toHaveClass('overflow-y-auto');
   });
 
   it('按基础设置字号渲染提取区文本', async () => {

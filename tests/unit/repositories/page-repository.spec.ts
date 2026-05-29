@@ -210,23 +210,43 @@ describe('page-repository', () => {
     ]);
   });
 
-  it('搜索只匹配标题和 URL', async () => {
+  it('搜索匹配标题、URL 和提取正文', async () => {
     const storage = createFakeStorageArea();
     const repo = createPageRepository(createChromeLocalAdapter(storage));
 
     await repo.savePage({
       ...buildPageRecord({ url: 'https://example.com/article/alpha', now: 1 }),
       title: 'Alpha 页面',
-      content: '不会参与搜索',
+      content: '普通正文',
+      updatedAt: 30,
+      expiresAt: 31,
     });
     await repo.savePage({
       ...buildPageRecord({ url: 'https://another.com/notes', now: 1 }),
       title: 'Beta 页面',
       content: 'alpha 内容',
+      updatedAt: 20,
+      expiresAt: 21,
+    });
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://third.example.com/alpha-path', now: 1 }),
+      title: 'Gamma 页面',
+      content: '普通正文',
+      updatedAt: 10,
+      expiresAt: 11,
+    });
+    await repo.savePage({
+      ...buildPageRecord({ url: 'https://example.com/other', now: 1 }),
+      title: 'Delta 页面',
+      content: '普通正文',
+      updatedAt: 40,
+      expiresAt: 41,
     });
 
     await expect(repo.searchPages('alpha')).resolves.toMatchObject([
       { normalizedUrl: 'https://example.com/article/alpha', title: 'Alpha 页面' },
+      { normalizedUrl: 'https://another.com/notes', title: 'Beta 页面' },
+      { normalizedUrl: 'https://third.example.com/alpha-path', title: 'Gamma 页面' },
     ]);
   });
 

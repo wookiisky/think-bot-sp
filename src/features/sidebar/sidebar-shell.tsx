@@ -164,6 +164,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(content);
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
+  const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
   const branchPreview =
     branchPreviewTarget
       ? findBranchPreviewDetail(
@@ -1409,7 +1410,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
       <section
         data-testid="sidebar-extraction-panel"
-        className="shrink-0 overflow-y-auto border-b border-border bg-background/80 px-3 py-1.5"
+        className={cn(
+          'box-border shrink-0 border-b border-border bg-background/80',
+          isExtractionPanelCollapsed ? 'overflow-hidden px-0 py-0' : 'overflow-y-auto px-3 py-1.5',
+        )}
         style={{ height: `${extractionPanelHeight}px` }}
       >
         {normalizedExtractionContent ? (

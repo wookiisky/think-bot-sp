@@ -17,7 +17,7 @@ type ConversationsHandlerContext = {
 type PageRepository = {
   /** 按最近更新时间返回页面。 */
   listRecentPages(): Promise<unknown[]>;
-  /** 按标题和 URL 搜索页面。 */
+  /** 按标题、URL 和提取正文搜索页面。 */
   searchPages(query: string): Promise<unknown[]>;
   /** 读取单个页面。 */
   getPage(normalizedUrl: string): Promise<unknown | null>;
