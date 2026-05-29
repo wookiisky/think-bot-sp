@@ -64,6 +64,7 @@ export const conversationsCommandSchema = z.discriminatedUnion('type', [
   updatePageTitleCommandSchema,
   deletePageCommandSchema,
 ]);
+export type ConversationsCommandMessage = z.infer<typeof conversationsCommandSchema>;
 
 /** 命令信封。 */
 export const conversationsCommandEnvelopeSchema = z.object({

@@ -98,12 +98,22 @@ test('settings models panel can add copy delete and persist through save', async
     .poll(() =>
       page.evaluate(async () => {
         const result = await chrome.storage.local.get('config:extension');
-        const config = result['config:extension'];
+        const config = result['config:extension'] as
+          | {
+              basic: {
+                defaultModelId: string | null;
+              };
+              models: Array<{
+                name: string;
+                deletedAt: number | null;
+              }>;
+            }
+          | undefined;
         return {
           defaultModelId: config ? config.basic.defaultModelId : 'missing',
-          deletedModels: config?.models?.filter((item: { deletedAt: number | null }) => item.deletedAt !== null).length ?? 0,
-          copiedModels: config?.models?.filter((item: { name: string }) => item.name === '主模型 副本').length ?? 0,
-          newModels: config?.models?.filter((item: { name: string }) => item.name === '新模型').length ?? 0,
+          deletedModels: config?.models.filter((item) => item.deletedAt !== null).length ?? 0,
+          copiedModels: config?.models.filter((item) => item.name === '主模型 副本').length ?? 0,
+          newModels: config?.models.filter((item) => item.name === '新模型').length ?? 0,
         };
       }),
     )

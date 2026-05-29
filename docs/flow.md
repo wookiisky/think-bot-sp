@@ -136,7 +136,7 @@
 
 流程：
 
-1. side panel 在初始化时先发起 `GET_SIDEBAR_BOOTSTRAP`，用户手动点击时发起 `RE_EXTRACT_CONTENT`。
+1. side panel 在初始化时先发起 `GET_SIDEBAR_BOOTSTRAP`，需要提取时再发起带来源标记的 `RE_EXTRACT_CONTENT`；只有“打开侧边栏流程”里的提取会继续进入自动触发编排。
 2. background 先返回缓存、页面状态、`promptTab` 会话摘要、loading 状态和黑名单判定结果。
 3. 若页面已有有效缓存，则不重复提取。
 4. 若页面无缓存且当前打开流程已通过黑名单校验，background 请求 content script 提供页面 HTML 和元数据。
@@ -221,7 +221,7 @@
 - side panel 会把 `ExtensionConfig.quickInputs` 渲染为 `Chat + quickInputs` 多 `promptTab` 工作台。
 - 每个 `promptTab` 有独立草稿、模型选择、消息线程和 loading 恢复。
 - 切换 `promptTab` 只影响聊天与输入区，不影响提取区。
-- 页面提取成功后，background 会读取 `autoTrigger=true` 的快捷输入并执行后台去重自动触发。
+- 只有侧边栏打开流程中的页面提取成功后，background 才会读取 `autoTrigger=true` 的快捷输入并执行后台去重自动触发。
 - 自动触发会话会注册到与手动发送相同的活跃会话表，因此页面级清空仍能先取消会话再删数据。
 
 当前流程：

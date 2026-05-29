@@ -1,3 +1,5 @@
+import type * as Ai from 'ai';
+import type { LanguageModel, ToolSet } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -8,18 +10,18 @@ import { getResolvedReasoningEffort, type ModelConfig } from '../../domain/confi
 
 type OpenAICompatibleProvider = {
   /** 兼容 OpenAI provider 的 chatModel 创建入口。 */
-  chatModel: (modelId: string) => unknown;
+  chatModel: (modelId: string) => LanguageModel;
 };
 
-type CallableProvider = (modelId: string) => unknown;
+type CallableProvider = (modelId: string) => LanguageModel;
 
 type GoogleToolProvider = CallableProvider & {
   /** Provider 内建 tool 工厂。 */
   tools: {
     /** Google Search grounding。 */
-    googleSearch: (_settings: Record<string, never>) => unknown;
+    googleSearch: (_settings: Record<string, never>) => NonNullable<ToolSet[string]>;
     /** URL Context。 */
-    urlContext: (_settings: Record<string, never>) => unknown;
+    urlContext: (_settings: Record<string, never>) => NonNullable<ToolSet[string]>;
   };
 };
 
@@ -66,6 +68,9 @@ type VertexFactory = (settings: {
   baseURL?: string;
 }) => GoogleToolProvider;
 
+type GenerateTextRequest = Parameters<typeof Ai.generateText>[0];
+type ProviderOptions = GenerateTextRequest extends { providerOptions?: infer Value } ? Value : never;
+
 type ProviderRegistryDeps = {
   /** OpenAI Compatible provider 工厂。 */
   createOpenAICompatible: OpenAICompatibleFactory;
@@ -90,15 +95,15 @@ export type ResolvedProviderModel = {
   /** 是否支持图片输入，由配置显式透传。 */
   supportsImages: boolean;
   /** 交给 AI SDK 的模型对象。 */
-  sdkModel: unknown;
+  sdkModel: LanguageModel;
   /** 顶层采样温度。 */
   temperature: number;
   /** 单次输出 token 上限。 */
   maxOutputTokens: number | null;
   /** provider tools。 */
-  tools?: Record<string, unknown>;
+  tools?: ToolSet;
   /** providerOptions。 */
-  providerOptions?: Record<string, unknown>;
+  providerOptions?: ProviderOptions;
 };
 
 /** 穷举保护，避免新增 provider 后静默落入错误分支。 */
@@ -120,8 +125,8 @@ const toGoogleThinkingLevel = (effort: ReturnType<typeof getResolvedReasoningEff
 const supportsBedrockEffort = (modelId: string) => modelId.startsWith('amazon.') || modelId.startsWith('us.amazon.');
 
 /** 构造 Gemini / Vertex tools。 */
-const buildGoogleTools = (provider: GoogleToolProvider, toolIds: string[]) => {
-  const nextTools: Record<string, unknown> = {};
+const buildGoogleTools = (provider: GoogleToolProvider, toolIds: string[]): ToolSet | undefined => {
+  const nextTools: ToolSet = {};
 
   if (toolIds.includes('url_context')) {
     nextTools.url_context = provider.tools.urlContext({});
@@ -160,12 +165,15 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
         };
       }
       case 'gemini': {
-        const provider = deps.createGoogleGenerativeAI({
+        const settings: Parameters<GoogleFactory>[0] = {
           apiKey: model.apiKey,
-          baseURL: toOptionalString(model.baseUrl),
-        });
-
-        return {
+        };
+        const baseURL = toOptionalString(model.baseUrl);
+        if (baseURL !== undefined) {
+          settings.baseURL = baseURL;
+        }
+        const provider = deps.createGoogleGenerativeAI(settings);
+        const resolved: ResolvedProviderModel = {
           providerId: model.provider,
           modelId: resolvedModelId,
           modelLabel: model.name,
@@ -173,7 +181,6 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           sdkModel: provider(resolvedModelId),
           temperature: model.temperature,
           maxOutputTokens: model.maxOutputTokens,
-          tools: buildGoogleTools(provider, model.tools),
           providerOptions: {
             google: {
               thinkingConfig: {
@@ -182,12 +189,22 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
             },
           },
         };
+        const tools = buildGoogleTools(provider, model.tools);
+        if (tools) {
+          resolved.tools = tools;
+        }
+
+        return resolved;
       }
       case 'anthropic': {
-        const provider = deps.createAnthropic({
+        const settings: Parameters<AnthropicFactory>[0] = {
           apiKey: model.apiKey,
-          baseURL: toOptionalString(model.baseUrl),
-        });
+        };
+        const baseURL = toOptionalString(model.baseUrl);
+        if (baseURL !== undefined) {
+          settings.baseURL = baseURL;
+        }
+        const provider = deps.createAnthropic(settings);
 
         return {
           providerId: model.provider,
@@ -205,13 +222,21 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
         };
       }
       case 'amazon-bedrock': {
-        const provider = deps.createAmazonBedrock({
-          apiKey: toOptionalString(model.apiKey),
-          region: toOptionalString(model.region),
-          baseURL: toOptionalString(model.baseUrl),
-        });
-
-        return {
+        const settings: Parameters<BedrockFactory>[0] = {};
+        const apiKey = toOptionalString(model.apiKey);
+        const region = toOptionalString(model.region);
+        const baseURL = toOptionalString(model.baseUrl);
+        if (apiKey !== undefined) {
+          settings.apiKey = apiKey;
+        }
+        if (region !== undefined) {
+          settings.region = region;
+        }
+        if (baseURL !== undefined) {
+          settings.baseURL = baseURL;
+        }
+        const provider = deps.createAmazonBedrock(settings);
+        const resolved: ResolvedProviderModel = {
           providerId: model.provider,
           modelId: resolvedModelId,
           modelLabel: model.name,
@@ -219,27 +244,40 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           sdkModel: provider(resolvedModelId),
           temperature: model.temperature,
           maxOutputTokens: model.maxOutputTokens,
-          providerOptions: supportsBedrockEffort(resolvedModelId)
-            ? {
-                bedrock: {
-                  reasoningConfig: {
-                    type: 'enabled',
-                    maxReasoningEffort: getResolvedReasoningEffort(model),
-                  },
-                },
-              }
-            : undefined,
         };
+        if (supportsBedrockEffort(resolvedModelId)) {
+          resolved.providerOptions = {
+            bedrock: {
+              reasoningConfig: {
+                type: 'enabled',
+                maxReasoningEffort: getResolvedReasoningEffort(model),
+              },
+            },
+          };
+        }
+
+        return resolved;
       }
       case 'google-vertex': {
-        const provider = deps.createVertex({
-          apiKey: toOptionalString(model.apiKey),
-          project: toOptionalString(model.project),
-          location: toOptionalString(model.location),
-          baseURL: toOptionalString(model.baseUrl),
-        });
-
-        return {
+        const settings: Parameters<VertexFactory>[0] = {};
+        const apiKey = toOptionalString(model.apiKey);
+        const project = toOptionalString(model.project);
+        const location = toOptionalString(model.location);
+        const baseURL = toOptionalString(model.baseUrl);
+        if (apiKey !== undefined) {
+          settings.apiKey = apiKey;
+        }
+        if (project !== undefined) {
+          settings.project = project;
+        }
+        if (location !== undefined) {
+          settings.location = location;
+        }
+        if (baseURL !== undefined) {
+          settings.baseURL = baseURL;
+        }
+        const provider = deps.createVertex(settings);
+        const resolved: ResolvedProviderModel = {
           providerId: model.provider,
           modelId: resolvedModelId,
           modelLabel: model.name,
@@ -247,7 +285,6 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           sdkModel: provider(resolvedModelId),
           temperature: model.temperature,
           maxOutputTokens: model.maxOutputTokens,
-          tools: buildGoogleTools(provider, model.tools),
           providerOptions: {
             vertex: {
               thinkingConfig: {
@@ -256,6 +293,12 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
             },
           },
         };
+        const tools = buildGoogleTools(provider, model.tools);
+        if (tools) {
+          resolved.tools = tools;
+        }
+
+        return resolved;
       }
       default:
         return assertNever(model.provider);
@@ -267,8 +310,8 @@ const defaultRegistry = createProviderRegistry({
   createOpenAICompatible,
   createGoogleGenerativeAI,
   createAnthropic,
-  createAmazonBedrock,
-  createVertex,
+  createAmazonBedrock: createAmazonBedrock as unknown as BedrockFactory,
+  createVertex: createVertex as unknown as VertexFactory,
 });
 
 /** 默认 registry，直接绑定官方 provider 工厂。 */

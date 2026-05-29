@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDefaultConfig } from '../../../src/domain/config/config-schema';
+import { createDefaultConfig, type ExtensionConfig } from '../../../src/domain/config/config-schema';
 import { buildPageRecord } from '../../../src/domain/page/page-schema';
 import { createChromeLocalAdapter } from '../../../src/repositories/chrome-local-adapter';
 import { createConfigRepository } from '../../../src/repositories/config-repository';
@@ -35,9 +35,9 @@ describe('sync-service', () => {
     let testProvider:
       | {
           /** 测试连接。 */
-          testConnection: ReturnType<typeof vi.fn>;
+          testConnection: (sync: ExtensionConfig['sync']) => Promise<{ provider: 'gist'; ok: true; message: string }>;
           /** 执行同步。 */
-          syncNow: ReturnType<typeof vi.fn>;
+          syncNow: (config: ExtensionConfig) => Promise<{ provider: 'gist'; lastSyncAt: number; snapshotBytes: number }>;
         }
       | null = null;
 
@@ -306,7 +306,11 @@ describe('sync-service', () => {
     const patchBody = JSON.parse((fetchImpl.mock.calls[1]?.[1]?.body as string) ?? '{}') as {
       files: Record<string, { content: string }>;
     };
-    const pushedSnapshot = JSON.parse(patchBody.files['think-bot-sp-sync.json'].content) as {
+    const pushedSnapshotFile = patchBody.files['think-bot-sp-sync.json'];
+    if (!pushedSnapshotFile) {
+      throw new Error('sync snapshot file was not uploaded');
+    }
+    const pushedSnapshot = JSON.parse(pushedSnapshotFile.content) as {
       config: { basic: { language: string }; sync: { lastSyncAt: number } };
       pages: Array<{ normalizedUrl: string; title: string; updatedAt: number }>;
       conversations: Array<{ normalizedUrl: string; updatedAt: number }>;

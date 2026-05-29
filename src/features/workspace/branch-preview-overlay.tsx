@@ -6,7 +6,8 @@ import { Button } from '../../components/ui/button';
 import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from './chat-markdown';
-import type { BranchPreviewDetail, WorkspaceTranslator } from './workspace-state';
+import type { BranchPreviewDetail } from './workspace-state';
+import type { WorkspaceTranslator } from './workspace-copy';
 
 type BranchPreviewOverlayProps = {
   /** 当前是否打开。 */
@@ -101,7 +102,7 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
         height: DEFAULT_PREVIEW_HEIGHT,
       }),
     );
-  }, [open, preview?.branchId]);
+  }, [open, preview?.id]);
 
   useEffect(() => {
     if (!open) {
@@ -109,7 +110,7 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
     }
 
     panelRef.current?.focus();
-  }, [open, preview?.branchId]);
+  }, [open, preview?.id]);
 
   useEffect(() => {
     if (!resizeState) {

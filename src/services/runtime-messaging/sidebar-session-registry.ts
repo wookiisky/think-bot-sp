@@ -27,12 +27,15 @@ export const createSidebarSessionRegistry = () => {
   return {
     /** 注册活跃会话，并在生命周期结束后自动回收。 */
     register(session: SidebarSession, scope: SidebarSessionScope) {
-      activeSessions.set(session.sessionId, {
+      const record: SidebarSessionRecord = {
         ...session,
         normalizedUrl: scope.normalizedUrl,
         promptTabId: scope.promptTabId,
-        branchId: scope.branchId,
-      });
+      };
+      if (scope.branchId !== undefined) {
+        record.branchId = scope.branchId;
+      }
+      activeSessions.set(session.sessionId, record);
       void session.done.finally(() => {
         activeSessions.delete(session.sessionId);
       });

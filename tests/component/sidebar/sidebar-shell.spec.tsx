@@ -88,6 +88,13 @@ const createSidebarApi = (overrides?: Record<string, unknown>) => ({
       sessionId: 'session-retry',
     },
   }),
+  selectAssistantBranch: vi.fn().mockResolvedValue({
+    type: 'SELECT_ASSISTANT_BRANCH_SUCCESS',
+    payload: {
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+    },
+  }),
   expandMessageBranches: vi.fn().mockResolvedValue({
     type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS',
     payload: {
@@ -384,6 +391,167 @@ describe('SidebarShell', () => {
     expect(await screen.findByLabelText('包含页面内容')).not.toBeChecked();
   });
 
+  it('清空当前页面数据后点击快捷标签，只补一次提取并只发送当前标签', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '已有提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article:quick-summary',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'quick-summary',
+            messages: [
+              {
+                id: 'summary-history',
+                role: 'assistant',
+                content: '总结历史回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'summary-history',
+              status: 'done',
+              summary: '总结历史回答',
+            },
+            updatedAt: 1,
+          },
+          {
+            id: 'https://example.com/article:quick-translate',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'quick-translate',
+            messages: [
+              {
+                id: 'translate-history',
+                role: 'assistant',
+                content: '翻译历史回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [],
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'translate-history',
+              status: 'done',
+              summary: '翻译历史回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结当前页面',
+              autoTrigger: true,
+              modelId: 'model-1',
+              parallelModelIds: [],
+              order: 0,
+              deletedAt: null,
+            },
+            {
+              id: 'quick-translate',
+              name: '翻译',
+              prompt: '请翻译当前页面',
+              autoTrigger: true,
+              modelId: 'model-1',
+              parallelModelIds: [],
+              order: 1,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.click(await screen.findByRole('button', { name: '清空当前页面数据' }));
+    await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
+    await user.click(screen.getByRole('tab', { name: /总结/ }));
+
+    await waitFor(() =>
+      expect(api.reExtractContent).toHaveBeenCalledWith({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'readability',
+        source: 'prompt_tab_click',
+      }),
+    );
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+    expect(api.sendChat).toHaveBeenCalledWith({
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      modelId: 'model-1',
+      text: '请总结当前页面',
+      displayText: '总结',
+      images: [],
+      includePageContent: true,
+      rollbackOnFailure: true,
+    });
+  });
+
   it('根据 quickInputs 渲染多 promptTab，并在切换标签时按需直接触发快捷输入', async () => {
     const user = userEvent.setup();
     const api = createSidebarApi({
@@ -523,6 +691,7 @@ describe('SidebarShell', () => {
               prompt: '请总结当前页面',
               autoTrigger: true,
               modelId: 'model-2',
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -532,6 +701,7 @@ describe('SidebarShell', () => {
               prompt: '请翻译当前页面',
               autoTrigger: false,
               modelId: 'missing-model',
+              parallelModelIds: [],
               order: 1,
               deletedAt: null,
             },
@@ -541,6 +711,7 @@ describe('SidebarShell', () => {
               prompt: '不应展示',
               autoTrigger: false,
               modelId: null,
+              parallelModelIds: [],
               order: 2,
               deletedAt: 3,
             },
@@ -652,6 +823,7 @@ describe('SidebarShell', () => {
               prompt: '请总结当前页面',
               autoTrigger: true,
               modelId: 'model-1',
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -740,6 +912,7 @@ describe('SidebarShell', () => {
               prompt: '请总结当前页面',
               autoTrigger: false,
               modelId: 'model-1',
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -936,6 +1109,7 @@ describe('SidebarShell', () => {
               prompt: '请总结当前页面',
               autoTrigger: true,
               modelId: 'model-2',
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },
@@ -1068,7 +1242,9 @@ describe('SidebarShell', () => {
 
   it('助手消息支持继续新增分支，并可停止和删除单个分支', async () => {
     const user = userEvent.setup();
-    let portMessageListener: ((event: unknown) => void) | null = null;
+    let portMessageListener: (event: unknown) => void = (_event: unknown) => {
+      throw new Error('stream listener was not registered');
+    };
     const api = createSidebarApi({
       getConfig: vi.fn().mockResolvedValue({
         type: 'GET_CONFIG_SUCCESS',
@@ -1423,7 +1599,9 @@ describe('SidebarShell', () => {
 
   it('支持编辑用户消息并重发，也支持重试助手消息替换旧结果', async () => {
     const user = userEvent.setup();
-    let portMessageListener: ((event: unknown) => void) | null = null;
+    let portMessageListener: (event: unknown) => void = (_event: unknown) => {
+      throw new Error('stream listener was not registered');
+    };
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -1645,6 +1823,7 @@ describe('SidebarShell', () => {
               prompt: '请总结当前页面',
               autoTrigger: true,
               modelId: 'model-1',
+              parallelModelIds: [],
               order: 0,
               deletedAt: null,
             },

@@ -34,12 +34,13 @@ import {
   appendAssistantBranches,
   buildActiveSessionIdMap,
   buildComposerStateMap,
-  findBranchPreviewDetail,
   buildMessageStateMap,
   buildPromptTabs,
   buildRestoreMessageIdMap,
   createChatPromptTab,
+  findBranchPreviewDetail,
   getPromptTabStatusKind,
+  omitMessageDisplayContent,
   pickInitialPromptTabId,
   toModelOptions,
   toOptimisticUserContent,
@@ -64,8 +65,9 @@ import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 import { downloadTextFile } from '../../shared/download-file';
 import { ChatInput } from './chat-input';
 import { ChatThread } from './chat-thread';
-import type { SidebarApi } from './sidebar-api';
+import type { SidebarApi, SidebarExtractionSource } from './sidebar-api';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
+import { sidebarPortEventSchema } from '../../services/runtime-messaging/sidebar-contract';
 
 type ExtractionMethod = 'readability' | 'jina';
 type SidebarState = 'bootstrapping' | 'blocked' | 'extracting' | 'ready' | 'error';
@@ -261,12 +263,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   /** 执行一次正文提取并同步 UI 状态。 */
-  const runExtraction = async (nextMethod: ExtractionMethod) => {
+  const runExtraction = async (nextMethod: ExtractionMethod, source: SidebarExtractionSource) => {
     setState('extracting');
     const extraction = await api.reExtractContent({
       tabId,
       pageUrl,
       method: nextMethod,
+      source,
     });
     setContent(extraction.payload.content);
     setMethod(extraction.payload.extractionMethod);
@@ -291,7 +294,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   /** 按当前方法重新提取。 */
   const handleReExtract = async () => {
     try {
-      await runExtraction(method);
+      await runExtraction(method, 'manual_reextract');
       pushToast(
         'success',
         method === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
@@ -367,15 +370,16 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       });
 
       const handlePortMessage = (event: unknown) => {
-        if (typeof event !== 'object' || event === null || !('type' in event)) {
+        const parsed = sidebarPortEventSchema.safeParse(event);
+        if (!parsed.success) {
           return;
         }
 
-        const payload = event as Record<string, unknown>;
-        const promptTabId = typeof payload.promptTabId === 'string' ? payload.promptTabId : null;
-        if (!promptTabId) {
+        const payload = parsed.data;
+        if (!('promptTabId' in payload)) {
           return;
         }
+        const promptTabId = payload.promptTabId;
 
         switch (payload.type) {
           case 'CHAT_STREAM_STARTED':
@@ -488,7 +492,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           case 'CHAT_STREAM_FAILED':
             if (
               payload.rollbackOnFailure === true
-              && typeof payload.messageId === 'string'
               && typeof payload.userMessageId === 'string'
             ) {
               setPromptTabMessages(promptTabId, (current) =>
@@ -762,7 +765,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }
 
         setState('extracting');
-        const extraction = await api.reExtractContent({ tabId, pageUrl, method: nextMethod });
+        const extraction = await api.reExtractContent({
+          tabId,
+          pageUrl,
+          method: nextMethod,
+          source: 'panel_bootstrap',
+        });
         if (cancelled) {
           return;
         }
@@ -791,14 +799,18 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     if (promptTabs.some((promptTab) => promptTab.id === activePromptTabId)) {
       return;
     }
-    setActivePromptTabId(promptTabs[0].id);
+    const firstPromptTab = promptTabs[0];
+    if (!firstPromptTab) {
+      return;
+    }
+    setActivePromptTabId(firstPromptTab.id);
   }, [activePromptTabId, promptTabs]);
 
   /** 黑名单放行后继续当前页面提取。 */
   const handleConfirmContinue = async () => {
     await api.confirmBlacklistContinue({ tabId, pageUrl });
     try {
-      await runExtraction(method);
+      await runExtraction(method, 'blacklist_continue');
     } catch {
       setState('error');
     }
@@ -812,7 +824,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
     try {
       await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
-      await runExtraction(nextMethod);
+      await runExtraction(nextMethod, 'manual_reextract');
       pushToast(
         'success',
         nextMethod === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
@@ -853,17 +865,32 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     ]);
 
     try {
-      const response = await api.sendChat({
+      const request = {
         tabId,
         pageUrl,
         promptTabId,
         modelId: input.modelId,
         text: input.text,
-        displayText: input.displayText,
         images: input.images,
         includePageContent: input.includePageContent,
-        rollbackOnFailure: input.rollbackOnFailure,
-      });
+      } as {
+        tabId: number;
+        pageUrl: string;
+        promptTabId: string;
+        modelId: string;
+        text: string;
+        images: string[];
+        includePageContent: boolean;
+        displayText?: string;
+        rollbackOnFailure?: boolean;
+      };
+      if (input.displayText !== undefined) {
+        request.displayText = input.displayText;
+      }
+      if (input.rollbackOnFailure !== undefined) {
+        request.rollbackOnFailure = input.rollbackOnFailure;
+      }
+      const response = await api.sendChat(request);
       setActiveSessionIds((current) => ({
         ...current,
         [promptTabId]: response.payload.sessionId,
@@ -874,14 +901,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       }));
       setIncludePageContent(input.includePageContent);
       setPromptTabMessages(promptTabId, (current) => {
+        const persistedUserMessageId = response.payload.userMessageId;
         const messagesWithPersistedUserId =
-          response.payload.userMessageId === null
+          persistedUserMessageId === null
             ? current
             : current.map((message) =>
                 message.id === optimisticUserMessageId
                   ? {
                       ...message,
-                      id: response.payload.userMessageId as string,
+                      id: persistedUserMessageId,
                     }
                   : message,
               );
@@ -928,7 +956,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
     if (!normalizeExtractionText(content)) {
       try {
-        await runExtraction(method);
+        await runExtraction(method, 'prompt_tab_click');
       } catch {
         setState('error');
         setPromptTabNotice(promptTab.id, t('sidebar.notice.reExtractFailed'));
@@ -976,9 +1004,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             ...current.slice(0, targetIndex + 1).map((message) =>
               message.id === messageId
                 ? {
-                    ...message,
+                    ...omitMessageDisplayContent(message),
                     content: text,
-                    displayContent: undefined,
                   }
                 : message,
             ),

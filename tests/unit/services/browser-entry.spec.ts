@@ -240,7 +240,6 @@ describe('browser-entry service', () => {
       set: vi.fn().mockImplementation(async (items: { enabledTabIds: number[] }) => {
         enabledTabIds = items.enabledTabIds;
       }),
-      remove: vi.fn().mockResolvedValue(undefined),
     });
     const service = createBrowserEntryService({
       logger,
@@ -297,7 +296,6 @@ describe('browser-entry service', () => {
       set: vi.fn().mockImplementation(async (items: { enabledTabIds: number[] }) => {
         enabledTabIds = items.enabledTabIds;
       }),
-      remove: vi.fn().mockResolvedValue(undefined),
     };
     const firstPanelState = createBrowserEntryPanelState(storage);
     const firstService = createBrowserEntryService({
@@ -376,7 +374,6 @@ describe('browser-entry service', () => {
         await new Promise((resolve) => setTimeout(resolve, 1));
         enabledTabIds = items.enabledTabIds;
       }),
-      remove: vi.fn().mockResolvedValue(undefined),
     });
     const service = createBrowserEntryService({
       logger,
@@ -431,7 +428,6 @@ describe('browser-entry service', () => {
       set: vi.fn().mockImplementation(async (items: { enabledTabIds: number[] }) => {
         enabledTabIds = items.enabledTabIds;
       }),
-      remove: vi.fn().mockResolvedValue(undefined),
     });
     const contextMenus = {
       removeAll: vi.fn(),

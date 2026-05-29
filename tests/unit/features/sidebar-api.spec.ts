@@ -27,6 +27,7 @@ describe('createSidebarApi', () => {
         pageUrl: 'https://example.com/article',
         promptTabId: 'chat',
         messageId: 'assistant-1',
+        modelId: 'model-1',
       }),
     ).rejects.toThrow('no branch models configured');
   });

@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
+import { tool, type LanguageModel, type ToolSet } from 'ai';
 import type { ModelConfig } from '../../../../src/domain/config/config-schema';
-
-type CreateProviderRegistry = typeof import('../../../../src/services/llm-dispatch/provider-registry')['createProviderRegistry'];
-declare const createProviderRegistryForTypeCheck: CreateProviderRegistry;
 
 /** 构造测试模型，避免每个用例重复铺开完整配置。 */
 const createModelConfig = (overrides: Partial<ModelConfig>): ModelConfig => ({
@@ -25,12 +24,37 @@ const createModelConfig = (overrides: Partial<ModelConfig>): ModelConfig => ({
   ...overrides,
 });
 
+/** 构造满足 AI SDK LanguageModel 契约的最小 fake。 */
+const createFakeLanguageModel = (factoryName: string, modelId: string): LanguageModel => ({
+  specificationVersion: 'v2',
+  provider: factoryName,
+  modelId,
+  supportedUrls: {},
+  doGenerate: async () => ({
+    content: [],
+    finishReason: 'stop',
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    },
+    warnings: [],
+  }),
+  doStream: async () => ({
+    stream: new ReadableStream(),
+  }),
+});
+
+/** 构造满足 provider tool 契约的最小 fake。 */
+const createFakeTool = (name: string): NonNullable<ToolSet[string]> =>
+  tool({
+    description: name,
+    inputSchema: z.object({}),
+  });
+
 /** 构造 openai-compatible fake，贴近 chatModel 接口形状。 */
 const createOpenAICompatibleFactory = () => {
-  const chatModel = vi.fn((modelId: string) => ({
-    factoryName: 'openai-compatible',
-    modelId,
-  }));
+  const chatModel = vi.fn((modelId: string) => createFakeLanguageModel('openai-compatible', modelId));
   const providerFactory = vi.fn(() => ({
     chatModel,
   }));
@@ -43,15 +67,18 @@ const createOpenAICompatibleFactory = () => {
 
 /** 构造 callable provider fake，贴近 google / anthropic 主接口。 */
 const createCallableFactory = (factoryName: string) => {
-  const provider = vi.fn((modelId: string) => ({
-    factoryName,
-    modelId,
-  }));
-  const providerFactory = vi.fn(() => provider);
+  const provider = vi.fn((modelId: string) => createFakeLanguageModel(factoryName, modelId));
+  const callableProvider = Object.assign(provider, {
+    tools: {
+      googleSearch: vi.fn(() => createFakeTool('google_search')),
+      urlContext: vi.fn(() => createFakeTool('url_context')),
+    },
+  });
+  const providerFactory = vi.fn(() => callableProvider);
 
   return {
     providerFactory,
-    provider,
+    provider: callableProvider,
   };
 };
 
@@ -62,23 +89,33 @@ afterEach(() => {
   vi.doUnmock('@ai-sdk/anthropic');
 });
 
-// eslint-disable-next-line no-constant-condition
-if (false) {
-  const wrongOpenAIFactory = vi.fn(() => vi.fn((modelId: string) => ({ modelId })));
+/** 构造完整 registry 依赖。 */
+const createRegistryDeps = () => {
+  const openAICompatible = createOpenAICompatibleFactory();
+  const googleFactory = createCallableFactory('google');
+  const anthropicFactory = createCallableFactory('anthropic');
+  const bedrockFactory = createCallableFactory('bedrock');
+  const vertexFactory = createCallableFactory('vertex');
 
-  // @ts-expect-error openai-compatible 工厂必须返回带 chatModel 的 provider
-  createProviderRegistryForTypeCheck({
-    createOpenAICompatible: wrongOpenAIFactory,
-    createGoogleGenerativeAI: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
-    createAnthropic: vi.fn(() => vi.fn((modelId: string) => ({ modelId }))),
-  });
-}
+  return {
+    openAICompatible,
+    googleFactory,
+    anthropicFactory,
+    bedrockFactory,
+    vertexFactory,
+    deps: {
+      createOpenAICompatible: openAICompatible.providerFactory,
+      createGoogleGenerativeAI: googleFactory.providerFactory,
+      createAnthropic: anthropicFactory.providerFactory,
+      createAmazonBedrock: bedrockFactory.providerFactory,
+      createVertex: vertexFactory.providerFactory,
+    },
+  };
+};
 
 describe('provider-registry', () => {
   it('默认导出的 resolveProviderModel 绑定官方 provider 工厂', async () => {
-    const openAICompatible = createOpenAICompatibleFactory();
-    const googleFactory = createCallableFactory('google');
-    const anthropicFactory = createCallableFactory('anthropic');
+    const { openAICompatible, googleFactory, anthropicFactory } = createRegistryDeps();
 
     vi.doMock('@ai-sdk/openai-compatible', () => ({
       createOpenAICompatible: openAICompatible.providerFactory,
@@ -139,14 +176,8 @@ describe('provider-registry', () => {
     const { createProviderRegistry } = await import(
       '../../../../src/services/llm-dispatch/provider-registry'
     );
-    const openAICompatible = createOpenAICompatibleFactory();
-    const googleFactory = createCallableFactory('google');
-    const anthropicFactory = createCallableFactory('anthropic');
-    const registry = createProviderRegistry({
-      createOpenAICompatible: openAICompatible.providerFactory,
-      createGoogleGenerativeAI: googleFactory.providerFactory,
-      createAnthropic: anthropicFactory.providerFactory,
-    });
+    const { openAICompatible, googleFactory, anthropicFactory, deps } = createRegistryDeps();
+    const registry = createProviderRegistry(deps);
 
     const openaiResolved = registry.resolveProviderModel(
       createModelConfig({
@@ -181,14 +212,8 @@ describe('provider-registry', () => {
     const { createProviderRegistry } = await import(
       '../../../../src/services/llm-dispatch/provider-registry'
     );
-    const openAICompatible = createOpenAICompatibleFactory();
-    const googleFactory = createCallableFactory('google');
-    const anthropicFactory = createCallableFactory('anthropic');
-    const registry = createProviderRegistry({
-      createOpenAICompatible: openAICompatible.providerFactory,
-      createGoogleGenerativeAI: googleFactory.providerFactory,
-      createAnthropic: anthropicFactory.providerFactory,
-    });
+    const { openAICompatible, googleFactory, anthropicFactory, deps } = createRegistryDeps();
+    const registry = createProviderRegistry(deps);
 
     const resolved = registry.resolveProviderModel(
       createModelConfig({
@@ -213,14 +238,8 @@ describe('provider-registry', () => {
     const { createProviderRegistry } = await import(
       '../../../../src/services/llm-dispatch/provider-registry'
     );
-    const openAICompatible = createOpenAICompatibleFactory();
-    const googleFactory = createCallableFactory('google');
-    const anthropicFactory = createCallableFactory('anthropic');
-    const registry = createProviderRegistry({
-      createOpenAICompatible: openAICompatible.providerFactory,
-      createGoogleGenerativeAI: googleFactory.providerFactory,
-      createAnthropic: anthropicFactory.providerFactory,
-    });
+    const { openAICompatible, googleFactory, anthropicFactory, deps } = createRegistryDeps();
+    const registry = createProviderRegistry(deps);
 
     const resolved = registry.resolveProviderModel(
       createModelConfig({

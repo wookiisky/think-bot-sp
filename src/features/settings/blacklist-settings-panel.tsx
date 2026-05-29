@@ -49,8 +49,9 @@ export const BlacklistSettingsPanel = ({
       return;
     }
 
-    if (!selectedRuleId || !visibleRules.some((rule) => rule.id === selectedRuleId)) {
-      setSelectedRuleId(visibleRules[0].id);
+    const firstRule = visibleRules[0];
+    if ((!selectedRuleId || !visibleRules.some((rule) => rule.id === selectedRuleId)) && firstRule) {
+      setSelectedRuleId(firstRule.id);
     }
   }, [selectedRuleId, visibleRules]);
 

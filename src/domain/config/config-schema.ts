@@ -199,6 +199,12 @@ export const DEFAULT_SYNC_CONFIG = {
 
 type QuickInputConfig = z.infer<typeof quickInputSchema>;
 type BlacklistRuleConfig = z.infer<typeof blacklistRuleSchema>;
+type QuickInputConfigInput = Omit<QuickInputConfig, 'parallelModelIds'> & {
+  /** 并行模型 id，缺省时由 schema 补齐。 */
+  parallelModelIds?: string[];
+  /** 旧版并行分支字段，进入 schema 前统一迁移。 */
+  branchModelIds?: string[];
+};
 
 const defaultQuickInputSeeds: Array<Omit<QuickInputConfig, 'order' | 'deletedAt'>> = [
   {
@@ -414,6 +420,18 @@ export const extensionConfigSchema = z
   });
 
 export type ExtensionConfig = z.infer<typeof extensionConfigSchema>;
+type ExtensionConfigOverrides = Partial<Omit<ExtensionConfig, 'basic' | 'sync' | 'display' | 'quickInputs' | 'blacklist'>> & {
+  /** 基础配置局部覆盖。 */
+  basic?: Partial<ExtensionConfig['basic']>;
+  /** 快捷输入配置覆盖，允许传入旧字段供 schema 迁移。 */
+  quickInputs?: QuickInputConfigInput[];
+  /** 同步配置局部覆盖。 */
+  sync?: Partial<ExtensionConfig['sync']>;
+  /** 展示配置局部覆盖。 */
+  display?: Parameters<typeof fillDisplayConfigDefaults>[0];
+  /** 黑名单配置覆盖。 */
+  blacklist?: Array<z.input<typeof blacklistRuleSchema>>;
+};
 export type ModelConfig = ExtensionConfig['models'][number];
 
 /** 解析模型的 reasoning effort，旧配置缺省时默认 high。 */
@@ -471,7 +489,7 @@ export const resolvePromptTabParallelModelIds = (config: ExtensionConfig, prompt
 };
 
 /** 生成默认配置。 */
-export const createDefaultConfig = (overrides: Partial<ExtensionConfig> = {}): ExtensionConfig =>
+export const createDefaultConfig = (overrides: ExtensionConfigOverrides = {}): ExtensionConfig =>
   extensionConfigSchema.parse({
     version: CONFIG_SCHEMA_VERSION,
     updatedAt: overrides.updatedAt ?? Date.now(),

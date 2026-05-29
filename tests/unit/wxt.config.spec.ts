@@ -4,6 +4,16 @@ import { describe, expect, it } from 'vitest';
 
 import config, { appendDevExtensionConnectSrc } from '../../wxt.config';
 
+/** 读取当前测试覆盖的静态 manifest 配置。 */
+const getStaticManifest = () => {
+  const manifest = config.manifest;
+  if (!manifest || typeof manifest === 'function' || 'then' in manifest) {
+    throw new Error('expected static manifest config');
+  }
+
+  return manifest;
+};
+
 describe('wxt manifest config', () => {
   it('设置页通过 options 入口的 manifest 元信息声明独立 tab 打开', () => {
     const optionsHtml = fs.readFileSync(
@@ -12,12 +22,14 @@ describe('wxt manifest config', () => {
     );
 
     expect(optionsHtml).toContain('<meta name="manifest.open_in_tab" content="true" />');
-    expect(config.manifest?.options_ui).toBeUndefined();
-    expect(config.manifest?.options_page).toBeUndefined();
+    const manifest = getStaticManifest();
+    expect(manifest.options_ui).toBeUndefined();
+    expect(manifest.options_page).toBeUndefined();
   });
 
   it('side panel 不声明全局 default_path，避免切换 browserTab 后继续常驻显示', () => {
-    expect(config.manifest?.side_panel).toBeUndefined();
+    const manifest = getStaticManifest();
+    expect(manifest.side_panel).toBeUndefined();
   });
 
   it('开发态扩展页同时放行本地 HMR 和远端网络请求', () => {

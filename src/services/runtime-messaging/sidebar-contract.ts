@@ -66,12 +66,22 @@ export const sidebarSwitchExtractionMethodCommandSchema = sidebarCommandBaseSche
   method: z.enum(['readability', 'jina']),
 });
 
+/** 触发本次提取的来源。 */
+export const sidebarExtractionSourceSchema = z.enum([
+  'panel_bootstrap',
+  'blacklist_continue',
+  'manual_reextract',
+  'prompt_tab_click',
+]);
+
 /** 重新提取页面内容的请求。 */
 export const sidebarReExtractContentCommandSchema = sidebarCommandBaseSchema.extend({
   /** 命令类型。 */
   type: z.literal('RE_EXTRACT_CONTENT'),
   /** 指定提取方式。 */
   method: z.enum(['readability', 'jina']),
+  /** 本次提取的触发来源。 */
+  source: sidebarExtractionSourceSchema,
 });
 
 /** 发送主聊天请求。 */
@@ -225,6 +235,7 @@ export const sidebarCommandSchema = z.discriminatedUnion('type', [
   sidebarDeleteBranchCommandSchema,
   sidebarExportConversationCommandSchema,
 ]);
+export type SidebarCommandMessage = z.infer<typeof sidebarCommandSchema>;
 
 /** sidebar 命令类型信封。 */
 export const sidebarCommandEnvelopeSchema = z.object({
@@ -265,6 +276,7 @@ export const sidebarPortClientMessageSchema = z.object({
   /** 当前 promptTab 稳定 id。 */
   promptTabId: z.string().min(1),
 });
+export type SidebarPortClientMessage = z.infer<typeof sidebarPortClientMessageSchema>;
 
 /** sidebar port 事件。 */
 export const sidebarPortEventSchema = z.discriminatedUnion('type', [
@@ -349,6 +361,10 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     branchId: z.string().min(1),
     /** 错误消息。 */
     errorMessage: z.string().min(1),
+    /** 是否已回滚本轮新增消息。 */
+    rollbackOnFailure: z.boolean().optional(),
+    /** 本轮用户消息 id。 */
+    userMessageId: z.string().min(1).optional(),
   }),
   z.object({
     /** 事件类型。 */
@@ -427,6 +443,10 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     branchId: z.string().min(1),
     /** 错误消息。 */
     errorMessage: z.string().min(1),
+    /** 是否已回滚本轮新增消息。 */
+    rollbackOnFailure: z.boolean().optional(),
+    /** 本轮用户消息 id。 */
+    userMessageId: z.string().min(1).optional(),
   }),
   z.object({
     /** 事件类型。 */
@@ -469,9 +489,9 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     content: z.string(),
   }),
 ]);
+export type SidebarPortEvent = z.infer<typeof sidebarPortEventSchema>;
 
 export type SidebarBootstrapResponse = z.infer<typeof sidebarBootstrapResponseSchema>;
 export type SidebarConversationRecord = z.infer<typeof sidebarConversationRecordSchema>;
 export type SidebarLoadingStateRecord = z.infer<typeof sidebarLoadingStateRecordSchema>;
 export type SidebarPageRecord = z.infer<typeof sidebarPageRecordSchema>;
-export type SidebarPortEvent = z.infer<typeof sidebarPortEventSchema>;

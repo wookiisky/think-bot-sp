@@ -72,6 +72,11 @@ describe('BlacklistSettingsPanel', () => {
   });
 
   it('恢复默认规则时保留自定义规则并重建内置规则', async () => {
+    const firstBuiltInRule = DEFAULT_BLACKLIST_RULES[0];
+    if (!firstBuiltInRule) {
+      throw new Error('missing built-in blacklist rule');
+    }
+
     render(
       <ControlledBlacklistSettingsPanel
         config={createDefaultConfig({
@@ -84,7 +89,7 @@ describe('BlacklistSettingsPanel', () => {
               deletedAt: null,
             },
             {
-              ...DEFAULT_BLACKLIST_RULES[0],
+              ...firstBuiltInRule,
               enabled: false,
               deletedAt: 10,
             },

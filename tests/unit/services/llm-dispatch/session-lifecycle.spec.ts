@@ -16,8 +16,8 @@ type Deferred = {
 
 /** 创建受控异步门闩。 */
 const createDeferred = (): Deferred => {
-  let resolve = () => undefined;
-  let reject = (_error: Error) => undefined;
+  let resolve: () => void = () => undefined;
+  let reject: (_error: Error) => void = () => undefined;
   const promise = new Promise<void>((innerResolve, innerReject) => {
     resolve = innerResolve;
     reject = innerReject;
@@ -1923,16 +1923,17 @@ describe('chat-dispatch-service session lifecycle', () => {
       ],
       abortSignal: expect.any(AbortSignal),
     });
-    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toSatisfy((conversation) =>
-      conversation?.messages.some(
-        (message) =>
-          message.id === 'assistant-user-retry' &&
-          message.role === 'assistant' &&
-          message.content === '分支重试回答' &&
-          message.branches.some(
-            (branch) => branch.id === 'branch-user-retry' && branch.content === '分支重试回答' && branch.status === 'done',
-          ),
-      ) === true,
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toSatisfy(
+      (conversation: Awaited<ReturnType<typeof conversationRepository.getConversation>>) =>
+        conversation?.messages.some(
+          (message) =>
+            message.id === 'assistant-user-retry' &&
+            message.role === 'assistant' &&
+            message.content === '分支重试回答' &&
+            message.branches.some(
+              (branch) => branch.id === 'branch-user-retry' && branch.content === '分支重试回答' && branch.status === 'done',
+            ),
+        ) === true,
     );
     expect(collectPublishedEvents(publishToPromptTab)).toEqual([
       {

@@ -155,13 +155,16 @@ export const createConversationsCommandHandler = ({
       case 'DELETE_PAGE': {
         const command = deletePageCommandSchema.parse(input);
         await sessionRegistry.cancelPageSessions(command.normalizedUrl);
-        const deleteMode = await deletePageWithPolicy({
+        const deleteInput: Parameters<typeof deletePageWithPolicy>[0] = {
           normalizedUrl: command.normalizedUrl,
           pageRepository,
           configRepository,
-          syncRepository,
           now,
-        });
+        };
+        if (syncRepository) {
+          deleteInput.syncRepository = syncRepository;
+        }
+        const deleteMode = await deletePageWithPolicy(deleteInput);
         return {
           type: 'DELETE_PAGE_SUCCESS' as const,
           payload: {

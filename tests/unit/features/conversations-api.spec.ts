@@ -26,6 +26,7 @@ describe('createConversationsApi', () => {
         pageUrl: 'https://example.com/article',
         promptTabId: 'chat',
         messageId: 'assistant-1',
+        modelId: 'model-1',
       }),
     ).rejects.toThrow('assistant message not found: assistant-1');
   });

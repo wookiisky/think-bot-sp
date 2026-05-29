@@ -20,7 +20,12 @@ export const appendDevExtensionConnectSrc = (extensionPagesCsp: string): string 
     return `${directives.join('; ')};`;
   }
 
-  const directiveParts = directives[connectSrcDirectiveIndex].split(/\s+/);
+  const connectSrcDirective = directives[connectSrcDirectiveIndex];
+  if (!connectSrcDirective) {
+    return `${directives.join('; ')};`;
+  }
+
+  const directiveParts = connectSrcDirective.split(/\s+/);
   const nextDirectiveParts = [...directiveParts];
   const existingSources = new Set(directiveParts.slice(1));
 
@@ -57,13 +62,18 @@ export default defineConfig({
         return;
       }
 
-      const extensionPagesCsp = manifest.content_security_policy?.extension_pages;
+      const existingCsp = manifest.content_security_policy;
+      if (typeof existingCsp !== 'object' || existingCsp === null) {
+        return;
+      }
+
+      const extensionPagesCsp = existingCsp.extension_pages;
       if (!extensionPagesCsp) {
         return;
       }
 
       manifest.content_security_policy = {
-        ...manifest.content_security_policy,
+        ...existingCsp,
         extension_pages: appendDevExtensionConnectSrc(extensionPagesCsp),
       };
     },

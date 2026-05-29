@@ -76,6 +76,21 @@ describe('runtime-messaging', () => {
     });
     expect(
       sidebarCommandSchema.parse({
+        type: 'RE_EXTRACT_CONTENT',
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'readability',
+        source: 'panel_bootstrap',
+      }),
+    ).toEqual({
+      type: 'RE_EXTRACT_CONTENT',
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      method: 'readability',
+      source: 'panel_bootstrap',
+    });
+    expect(
+      sidebarCommandSchema.parse({
         type: 'CLEAR_PAGE_CONTEXT',
         tabId: 7,
         pageUrl: 'https://example.com/article',
@@ -521,6 +536,10 @@ describe('runtime-messaging', () => {
       sessionId: 'session-1',
       userMessageId: 'user-1',
       messageId: 'assistant-1',
+      branchId: '',
+      modelId: 'model-1',
+      modelLabel: '',
+      branches: [],
       cancel,
       done: new Promise(() => undefined),
     });
@@ -855,6 +874,13 @@ describe('runtime-messaging', () => {
       branchId: 'assistant-edit:primary',
       modelId: 'model-1',
       modelLabel: '主模型',
+      branches: [
+        {
+          branchId: 'assistant-edit:primary',
+          modelId: 'model-1',
+          modelLabel: '主模型',
+        },
+      ],
       cancel: vi.fn(),
       done: Promise.resolve({
         sessionId: 'session-edit',
@@ -869,6 +895,13 @@ describe('runtime-messaging', () => {
       branchId: 'branch-1',
       modelId: 'model-1',
       modelLabel: '主模型',
+      branches: [
+        {
+          branchId: 'branch-1',
+          modelId: 'model-1',
+          modelLabel: '主模型',
+        },
+      ],
       cancel: vi.fn(),
       done: Promise.resolve({
         sessionId: 'session-user-retry',
@@ -1351,7 +1384,7 @@ describe('runtime-messaging', () => {
   });
 
   it('port bus 会按 promptTab 路由事件，并保留注册与断连广播', () => {
-    const events: Array<{ type: string; portName: string }> = [];
+    const events: Array<{ type: string; portName?: string }> = [];
     const bus = createPortBus();
     bus.subscribe((event) => {
       events.push(event);

@@ -1,5 +1,8 @@
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
 
+type ConversationMessageRecord = SidebarConversationRecord['messages'][number];
+type AssistantConversationMessageRecord = ConversationMessageRecord & { role: 'assistant' };
+
 /** 共享的聊天标签 id。 */
 export const CHAT_PROMPT_TAB_ID = 'chat';
 
@@ -94,6 +97,12 @@ export type EditingState = {
   messageId: string;
   /** 当前编辑草稿。 */
   text: string;
+};
+
+/** 删除消息上的 displayContent，回退为直接展示真实 content。 */
+export const omitMessageDisplayContent = (message: ChatMessageState): ChatMessageState => {
+  const { displayContent: _displayContent, ...rest } = message;
+  return rest;
 };
 
 /** 生成默认 chat 标签。 */
@@ -226,23 +235,26 @@ export const toChatMessageStates = (messages: SidebarConversationRecord['message
   messages.map((message) => {
     const branches =
       message.role === 'assistant'
-        ? normalizeAssistantBranches(message)
+        ? normalizeAssistantBranches(message as AssistantConversationMessageRecord)
         : [];
     const selectedBranchId =
       message.role === 'assistant' ? resolveSelectedBranchId(branches, message.selectedBranchId ?? null) : null;
     const selectedBranch =
       message.role === 'assistant' ? branches.find((branch) => branch.id === selectedBranchId) ?? null : null;
 
-    return {
+    const nextMessage: ChatMessageState = {
       id: message.id,
       role: message.role,
       content: selectedBranch?.content ?? message.content,
-      displayContent: message.displayContent,
       status: selectedBranch?.status ?? message.status,
       errorMessage: selectedBranch?.errorMessage ?? message.errorMessage,
       branches,
       selectedBranchId,
     };
+    if (message.displayContent !== undefined) {
+      nextMessage.displayContent = message.displayContent;
+    }
+    return nextMessage;
   });
 
 /** 从消息列表中定位一个可预览的助手分支。 */
@@ -401,7 +413,7 @@ export const getPromptTabStatusKind = (promptTab: PromptTabDefinition, activeSes
 
 /** 归一化助手分支，兼容旧消息把主回答折叠为首个分支。 */
 const normalizeAssistantBranches = (
-  message: Extract<SidebarConversationRecord['messages'][number], { role: 'assistant' }>,
+  message: AssistantConversationMessageRecord,
 ): BranchMessageState[] => {
   if (message.branches.length > 0) {
     return message.branches.map((branch, index) => ({

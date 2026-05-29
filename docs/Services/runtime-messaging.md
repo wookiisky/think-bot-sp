@@ -82,7 +82,7 @@ long-lived port 事件：
 阶段 4 当前落地边界：
 
 - 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
-- 已落地补充：`RE_EXTRACT_CONTENT` 成功后会在 background 内部触发自动触发去重编排；手动发送与自动触发共享同一套活跃会话注册表。
+- 已落地补充：`RE_EXTRACT_CONTENT` 现在显式区分提取来源，只有侧边栏打开流程中的提取成功后，background 才会触发自动触发去重编排；手动重提取和点击快捷标签补提取都不会顺带触发其他 `promptTab`。
 - 未落地：对话管理页复用同一条流式订阅、快捷输入远端模板命令。
 - 已落地补充：对话管理页复用 `SEND_CHAT / STOP_SESSION / STOP_BRANCH / DELETE_BRANCH / EDIT_USER_MESSAGE / RETRY_USER_MESSAGE / RETRY_MESSAGE / EXPAND_MESSAGE_BRANCHES / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 与同一条流式事件协议。
 - 未落地：快捷输入远端模板命令。
@@ -137,13 +137,14 @@ long-lived port 事件：
 ## 5. 关键流程
 
 - extension page 发 one-shot command 到 background。
+- one-shot command 路由只先识别命令 `type` 信封，具体 payload 在对应 command handler 分支内用 schema 校验后再进入业务逻辑。
 - side panel 首屏初始化统一走 `GET_SIDEBAR_BOOTSTRAP`，只拉取恢复和判定数据，不在该命令内隐式触发提取。
 - side panel sender 校验固定检查 `runtime.id` 和 URL `pathname` 为 `sidebar.html`，允许 query 参数存在。
 - 流式任务创建后，UI 建立 port 订阅。
 - background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。
 - side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
-- 自动触发不暴露新的 one-shot command；由 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
+- 自动触发不暴露新的 one-shot command；由“侧边栏打开流程”的 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
 - `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
 - 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。

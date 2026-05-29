@@ -102,7 +102,7 @@ type ConversationRepository = {
     branchId: string;
     /** 当前时间。 */
     now: number;
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   /** 删除单个分支 loading。 */
   removeBranchLoadingState?: (normalizedUrl: string, promptTabId: string, branchId: string) => Promise<void>;
   /** 切换当前轮主分支。 */
@@ -112,7 +112,7 @@ type ConversationRepository = {
     messageId: string;
     branchId: string;
     now: number;
-  }) => Promise<void>;
+  }) => Promise<unknown>;
   /** 读取单个会话。 */
   getConversation?: (normalizedUrl: string, promptTabId: string) => Promise<SidebarConversationRecord | null>;
 };
@@ -143,22 +143,7 @@ type ChatDispatchService = {
     pageContent: string;
     /** 失败时是否回滚本轮新增消息。 */
     rollbackOnFailure?: boolean;
-  }) => Promise<ChatSession & {
-    /** 本轮初始化创建的分支摘要。 */
-    branches: Array<{
-      /** 分支 id。 */
-      branchId: string;
-      /** 分支模型 id。 */
-      modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }>;
-    /** 并行分支会话。 */
-    branchSessions: Array<ChatSession & {
-      /** 分支 id。 */
-      branchId: string;
-    }>;
-  }>;
+  }) => Promise<MainChatSession>;
   /** 编辑目标用户消息并重发。 */
   editUserMessage: (input: {
     /** 归一化页面 URL。 */
@@ -171,22 +156,7 @@ type ChatDispatchService = {
     content: string;
     /** 当前请求要带给模型的页面正文。 */
     pageContent: string;
-  }) => Promise<ChatSession & {
-    /** 本轮初始化创建的分支摘要。 */
-    branches: Array<{
-      /** 分支 id。 */
-      branchId: string;
-      /** 分支模型 id。 */
-      modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }>;
-    /** 并行分支会话。 */
-    branchSessions: Array<ChatSession & {
-      /** 分支 id。 */
-      branchId: string;
-    }>;
-  }>;
+  }) => Promise<MainChatSession>;
   /** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
   retryUserMessage: (input: {
     /** 归一化页面 URL。 */
@@ -197,22 +167,7 @@ type ChatDispatchService = {
     messageId: string;
     /** 当前请求要带给模型的页面正文。 */
     pageContent: string;
-  }) => Promise<ChatSession & {
-    /** 本轮初始化创建的分支摘要。 */
-    branches: Array<{
-      /** 分支 id。 */
-      branchId: string;
-      /** 分支模型 id。 */
-      modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }>;
-    /** 并行分支会话。 */
-    branchSessions: Array<ChatSession & {
-      /** 分支 id。 */
-      branchId: string;
-    }>;
-  }>;
+  }) => Promise<MainChatSession>;
   /** 重试目标助手分支。 */
   retryMessage: (input: {
     /** 归一化页面 URL。 */
@@ -225,7 +180,7 @@ type ChatDispatchService = {
     branchId: string;
     /** 当前请求要带给模型的页面正文。 */
     pageContent: string;
-  }) => Promise<ChatSession & { branchId: string }>;
+  }) => Promise<BranchChatSession>;
   /** 为既有助手消息继续新增分支。 */
   expandBranches: (input: {
     /** 归一化页面 URL。 */
@@ -238,10 +193,27 @@ type ChatDispatchService = {
     modelId: string;
     /** 当前请求要带给模型的页面正文。 */
     pageContent: string;
-  }) => Promise<ChatSession[]>;
+  }) => Promise<BranchChatSession[]>;
 };
 
 type ChatSession = SidebarSession;
+type BranchDescriptor = {
+  /** 分支 id。 */
+  branchId: string;
+  /** 分支模型 id。 */
+  modelId: string;
+  /** 分支模型展示名。 */
+  modelLabel: string;
+};
+type BranchChatSession = ChatSession & BranchDescriptor;
+type MainChatSession = BranchChatSession & {
+  /** 本轮持久化的用户消息 id。 */
+  userMessageId?: string | null;
+  /** 本轮初始化创建的分支摘要。 */
+  branches: BranchDescriptor[];
+  /** 并行分支会话。 */
+  branchSessions: BranchChatSession[];
+};
 
 type ConversationExporter = {
   /** 导出当前会话。 */
@@ -397,16 +369,21 @@ export const createSidebarCommandHandler = ({
           });
         }
 
-        const session = await chatDispatchService.dispatchChat({
+        const dispatchInput: Parameters<ChatDispatchService['dispatchChat']>[0] = {
           normalizedUrl,
           promptTabId: command.promptTabId,
           modelId: command.modelId,
           content: command.text,
-          displayText: command.displayText,
           images: command.images,
           pageContent: command.includePageContent ? page?.content ?? '' : '',
-          rollbackOnFailure: command.rollbackOnFailure,
-        });
+        };
+        if (command.displayText !== undefined) {
+          dispatchInput.displayText = command.displayText;
+        }
+        if (command.rollbackOnFailure !== undefined) {
+          dispatchInput.rollbackOnFailure = command.rollbackOnFailure;
+        }
+        const session = await chatDispatchService.dispatchChat(dispatchInput);
         sessionRegistry.register(session, {
           normalizedUrl,
           promptTabId: command.promptTabId,
@@ -418,17 +395,7 @@ export const createSidebarCommandHandler = ({
             branchId: branchSession.branchId,
           });
         }
-        const branches =
-          session.branches
-          ?? (session.branchId && session.modelId && session.modelLabel
-            ? [
-                {
-                  branchId: session.branchId,
-                  modelId: session.modelId,
-                  modelLabel: session.modelLabel,
-                },
-              ]
-            : []);
+        const branches = session.branches;
         commandLogger.info('chat.send.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -481,17 +448,7 @@ export const createSidebarCommandHandler = ({
             branchId: branchSession.branchId,
           });
         }
-        const branches =
-          session.branches
-          ?? (session.branchId && session.modelId && session.modelLabel
-            ? [
-                {
-                  branchId: session.branchId,
-                  modelId: session.modelId,
-                  modelLabel: session.modelLabel,
-                },
-              ]
-            : []);
+        const branches = session.branches;
         commandLogger.info('chat.edit.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -539,17 +496,7 @@ export const createSidebarCommandHandler = ({
             branchId: branchSession.branchId,
           });
         }
-        const branches =
-          session.branches
-          ?? (session.branchId && session.modelId && session.modelLabel
-            ? [
-                {
-                  branchId: session.branchId,
-                  modelId: session.modelId,
-                  modelLabel: session.modelLabel,
-                },
-              ]
-            : []);
+        const branches = session.branches;
         commandLogger.info('chat.user_retry.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -677,20 +624,14 @@ export const createSidebarCommandHandler = ({
           sessionRegistry.register(session, {
             normalizedUrl,
             promptTabId: command.promptTabId,
-            branchId: 'branchId' in session ? session.branchId : undefined,
+            branchId: session.branchId,
           });
         }
-        const branches = sessions.flatMap((session) =>
-          'branchId' in session
-            ? [
-                {
-                  branchId: session.branchId,
-                  modelId: session.modelId,
-                  modelLabel: session.modelLabel,
-                },
-              ]
-            : [],
-        );
+        const branches = sessions.map((session) => ({
+          branchId: session.branchId,
+          modelId: session.modelId,
+          modelLabel: session.modelLabel,
+        }));
         commandLogger.info('branch.expand.accepted', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -802,15 +743,20 @@ export const createSidebarCommandHandler = ({
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         await sessionRegistry.cancelPageSessions(normalizedUrl);
-        await deletePageWithPolicy({
+        const deleteInput: Parameters<typeof deletePageWithPolicy>[0] = {
           normalizedUrl,
           pageRepository: {
             deletePage: pageRepository.deletePage,
           },
-          configRepository,
-          syncRepository,
           now,
-        });
+        };
+        if (configRepository) {
+          deleteInput.configRepository = configRepository;
+        }
+        if (syncRepository) {
+          deleteInput.syncRepository = syncRepository;
+        }
+        await deletePageWithPolicy(deleteInput);
         commandLogger.info('page.clear.completed', {
           browserTabId: command.tabId,
           normalizedUrl,
@@ -890,7 +836,7 @@ export const createSidebarCommandHandler = ({
       case 'RE_EXTRACT_CONTENT':
         throw new Error(`unsupported command: ${input.type}`);
       default:
-        throw new Error(`unsupported command: ${input.type}`);
+        throw new Error(`unsupported command: ${(input as { type: string }).type}`);
     }
   };
 };

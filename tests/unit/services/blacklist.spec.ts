@@ -86,6 +86,11 @@ describe('blacklist service', () => {
   });
 
   it('支持测试单条规则与恢复默认规则', () => {
+    const firstBuiltInRule = DEFAULT_BLACKLIST_RULES[0];
+    if (!firstBuiltInRule) {
+      throw new Error('missing built-in blacklist rule');
+    }
+
     const service = createBlacklistService({
       rules: [
         {
@@ -96,7 +101,7 @@ describe('blacklist service', () => {
           deletedAt: null,
         },
         {
-          ...DEFAULT_BLACKLIST_RULES[0],
+          ...firstBuiltInRule,
           enabled: false,
           deletedAt: 10,
         },

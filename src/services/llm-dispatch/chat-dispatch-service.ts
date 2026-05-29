@@ -1,3 +1,5 @@
+import type * as Ai from 'ai';
+import type { LanguageModel, ToolSet } from 'ai';
 import { createDefaultConfig, resolvePromptTabParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig, ModelConfig } from '../../domain/config/config-schema';
 import { createLoadingState } from '../../domain/loading/loading-state-schema';
@@ -21,6 +23,9 @@ type ChatDispatchInput = {
   /** 失败时是否回滚本轮新增消息。 */
   rollbackOnFailure?: boolean;
 };
+
+type StreamTextRequest = Parameters<typeof Ai.streamText>[0];
+type ProviderOptions = StreamTextRequest extends { providerOptions?: infer Value } ? Value : never;
 
 type PromptContext = {
   /** 当前请求最终使用的系统提示词。 */
@@ -284,7 +289,7 @@ type BranchStreamSession = StreamSession & {
   modelLabel: string;
 };
 
-type MultiBranchStreamSession = StreamSession & {
+type MultiBranchStreamSession = BranchStreamSession & {
   /** 本轮初始化时创建的分支摘要。 */
   branches: BranchSummary[];
   /** 本轮额外并行分支会话。 */
@@ -304,7 +309,7 @@ type ChatDispatchServiceDeps = {
   /** 配置仓储。 */
   configRepository: {
     /** 读取完整配置。 */
-    getConfig: () => Promise<ExtensionConfig>;
+    getConfig?: () => Promise<ExtensionConfig>;
     /** 按 id 读取模型。 */
     getModelById: (_modelId: string) => Promise<ModelConfig | null>;
   };
@@ -529,6 +534,14 @@ type ChatDispatchServiceDeps = {
     }) => Promise<unknown>;
     /** 删除分支 loading。 */
     removeBranchLoadingState: (_normalizedUrl: string, _promptTabId: string, _branchId: string) => Promise<void>;
+    /** 重新启动既有助手分支。 */
+    restartAssistantBranch: (_input: {
+      normalizedUrl: string;
+      promptTabId: string;
+      messageId: string;
+      branchId: string;
+      now: number;
+    }) => Promise<unknown>;
     /** 切换当前轮的主分支。 */
     selectAssistantBranch: (_input: {
       normalizedUrl: string;
@@ -546,15 +559,15 @@ type ChatDispatchServiceDeps = {
   /** 启动流式请求。 */
   streamText: (_input: {
     /** AI SDK 模型对象。 */
-    model: unknown;
+    model: LanguageModel;
     /** 采样温度。 */
     temperature?: number;
     /** 单次输出 token 上限。 */
     maxOutputTokens?: number;
     /** provider tools。 */
-    tools?: Record<string, unknown>;
+    tools?: ToolSet;
     /** providerOptions。 */
-    providerOptions?: Record<string, unknown>;
+    providerOptions?: ProviderOptions;
     /** 对话消息。 */
     messages: ConversationHistoryMessage[];
     /** 取消信号。 */
@@ -627,15 +640,34 @@ const buildModelInvocation = (input: {
   messages: ConversationHistoryMessage[];
   /** 取消信号。 */
   abortSignal: AbortSignal;
-}) => ({
-  model: input.resolvedModel.sdkModel,
-  temperature: input.resolvedModel.temperature,
-  maxOutputTokens: input.resolvedModel.maxOutputTokens ?? undefined,
-  tools: input.resolvedModel.tools,
-  providerOptions: input.resolvedModel.providerOptions,
-  messages: input.messages,
-  abortSignal: input.abortSignal,
-});
+}) => {
+  const invocation = {
+    model: input.resolvedModel.sdkModel,
+    temperature: input.resolvedModel.temperature,
+    messages: input.messages,
+    abortSignal: input.abortSignal,
+  } as {
+    model: LanguageModel;
+    temperature: number;
+    messages: ConversationHistoryMessage[];
+    abortSignal: AbortSignal;
+    maxOutputTokens?: number;
+    tools?: ToolSet;
+    providerOptions?: ProviderOptions;
+  };
+
+  if (input.resolvedModel.maxOutputTokens !== null) {
+    invocation.maxOutputTokens = input.resolvedModel.maxOutputTokens;
+  }
+  if (input.resolvedModel.tools) {
+    invocation.tools = input.resolvedModel.tools;
+  }
+  if (input.resolvedModel.providerOptions) {
+    invocation.providerOptions = input.resolvedModel.providerOptions;
+  }
+
+  return invocation;
+};
 
 /** 汇总多条分支会话的最终状态，供 loading 生命周期收口使用。 */
 const resolveAggregateStatus = (results: ChatStreamResult[]): ChatStreamResult['status'] => {
@@ -746,42 +778,39 @@ const buildConversationHistoryThroughUser = (
 /** 把会话消息压成发给模型的完整对话历史。 */
 const toConversationHistory = (
   messages: NonNullable<Awaited<ReturnType<ChatDispatchServiceDeps['conversationRepository']['getConversation']>>>['messages'],
-): ConversationHistoryMessage[] =>
-  messages.flatMap((message) => {
+): ConversationHistoryMessage[] => {
+  const history: ConversationHistoryMessage[] = [];
+  for (const message of messages) {
     if (message.role === 'user') {
-      return [
-        {
-          role: 'user' as const,
-          content: message.content,
-          images: message.images,
-        },
-      ];
+      history.push({
+        role: 'user',
+        content: message.content,
+        images: message.images,
+      });
+      continue;
     }
-    if (message.role !== 'assistant') {
-      if (message.role !== 'system') {
-        return [];
-      }
-      return [
-        {
-          role: 'system' as const,
-          content: message.content,
-          images: [],
-        },
-      ];
+
+    if (message.role === 'system') {
+      history.push({
+        role: 'system',
+        content: message.content,
+        images: [],
+      });
+      continue;
     }
 
     const selectedContent = getSelectedAssistantContent(message)?.trim() ?? '';
-    if (!selectedContent) {
-      return [];
-    }
-    return [
-      {
-        role: 'assistant' as const,
+    if (selectedContent) {
+      history.push({
+        role: 'assistant',
         content: selectedContent,
         images: [],
-      },
-    ];
-  });
+      });
+    }
+  }
+
+  return history;
+};
 
 /** 主聊天流调度服务。 */
 export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
@@ -1083,15 +1112,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
 
       let assistantMessageCreated = false;
       try {
-        await deps.conversationRepository.appendUserMessage({
+        const userMessageInput: Parameters<ChatDispatchServiceDeps['conversationRepository']['appendUserMessage']>[0] = {
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
           messageId: userMessageId,
           content: input.content,
-          displayContent: input.displayText,
           images: input.images,
           now: now(),
-        });
+        };
+        if (input.displayText !== undefined) {
+          userMessageInput.displayContent = input.displayText;
+        }
+        await deps.conversationRepository.appendUserMessage(userMessageInput);
         await deps.conversationRepository.appendAssistantMessage({
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
@@ -1549,15 +1581,26 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             status,
             now: now(),
           });
-          publishToPromptTabSafely({
-            type: status === 'cancelled' ? 'CHAT_STREAM_CANCELLED' : 'CHAT_STREAM_FAILED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            ...(status === 'error' ? { errorMessage } : {}),
-          });
+          if (status === 'cancelled') {
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_CANCELLED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+            });
+          } else {
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_FAILED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+              errorMessage,
+            });
+          }
           if (status === 'cancelled') {
             logger.info('chat.stream.cancelled', {
               normalizedUrl: input.normalizedUrl,
@@ -1839,15 +1882,26 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             status,
             now: now(),
           });
-          publishToPromptTabSafely({
-            type: status === 'cancelled' ? 'CHAT_STREAM_CANCELLED' : 'CHAT_STREAM_FAILED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            ...(status === 'error' ? { errorMessage } : {}),
-          });
+          if (status === 'cancelled') {
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_CANCELLED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+            });
+          } else {
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_FAILED',
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+              errorMessage,
+            });
+          }
           if (status === 'cancelled') {
             logger.info('chat.stream.cancelled', {
               normalizedUrl: input.normalizedUrl,

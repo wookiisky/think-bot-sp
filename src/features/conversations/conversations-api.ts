@@ -72,7 +72,19 @@ type BranchDescriptor = {
   modelLabel: string;
 };
 
-type ConversationsStreamPort = chrome.runtime.Port;
+type ConversationsStreamMessageEvent = {
+  /** 监听流式消息。 */
+  addListener: chrome.runtime.Port['onMessage']['addListener'];
+  /** 移除流式消息监听。 */
+  removeListener: chrome.runtime.Port['onMessage']['removeListener'];
+};
+
+type ConversationsStreamPort = {
+  /** 断开流式订阅。 */
+  disconnect: () => void;
+  /** 流式消息事件。 */
+  onMessage: ConversationsStreamMessageEvent;
+};
 
 type ConversationsApi = {
   /** 列出最近页面。 */

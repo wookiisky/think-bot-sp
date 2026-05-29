@@ -36,13 +36,13 @@ import {
   buildRestoreMessageIdMap,
   findBranchPreviewDetail,
   getPromptTabStatusKind,
+  omitMessageDisplayContent,
   toModelOptions,
   toOptimisticUserContent,
   type ChatMessageState,
   type ComposerState,
   type EditingState,
   type ModelOption,
-  type PromptTabStatusKind,
   type PromptTabDefinition,
   syncAssistantMessageState,
   upsertAssistantBranch,
@@ -61,6 +61,7 @@ import {
 import { normalizeExtractionText } from '../workspace/extraction-text';
 import type { ConversationsApi } from './conversations-api';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
+import { sidebarPortEventSchema } from '../../services/runtime-messaging/sidebar-contract';
 
 type ConversationsShellProps = {
   /** conversations 页 API。 */
@@ -339,7 +340,12 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         return;
       }
       if (!response.pages.some((page) => page.normalizedUrl === selectedPageUrl)) {
-        setSelectedPageUrl(response.pages[0].normalizedUrl);
+        const firstPage = response.pages[0];
+        if (!firstPage) {
+          setSelectedPageUrl(null);
+          return;
+        }
+        setSelectedPageUrl(firstPage.normalizedUrl);
       }
     };
 
@@ -409,15 +415,16 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       promptTabId: activePromptTab.id,
     });
     const handlePortMessage = (event: unknown) => {
-      if (typeof event !== 'object' || event === null || !('type' in event)) {
+      const parsed = sidebarPortEventSchema.safeParse(event);
+      if (!parsed.success) {
         return;
       }
 
-      const payload = event as Record<string, unknown>;
-      const promptTabId = typeof payload.promptTabId === 'string' ? payload.promptTabId : null;
-      if (!promptTabId) {
+      const payload = parsed.data;
+      if (!('promptTabId' in payload)) {
         return;
       }
+      const promptTabId = payload.promptTabId;
 
       switch (payload.type) {
         case 'CHAT_STREAM_STARTED':
@@ -537,12 +544,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 role: 'assistant',
                 content: message?.content ?? '',
                 status: payload.type === 'CHAT_STREAM_FAILED' ? 'error' : 'cancelled',
-                errorMessage:
-                  typeof payload.errorMessage === 'string'
-                    ? payload.errorMessage
-                    : payload.type === 'CHAT_STREAM_FAILED'
-                      ? t('workspace.status.error')
-                      : t('workspace.status.cancelled'),
+                errorMessage: payload.type === 'CHAT_STREAM_FAILED' ? payload.errorMessage : t('workspace.status.cancelled'),
                 branches:
                   typeof payload.branchId === 'string'
                     ? (message?.branches ?? []).map((branch) =>
@@ -550,12 +552,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           ? {
                               ...branch,
                               status: payload.type === 'CHAT_STREAM_FAILED' ? 'error' : 'cancelled',
-                              errorMessage:
-                                typeof payload.errorMessage === 'string'
-                                  ? payload.errorMessage
-                                  : payload.type === 'CHAT_STREAM_FAILED'
-                                    ? t('workspace.status.error')
-                                    : t('workspace.status.cancelled'),
+                              errorMessage: payload.type === 'CHAT_STREAM_FAILED' ? payload.errorMessage : t('workspace.status.cancelled'),
                             }
                           : branch,
                       )
@@ -618,11 +615,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                       ? 'error'
                       : 'cancelled',
                 errorMessage:
-                  typeof payload.errorMessage === 'string'
+                  payload.type === 'BRANCH_STREAM_FAILED'
                     ? payload.errorMessage
-                    : payload.type === 'BRANCH_STREAM_FAILED'
-                      ? t('workspace.status.error')
-                      : payload.type === 'BRANCH_STREAM_CANCELLED'
+                    : payload.type === 'BRANCH_STREAM_CANCELLED'
                         ? t('workspace.status.cancelled')
                         : null,
               })),
@@ -764,15 +759,26 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     ]);
 
     try {
-      const response = await api.sendChat({
+      const request = {
         pageUrl: selectedPage.url,
         promptTabId,
         modelId: input.modelId,
         text: input.text,
-        displayText: input.displayText,
         images: input.images,
         includePageContent: input.includePageContent,
-      });
+      } as {
+        pageUrl: string;
+        promptTabId: string;
+        modelId: string;
+        text: string;
+        images: string[];
+        includePageContent: boolean;
+        displayText?: string;
+      };
+      if (input.displayText !== undefined) {
+        request.displayText = input.displayText;
+      }
+      const response = await api.sendChat(request);
       setActiveSessionIds((current) => ({
         ...current,
         [promptTabId]: response.payload.sessionId,
@@ -783,10 +789,11 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       }));
       setIncludePageContent(input.includePageContent);
       setPromptTabMessages(promptTabId, (current) => {
+        const persistedUserMessageId = response.payload.userMessageId;
         const messagesWithPersistedUserId =
-          response.payload.userMessageId === null
+          persistedUserMessageId === null
             ? current
-            : current.map((message) => (message.id === optimisticUserMessageId ? { ...message, id: response.payload.userMessageId } : message));
+            : current.map((message) => (message.id === optimisticUserMessageId ? { ...message, id: persistedUserMessageId } : message));
         return appendAssistantBranches(
           upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
             id: response.payload.messageId,
@@ -869,9 +876,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             ...current.slice(0, targetIndex + 1).map((message) =>
               message.id === messageId
                 ? {
-                    ...message,
+                    ...omitMessageDisplayContent(message),
                     content: text,
-                    displayContent: undefined,
                   }
                 : message,
             ),
@@ -1567,24 +1573,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       </section>
     </main>
   );
-};
-
-/** 把标签状态映射成统一视觉状态。 */
-const toPromptVisualStatus = (status: PromptTabStatusKind) => {
-  switch (status) {
-    case 'loading':
-      return 'loading';
-    case 'auto-running':
-      return 'auto';
-    case 'auto-error':
-      return 'error';
-    case 'auto-done':
-    case 'ready':
-      return 'done';
-    case 'idle':
-    default:
-      return 'idle';
-  }
 };
 
 /** 判断标签是否已有可见文本内容。 */

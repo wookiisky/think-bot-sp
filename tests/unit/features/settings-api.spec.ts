@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { settingsApi } from '../../../src/features/settings/settings-api';
 
 describe('settingsApi', () => {
@@ -97,32 +98,21 @@ describe('settingsApi', () => {
     });
 
     await expect(
-      settingsApi.syncNow({
-        version: '2.0.0',
-        updatedAt: 123,
-        basic: {
-          theme: 'system',
-          language: 'zh-CN',
-          defaultModelId: null,
-          systemPrompt: '',
-          filterCot: false,
-          extractionMethod: 'readability',
-          includePageContentByDefault: true,
-        },
-        models: [],
-        quickInputs: [],
-        sync: {
-          enabled: true,
-          provider: 'gist',
-          gistToken: 'token',
-          gistId: 'gist-id',
-          webdavUrl: '',
-          webdavUsername: '',
-          webdavPassword: '',
-          lastSyncAt: null,
-        },
-        blacklist: [],
-      }),
+      settingsApi.syncNow(
+        createDefaultConfig({
+          updatedAt: 123,
+          sync: {
+            enabled: true,
+            provider: 'gist',
+            gistToken: 'token',
+            gistId: 'gist-id',
+            webdavUrl: '',
+            webdavUsername: '',
+            webdavPassword: '',
+            lastSyncAt: null,
+          },
+        }),
+      ),
     ).resolves.toEqual({
       config: expect.objectContaining({
         sync: expect.objectContaining({

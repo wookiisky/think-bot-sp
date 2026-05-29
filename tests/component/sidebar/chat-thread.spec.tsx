@@ -39,7 +39,7 @@ const translations: Record<string, string> = {
 
 const t = (key: string) => translations[key] ?? key;
 let clipboardWriteText: ReturnType<typeof vi.fn>;
-let scrollIntoViewSpy: ReturnType<typeof vi.fn>;
+let scrollIntoViewSpy: (arg?: Parameters<HTMLElement['scrollIntoView']>[0]) => void;
 
 const createRect = (input: { top: number; bottom: number; left?: number; right?: number; width?: number; height?: number }): DOMRect => {
   const left = input.left ?? 0;

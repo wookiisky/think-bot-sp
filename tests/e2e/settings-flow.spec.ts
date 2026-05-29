@@ -85,9 +85,17 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   await expect(
     options.evaluate(async () => {
       const result = await chrome.storage.local.get(null);
+      const config = result['config:extension'] as
+        | {
+            basic?: {
+              language?: string;
+              theme?: string;
+            };
+          }
+        | undefined;
       return {
-        language: result['config:extension']?.basic?.language ?? null,
-        theme: result['config:extension']?.basic?.theme ?? null,
+        language: config?.basic?.language ?? null,
+        theme: config?.basic?.theme ?? null,
         keys: Object.keys(result).sort(),
       };
     }),

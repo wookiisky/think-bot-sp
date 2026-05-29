@@ -291,6 +291,10 @@ describe('SettingsShell', () => {
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 1, entryCount: 1, bytes: 16 });
+    const firstQuickInput = config.quickInputs[0];
+    if (!firstQuickInput) {
+      throw new Error('missing quick input');
+    }
     mocks.saveConfig.mockResolvedValueOnce(
       createDefaultConfig({
         ...config,
@@ -300,7 +304,7 @@ describe('SettingsShell', () => {
         },
         quickInputs: [
           {
-            ...config.quickInputs[0],
+            ...firstQuickInput,
             parallelModelIds: ['model-1'],
           },
         ],
@@ -418,6 +422,7 @@ describe('SettingsShell', () => {
           prompt: '请总结当前页面',
           autoTrigger: false,
           modelId: null,
+          parallelModelIds: [],
           order: 2,
           deletedAt: null,
         },
@@ -427,6 +432,7 @@ describe('SettingsShell', () => {
           prompt: '不应显示',
           autoTrigger: false,
           modelId: null,
+          parallelModelIds: [],
           order: 1,
           deletedAt: Date.now(),
         },
@@ -436,6 +442,7 @@ describe('SettingsShell', () => {
           prompt: '请翻译当前页面',
           autoTrigger: false,
           modelId: null,
+          parallelModelIds: [],
           order: 1,
           deletedAt: null,
         },
@@ -740,12 +747,14 @@ describe('SettingsShell', () => {
 
   it('快速重复点击保存时只触发一次保存请求', async () => {
     const config = createDefaultConfig();
-    let resolveSave: (() => void) | null = null;
+    let resolveSave: () => void = () => {
+      throw new Error('save promise was not created');
+    };
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
     mocks.saveConfig.mockImplementationOnce(
       () =>
-        new Promise((resolve) => {
+        new Promise<ReturnType<typeof createDefaultConfig>>((resolve) => {
           resolveSave = () => resolve(config);
         }),
     );
@@ -760,7 +769,7 @@ describe('SettingsShell', () => {
 
     expect(mocks.saveConfig).toHaveBeenCalledTimes(1);
 
-    resolveSave?.();
+    resolveSave();
     await waitFor(() => {
       expect(screen.getByRole('button', { name: '保存' })).not.toBeDisabled();
     });

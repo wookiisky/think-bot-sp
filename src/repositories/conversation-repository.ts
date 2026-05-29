@@ -12,8 +12,9 @@ import {
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 type ConversationRecord = z.infer<typeof conversationRecordSchema>;
 type LoadingStateRecord = z.infer<typeof loadingStateRecordSchema>;
-type AssistantMessageRecord = Extract<ConversationRecord['messages'][number], { role: 'assistant' }>;
-type UserMessageRecord = Extract<ConversationRecord['messages'][number], { role: 'user' }>;
+type ConversationMessageRecord = ConversationRecord['messages'][number];
+type AssistantMessageRecord = ConversationMessageRecord & { role: 'assistant' };
+type UserMessageRecord = ConversationMessageRecord & { role: 'user' };
 type BranchRecord = AssistantMessageRecord['branches'][number];
 type InitialBranchSeed = {
   /** 分支稳定 id。 */
@@ -25,6 +26,14 @@ type InitialBranchSeed = {
   /** 是否为主分支。 */
   isPrimary: boolean;
 };
+
+/** 判断消息是否为 assistant 消息。 */
+const isAssistantMessageRecord = (message: ConversationMessageRecord | undefined): message is AssistantMessageRecord =>
+  message?.role === 'assistant';
+
+/** 判断消息是否为 user 消息。 */
+const isUserMessageRecord = (message: ConversationMessageRecord | undefined): message is UserMessageRecord =>
+  message?.role === 'user';
 
 /** 规范化用户消息展示文本，避免把与真实内容相同的值重复落库。 */
 const toDisplayContentPatch = (content: string, displayContent?: string) =>
@@ -205,7 +214,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
   const withPromptTabMutation = async <T>(normalizedUrl: string, promptTabId: string, task: () => Promise<T>) => {
     const queueKey = getConversationKey(normalizedUrl, promptTabId);
     const previous = mutationQueues.get(queueKey) ?? Promise.resolve();
-    let release = () => undefined;
+    let release: () => void = () => undefined;
     const next = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -227,9 +236,9 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
     now: number,
   ): Promise<ConversationRecord> => readConversation(normalizedUrl, promptTabId).then((value) => value ?? createEmptyConversation(normalizedUrl, promptTabId, now));
   /** 查找指定 assistant 消息。 */
-  const requireAssistantMessage = (conversation: ConversationRecord, messageId: string) => {
+  const requireAssistantMessage = (conversation: ConversationRecord, messageId: string): AssistantMessageRecord => {
     const message = conversation.messages.find((item) => item.id === messageId);
-    if (!message || message.role !== 'assistant') {
+    if (!isAssistantMessageRecord(message)) {
       throw new Error(`assistant message not found: ${messageId}`);
     }
 
@@ -238,7 +247,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
   /** 查找指定用户消息。 */
   const requireUserMessage = (conversation: ConversationRecord, messageId: string): UserMessageRecord => {
     const message = conversation.messages.find((item) => item.id === messageId);
-    if (!message || message.role !== 'user') {
+    if (!isUserMessageRecord(message)) {
       throw new Error(`user message not found: ${messageId}`);
     }
 

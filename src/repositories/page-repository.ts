@@ -139,17 +139,22 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       const currentValue = result[getPageKey(input.normalizedUrl)];
       const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : buildPageRecord({ url: input.url, now: Date.now() });
       const now = Date.now();
-      const nextPage = updatePromptTabState(
-        currentPage,
-        {
-          promptTabId: input.promptTabId,
-          initializedAt: input.initializedAt,
-          lastAutoTriggerAt: input.lastAutoTriggerAt,
-          autoTriggerStatus: input.autoTriggerStatus,
-          lastClearedAt: input.lastClearedAt,
-        },
-        now,
-      );
+      const nextPromptTabState: Parameters<typeof updatePromptTabState>[1] = {
+        promptTabId: input.promptTabId,
+      };
+      if (input.initializedAt !== undefined) {
+        nextPromptTabState.initializedAt = input.initializedAt;
+      }
+      if (input.lastAutoTriggerAt !== undefined) {
+        nextPromptTabState.lastAutoTriggerAt = input.lastAutoTriggerAt;
+      }
+      if (input.autoTriggerStatus !== undefined) {
+        nextPromptTabState.autoTriggerStatus = input.autoTriggerStatus;
+      }
+      if (input.lastClearedAt !== undefined) {
+        nextPromptTabState.lastClearedAt = input.lastClearedAt;
+      }
+      const nextPage = updatePromptTabState(currentPage, nextPromptTabState, now);
 
       await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
       return nextPage;

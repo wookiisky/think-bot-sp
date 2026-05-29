@@ -319,6 +319,9 @@ export const LanguageModelsPanel = ({
 
     const reorderedVisibleModels = [...visibleModels];
     const [movedModel] = reorderedVisibleModels.splice(currentIndex, 1);
+    if (!movedModel) {
+      return;
+    }
     reorderedVisibleModels.splice(targetIndex, 0, movedModel);
     reorderVisibleModels(reorderedVisibleModels);
     onSelectModel(modelId);

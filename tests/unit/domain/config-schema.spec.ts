@@ -118,18 +118,24 @@ describe('config schema', () => {
   });
 
   it('会给旧配置补齐缺失的系统快捷输入和黑名单规则，但不覆盖已有项', () => {
+    const firstQuickInput = DEFAULT_QUICK_INPUTS[0];
+    const firstBlacklistRule = DEFAULT_BLACKLIST_RULES[0];
+    if (!firstQuickInput || !firstBlacklistRule) {
+      throw new Error('missing default seed');
+    }
+
     const seededConfig = applySystemConfigSeeds(
       createDefaultConfig({
         quickInputs: [
           {
-            ...DEFAULT_QUICK_INPUTS[0],
+            ...firstQuickInput,
             name: '我自己的概括',
             order: 0,
           },
         ],
         blacklist: [
           {
-            ...DEFAULT_BLACKLIST_RULES[0],
+            ...firstBlacklistRule,
             enabled: false,
           },
         ],

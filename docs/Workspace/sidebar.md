@@ -71,7 +71,7 @@
 
 ## 2.3 阶段 6 实际交付
 
-- 已在 `background` 接入“提取成功后自动触发”编排，只消费 `autoTrigger=true` 且未软删除的快捷输入。
+- 已在 `background` 接入“侧边栏打开流程提取成功后自动触发”编排，只消费 `autoTrigger=true` 且未软删除的快捷输入。
 - 已按“页面已有正文 / 当前 `promptTab` 无历史 / 无 loading / 未初始化”完成自动触发去重。
 - 已把自动触发会话纳入与手动发送同一套活跃会话注册表，页面级清空和停止链路不会漏掉自动触发会话。
 - 已在 `PageRecord.promptTabStates` 中回写 `initializedAt / lastAutoTriggerAt / autoTriggerStatus`，side panel 重开后可恢复完成态。
@@ -175,6 +175,7 @@
 - 处理顶部工具按钮，包括切换提取方式、复制提取内容、重新提取、清空当前页面数据、打开历史页、打开设置页和打开 GitHub。
 - 展示并切换 `promptTab`。
 - 在 side panel 初始化完成后主动调用 `GET_SIDEBAR_BOOTSTRAP`，先恢复缓存和状态，再按需进入黑名单确认、提取和自动触发。
+- 用户在当前打开会话里手动点击快捷输入、手动重新提取或切换提取方式时，若需要补提取，只补当前动作所需提取，不自动带起其他 `autoTrigger` 标签。
 - 保持提取内容区常驻显示，并与 `promptTab` 聊天区并存。
 - 发起发送、停止当前 `promptTab` 会话、清空当前 `promptTab` 会话、导出。
 - 展示主回答与分支回答。

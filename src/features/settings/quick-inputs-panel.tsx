@@ -279,6 +279,9 @@ export const QuickInputsPanel = ({
 
     const reorderedVisibleQuickInputs = [...visibleQuickInputs];
     const [movedItem] = reorderedVisibleQuickInputs.splice(currentIndex, 1);
+    if (!movedItem) {
+      return;
+    }
     reorderedVisibleQuickInputs.splice(targetIndex, 0, movedItem);
     reorderVisibleQuickInputs(reorderedVisibleQuickInputs);
   };

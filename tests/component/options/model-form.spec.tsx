@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ModelConfig } from '../../../src/domain/config/config-schema';
 import { ModelForm } from '../../../src/features/settings/model-form';
 
-const createModel = (overrides = {}) =>
-  ({
+const createModel = (overrides: Partial<ModelConfig> = {}): ModelConfig => ({
     id: 'model-1',
     name: '主模型',
     provider: 'openai-compatible',
@@ -23,7 +23,7 @@ const createModel = (overrides = {}) =>
     deletedAt: null,
     supportsImages: false,
     ...overrides,
-  }) as const;
+  });
 
 describe('ModelForm', () => {
   afterEach(() => cleanup());

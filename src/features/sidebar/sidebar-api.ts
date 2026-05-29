@@ -8,6 +8,7 @@ import type {
 } from '../../services/runtime-messaging/sidebar-contract';
 
 type ExtractionMethod = 'readability' | 'jina';
+export type SidebarExtractionSource = 'panel_bootstrap' | 'blacklist_continue' | 'manual_reextract' | 'prompt_tab_click';
 
 type SidebarBootstrapResponse = {
   /** 响应类型。 */
@@ -251,7 +252,19 @@ type ExportConversationResponse = {
   };
 };
 
-type SidebarStreamPort = chrome.runtime.Port;
+type SidebarStreamMessageEvent = {
+  /** 监听流式消息。 */
+  addListener: chrome.runtime.Port['onMessage']['addListener'];
+  /** 移除流式消息监听。 */
+  removeListener: chrome.runtime.Port['onMessage']['removeListener'];
+};
+
+type SidebarStreamPort = {
+  /** 断开流式订阅。 */
+  disconnect: () => void;
+  /** 流式消息事件。 */
+  onMessage: SidebarStreamMessageEvent;
+};
 
 type GetConfigResponse = {
   /** 响应类型。 */
@@ -268,7 +281,9 @@ type SidebarApi = {
   /** 确认黑名单后继续。 */
   confirmBlacklistContinue: (..._input: [{ tabId: number; pageUrl: string }]) => Promise<ConfirmBlacklistContinueResponse>;
   /** 重新提取页面内容。 */
-  reExtractContent: (..._input: [{ tabId: number; pageUrl: string; method: ExtractionMethod }]) => Promise<ReExtractContentResponse>;
+  reExtractContent: (
+    ..._input: [{ tabId: number; pageUrl: string; method: ExtractionMethod; source: SidebarExtractionSource }]
+  ) => Promise<ReExtractContentResponse>;
   /** 切换提取方式。 */
   switchExtractionMethod: (
     ..._input: [{ tabId: number; pageUrl: string; method: ExtractionMethod }]

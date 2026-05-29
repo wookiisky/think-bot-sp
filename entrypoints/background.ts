@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 
-import { generateText, streamText } from 'ai';
+import { generateText, streamText, type LanguageModel, type ToolSet } from 'ai';
 import { defineBackground } from 'wxt/utils/define-background';
 import { normalizePageUrl } from '../src/domain/page/page-schema';
 import { createChromeLocalAdapter } from '../src/repositories/chrome-local-adapter';
@@ -23,11 +23,20 @@ import { createConfigCommandHandler, isConfigCommandMessage } from '../src/servi
 import { createConversationsCommandHandler, isConversationsCommandMessage } from '../src/services/runtime-messaging/conversations-commands';
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
-import { sidebarPortClientMessageSchema, sidebarPortEventSchema } from '../src/services/runtime-messaging/sidebar-contract';
+import {
+  sidebarConfirmBlacklistContinueCommandSchema,
+  sidebarPortClientMessageSchema,
+  sidebarPortEventSchema,
+  sidebarReExtractContentCommandSchema,
+  sidebarSwitchExtractionMethodCommandSchema,
+} from '../src/services/runtime-messaging/sidebar-contract';
 import { createSidebarSessionRegistry } from '../src/services/runtime-messaging/sidebar-session-registry';
 import { assertConversationsPageSender, isConversationsPageSender, isSidebarPageSender } from '../src/services/runtime-messaging/sender';
 import { createSidebarAutoTriggerService } from '../src/services/sidebar-auto-trigger/sidebar-auto-trigger-service';
 import { createSyncService } from '../src/services/sync/sync-service';
+
+type GenerateTextRequest = Parameters<typeof generateText>[0];
+type ProviderOptions = GenerateTextRequest extends { providerOptions?: infer Value } ? Value : never;
 
 export default defineBackground(() => {
   const logger = createLogger('background');
@@ -72,7 +81,15 @@ export default defineBackground(() => {
         );
       },
     },
-    streamText: async (input) => {
+    streamText: async (input: {
+      model: LanguageModel;
+      temperature?: number;
+      maxOutputTokens?: number;
+      tools?: ToolSet;
+      providerOptions?: ProviderOptions;
+      messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string; images: string[] }>;
+      abortSignal: AbortSignal;
+    }) => {
       (
         globalThis as typeof globalThis & {
           __THINK_BOT_TEST_LAST_STREAM_MESSAGES__?: Array<{ role: string; content: string; images: string[] }>;
@@ -106,14 +123,28 @@ export default defineBackground(() => {
     modelTestService: {
       async testModel(model) {
         const resolvedModel = resolveProviderModel(model);
-        const response = await generateText({
+        const request = {
           model: resolvedModel.sdkModel,
           prompt: 'hi',
           temperature: resolvedModel.temperature,
-          maxOutputTokens: resolvedModel.maxOutputTokens ?? undefined,
-          tools: resolvedModel.tools,
-          providerOptions: resolvedModel.providerOptions,
-        });
+        } as {
+          model: LanguageModel;
+          prompt: string;
+          temperature: number;
+          maxOutputTokens?: number;
+          tools?: ToolSet;
+          providerOptions?: ProviderOptions;
+        };
+        if (resolvedModel.maxOutputTokens !== null) {
+          request.maxOutputTokens = resolvedModel.maxOutputTokens;
+        }
+        if (resolvedModel.tools) {
+          request.tools = resolvedModel.tools;
+        }
+        if (resolvedModel.providerOptions) {
+          request.providerOptions = resolvedModel.providerOptions;
+        }
+        const response = await generateText(request);
 
         return {
           provider: resolvedModel.providerId,
@@ -430,10 +461,11 @@ export default defineBackground(() => {
       };
 
       if (message.type === 'CONFIRM_BLACKLIST_CONTINUE') {
-        const normalizedUrl = normalizePageUrl(message.pageUrl);
-        bypassStore.set(toBypassKey(message.tabId, normalizedUrl), Date.now());
+        const command = sidebarConfirmBlacklistContinueCommandSchema.parse(message);
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        bypassStore.set(toBypassKey(command.tabId, normalizedUrl), Date.now());
         logger.info('blacklist.bypass_confirmed', {
-          browserTabId: message.tabId,
+          browserTabId: command.tabId,
           normalizedUrl,
         });
         sendResponse({
@@ -446,38 +478,43 @@ export default defineBackground(() => {
       }
 
       if (message.type === 'RE_EXTRACT_CONTENT') {
+        const command = sidebarReExtractContentCommandSchema.parse(message);
         void configRepository
           .getConfig()
           .then((config) =>
             extractionService.extractPage({
-              tabId: message.tabId,
-              pageUrl: message.pageUrl,
-              method: message.method as 'readability' | 'jina',
+              tabId: command.tabId,
+              pageUrl: command.pageUrl,
+              method: command.method,
               jinaApiKey: config.basic.jinaApiKey,
               jinaResponseTemplate: config.basic.jinaResponseTemplate,
             }),
           )
           .then((result) => {
+            const shouldRunAutoTrigger = command.source === 'panel_bootstrap' || command.source === 'blacklist_continue';
             logger.info('extraction.completed', {
-              browserTabId: message.tabId,
+              browserTabId: command.tabId,
               normalizedUrl: result.normalizedUrl,
               method: result.extractionMethod,
+              source: command.source,
             });
             sendResponse({
               type: 'RE_EXTRACT_CONTENT_SUCCESS',
               payload: result,
             });
-            void sidebarAutoTriggerService.handleExtractionCompleted({
-              browserTabId: message.tabId,
-              pageUrl: result.url,
-              normalizedUrl: result.normalizedUrl,
-              pageContent: result.content,
-            });
+            if (shouldRunAutoTrigger) {
+              void sidebarAutoTriggerService.handleExtractionCompleted({
+                browserTabId: command.tabId,
+                pageUrl: result.url,
+                normalizedUrl: result.normalizedUrl,
+                pageContent: result.content,
+              });
+            }
           })
           .catch((error: unknown) => {
             const reason = error instanceof Error ? error.message : String(error);
             logger.error('extraction.failed', {
-              browserTabId: message.tabId,
+              browserTabId: command.tabId,
               reason,
             });
             recordRecentError({
@@ -491,15 +528,16 @@ export default defineBackground(() => {
       }
 
       if (message.type === 'SWITCH_EXTRACTION_METHOD') {
+        const command = sidebarSwitchExtractionMethodCommandSchema.parse(message);
         logger.info('extraction.method_switched', {
-          browserTabId: message.tabId,
-          normalizedUrl: normalizePageUrl(message.pageUrl),
-          method: message.method,
+          browserTabId: command.tabId,
+          normalizedUrl: normalizePageUrl(command.pageUrl),
+          method: command.method,
         });
         sendResponse({
           type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
           payload: {
-            method: message.method,
+            method: command.method,
           },
         });
         return true;

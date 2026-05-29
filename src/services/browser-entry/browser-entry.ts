@@ -192,7 +192,7 @@ export const createBrowserEntryService = ({
   };
 
   /** 处理扩展按钮点击。 */
-  const handleActionClick = async (tab: chrome.tabs.Tab | undefined): Promise<BrowserEntryActionResult> => {
+  const handleActionClick = async (tab: Pick<chrome.tabs.Tab, 'id' | 'url'> | undefined): Promise<BrowserEntryActionResult> => {
     logger.info('action.clicked', {
       tabId: tab?.id,
       url: tab?.url,

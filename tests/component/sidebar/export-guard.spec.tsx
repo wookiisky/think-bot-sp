@@ -36,6 +36,7 @@ describe('SidebarShell export guard', () => {
       editUserMessage: vi.fn(),
       retryUserMessage: vi.fn(),
       retryMessage: vi.fn(),
+      selectAssistantBranch: vi.fn(),
       expandMessageBranches: vi.fn(),
       stopBranch: vi.fn(),
       deleteBranch: vi.fn(),

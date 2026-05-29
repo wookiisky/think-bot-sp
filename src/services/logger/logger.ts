@@ -19,8 +19,18 @@ export const sanitizePayload = (payload?: Record<string, unknown>): Record<strin
 const formatMessage = (scope: string, event: string): string => `[${scope}] ${event}`;
 
 const getMethod = (level: LogLevel) => {
-  const method = (console as Record<string, typeof console.log>)[level];
-  return method ?? console.log;
+  switch (level) {
+    case 'debug':
+      return console.debug;
+    case 'info':
+      return console.info;
+    case 'warn':
+      return console.warn;
+    case 'error':
+      return console.error;
+    default:
+      return console.log;
+  }
 };
 
 export const createLogger = (scope: string) => {

@@ -97,14 +97,21 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
     .poll(() =>
       page.evaluate(async () => {
         const result = await chrome.storage.local.get('config:extension');
-        const config = result['config:extension'];
+        const config = result['config:extension'] as
+          | {
+              quickInputs: Array<{
+                name: string;
+                autoTrigger: boolean;
+                modelId: string | null;
+                order: number;
+                deletedAt: number | null;
+              }>;
+            }
+          | undefined;
         return {
-          deletedCount:
-            config?.quickInputs?.filter((item: { deletedAt: number | null }) => item.deletedAt !== null)?.length ?? 0,
-          autoTriggerValue:
-            config?.quickInputs?.find((item: { name: string }) => item.name === '问题拆解')?.autoTrigger ?? null,
-          modelIdValue:
-            config?.quickInputs?.find((item: { name: string }) => item.name === '问题拆解')?.modelId ?? null,
+          deletedCount: config?.quickInputs.filter((item) => item.deletedAt !== null).length ?? 0,
+          autoTriggerValue: config?.quickInputs.find((item) => item.name === '问题拆解')?.autoTrigger ?? null,
+          modelIdValue: config?.quickInputs.find((item) => item.name === '问题拆解')?.modelId ?? null,
         };
       }),
     )
@@ -116,12 +123,20 @@ test('settings quick inputs panel can add edit reorder delete and persist throug
 
   const visibleNames = await page.evaluate(async () => {
     const result = await chrome.storage.local.get('config:extension');
-    const config = result['config:extension'];
+    const config = result['config:extension'] as
+      | {
+          quickInputs: Array<{
+            name: string;
+            order: number;
+            deletedAt: number | null;
+          }>;
+        }
+      | undefined;
     return (
       config?.quickInputs
-        ?.filter((item: { deletedAt: number | null }) => item.deletedAt === null)
-        ?.sort((left: { order: number }, right: { order: number }) => left.order - right.order)
-        ?.map((item: { name: string }) => item.name) ?? []
+        .filter((item) => item.deletedAt === null)
+        .sort((left, right) => left.order - right.order)
+        .map((item) => item.name) ?? []
     );
   });
 
