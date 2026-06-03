@@ -60,6 +60,7 @@ import {
   loadWorkspaceLocaleResources,
   type WorkspaceLocaleCode,
 } from '../workspace/workspace-copy';
+import { WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS } from '../workspace/workspace-resize-handle-style';
 import { normalizeExtractionText } from '../workspace/extraction-text';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 import { downloadTextFile } from '../../shared/download-file';
@@ -1467,21 +1468,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ) : null}
       </section>
 
-      <div className="shrink-0 border-b border-border px-3 py-0.5">
-        <div
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label={t('sidebar.resizeExtraction')}
-          data-testid="sidebar-extraction-resize-handle"
-          className="mx-auto h-1.5 w-10 cursor-row-resize bg-border transition-colors hover:bg-primary/40"
-          onPointerDown={(event) => {
-            setExtractionResizeState({
-              startY: event.clientY,
-              startHeight: extractionPanelHeight,
-            });
-          }}
-        />
-      </div>
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('sidebar.resizeExtraction')}
+        data-testid="sidebar-extraction-resize-handle"
+        className={WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS}
+        onPointerDown={(event) => {
+          setExtractionResizeState({
+            startY: event.clientY,
+            startHeight: extractionPanelHeight,
+          });
+        }}
+      />
 
       <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
         <div className="flex flex-wrap gap-1">

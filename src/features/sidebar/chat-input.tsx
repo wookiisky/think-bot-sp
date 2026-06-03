@@ -7,6 +7,7 @@ import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Tooltip } from '../../components/ui/tooltip';
 import { cn } from '../../lib/utils';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
+import { WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS } from '../workspace/workspace-resize-handle-style';
 
 /** Textarea 单行高度。 */
 const SINGLE_LINE_HEIGHT = 32;
@@ -130,21 +131,19 @@ export const ChatInput = ({
 
   return (
     <section data-testid="chat-input-section" className="shrink-0 border-t border-border bg-card/75 px-2 py-1 backdrop-blur-sm">
-      <div className="mb-0 flex justify-center">
-        <div
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label={t('workspace.resizeComposer')}
-          data-testid="chat-input-resize-handle"
-          className="h-0.5 w-8 cursor-row-resize rounded-none bg-border transition-colors hover:bg-primary/40"
-          onPointerDown={(event) => {
-            setResizeSession({
-              startY: event.clientY,
-              startHeight: textareaHeight,
-            });
-          }}
-        />
-      </div>
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('workspace.resizeComposer')}
+        data-testid="chat-input-resize-handle"
+        className={cn(WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS, 'mb-1')}
+        onPointerDown={(event) => {
+          setResizeSession({
+            startY: event.clientY,
+            startHeight: textareaHeight,
+          });
+        }}
+      />
 
       <div data-testid="chat-input-panel" className="flex flex-col gap-1">
         {images.length > 0 ? (

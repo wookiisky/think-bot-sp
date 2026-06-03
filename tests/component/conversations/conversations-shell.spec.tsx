@@ -196,7 +196,20 @@ describe('ConversationsShell', () => {
     expect(screen.queryByText('历史对话')).toBeNull();
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
+    const pageItems = screen.getAllByTestId('conversations-page-item');
+    expect(pageItems[0]).toHaveClass('gap-1.5', 'px-2', 'py-1');
+    expect(within(pageItems[0]).getByText('页面 A')).toHaveClass('text-xs', 'leading-4');
     expect(within(screen.getByTestId('conversations-page-list')).queryByText('https://example.com/article-a')).toBeNull();
+    expect(screen.getByTestId('conversations-sidebar-resize-handle')).toHaveClass(
+      'w-0.5',
+      'self-stretch',
+      'bg-muted-foreground/35',
+      'hover:bg-primary/50',
+    );
+    const detailHeader = screen.getByTestId('conversations-detail-header');
+    expect(detailHeader).toHaveClass('px-2.5', 'py-1.5');
+    expect(screen.getByTestId('conversations-detail-title')).toHaveClass('text-base');
+    expect(within(detailHeader).getByText('https://example.com/article-a')).toHaveClass('text-xs');
     expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(screen.getByTestId('conversations-extraction-panel')).toHaveStyle({ height: `${DEFAULT_EXTRACTION_PANEL_HEIGHT}px` });
@@ -234,6 +247,12 @@ describe('ConversationsShell', () => {
     await waitFor(() => {
       expect(extractionPanel).toHaveStyle({ height: '280px' });
     });
+    expect(screen.getByTestId('conversations-extraction-resize-handle')).toHaveClass(
+      'h-0.5',
+      'w-full',
+      'bg-muted-foreground/35',
+      'hover:bg-primary/50',
+    );
 
     fireEvent.pointerDown(screen.getByTestId('conversations-extraction-resize-handle'), {
       clientY: 200,
@@ -256,6 +275,27 @@ describe('ConversationsShell', () => {
     expect(extractionPanel).toHaveStyle({ height: '1px' });
     expect(extractionPanel).toHaveClass('overflow-hidden', 'px-0', 'py-0');
     expect(extractionPanel).not.toHaveClass('overflow-y-auto');
+  });
+
+  it('支持直接拖拽左右区分割线调整左侧栏宽度', async () => {
+    const api = createConversationsApi();
+
+    render(<ConversationsShell api={api} />);
+
+    const sidebar = await screen.findByTestId('conversations-sidebar');
+    await waitFor(() => {
+      expect(sidebar).toHaveStyle({ width: '332px' });
+    });
+
+    fireEvent.pointerDown(screen.getByTestId('conversations-sidebar-resize-handle'), {
+      clientX: 300,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: 360,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(sidebar).toHaveStyle({ width: '392px' });
   });
 
   it('支持标题编辑和页面删除', async () => {

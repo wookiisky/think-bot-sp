@@ -49,6 +49,10 @@ import {
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
+import {
+  WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS,
+  WORKSPACE_VERTICAL_RESIZE_HANDLE_CLASS,
+} from '../workspace/workspace-resize-handle-style';
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
 import { ChatInput } from '../sidebar/chat-input';
 import { ChatThread } from '../sidebar/chat-thread';
@@ -1257,7 +1261,11 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       data-testid="conversations-shell"
       className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
     >
-      <aside className="flex shrink-0 flex-col border-r border-border bg-card/80 backdrop-blur-sm" style={{ width: `${sidebarWidth}px` }}>
+      <aside
+        data-testid="conversations-sidebar"
+        className="flex shrink-0 flex-col bg-card/80 backdrop-blur-sm"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         <header className="border-b border-border px-3 py-2">
           <label className="flex items-center gap-2 border border-input bg-input/20 px-2.5 py-1.5 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
@@ -1283,23 +1291,24 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             return (
               <div
                 key={page.normalizedUrl}
+                data-testid="conversations-page-item"
                 className={cn(
-                  'flex w-full items-center gap-2 border-b border-border px-2.5 py-1.5 text-left transition-colors',
+                  'flex w-full items-center gap-1.5 border-b border-border px-2 py-1 text-left transition-colors',
                   isSelected && 'bg-primary/10',
                 )}
               >
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                   onClick={() => setSelectedPageUrl(page.normalizedUrl)}
                 >
                   {page.faviconUrl ? (
-                    <img src={page.faviconUrl} alt="" className="size-4 rounded-sm" />
+                    <img src={page.faviconUrl} alt="" className="size-3.5 rounded-sm" />
                   ) : (
-                    <span className="size-4 rounded-sm bg-border" />
+                    <span className="size-3.5 rounded-sm bg-border" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium leading-5">{displayTitle}</p>
+                    <p className="truncate text-xs font-medium leading-4">{displayTitle}</p>
                   </div>
                 </button>
                 <div className="flex shrink-0 gap-1">
@@ -1341,32 +1350,33 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
       </aside>
 
-      <div className="flex w-4 shrink-0 items-center justify-center border-r border-border bg-background/80">
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={t('conversations.resizeSidebar')}
-          data-testid="conversations-sidebar-resize-handle"
-          className="h-24 w-2 cursor-col-resize bg-border transition-colors hover:bg-primary/40"
-          onPointerDown={(event) =>
-            setSidebarResizeState({
-              startX: event.clientX,
-              startWidth: sidebarWidth,
-            })
-          }
-        />
-      </div>
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t('conversations.resizeSidebar')}
+        data-testid="conversations-sidebar-resize-handle"
+        className={WORKSPACE_VERTICAL_RESIZE_HANDLE_CLASS}
+        onPointerDown={(event) =>
+          setSidebarResizeState({
+            startX: event.clientX,
+            startWidth: sidebarWidth,
+          })
+        }
+      />
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="shrink-0 border-b border-border bg-card/80 px-3 py-2.5 backdrop-blur-sm">
+        <header
+          data-testid="conversations-detail-header"
+          className="shrink-0 border-b border-border bg-card/80 px-2.5 py-1.5 backdrop-blur-sm"
+        >
           {detail.page ? (
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   {isTitleEditing ? (
                     <input
                       aria-label={t('conversations.editTitle')}
-                      className="w-full border border-input bg-background px-2.5 py-1.5 text-lg font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                      className="w-full border border-input bg-background px-2 py-1 text-base font-semibold outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
                       value={titleDraft}
                       autoFocus
                       onChange={(event) => setTitleDraft(event.target.value)}
@@ -1386,13 +1396,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     <button
                       type="button"
                       aria-label={t('conversations.editTitle')}
-                      className="text-left text-xl font-semibold"
+                      data-testid="conversations-detail-title"
+                      className="text-left text-base font-semibold"
                       onClick={() => setIsTitleEditing(true)}
                     >
                       {detail.page.title || detail.page.url}
                     </button>
                   )}
-                  <p className="mt-1 truncate text-sm text-muted-foreground">{detail.page.url}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail.page.url}</p>
                 </div>
                 <div className="flex gap-1">
                   <Tooltip content={t('conversations.action.copyExtraction')}>
@@ -1446,21 +1457,19 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
 
-        <div className="shrink-0 border-b border-border px-3 py-0.5">
-          <div
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label={t('conversations.resizeExtraction')}
-            data-testid="conversations-extraction-resize-handle"
-            className="mx-auto h-1.5 w-10 cursor-row-resize bg-border transition-colors hover:bg-primary/40"
-            onPointerDown={(event) => {
-              setExtractionResizeState({
-                startY: event.clientY,
-                startHeight: extractionPanelHeight,
-              });
-            }}
-          />
-        </div>
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t('conversations.resizeExtraction')}
+          data-testid="conversations-extraction-resize-handle"
+          className={WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS}
+          onPointerDown={(event) => {
+            setExtractionResizeState({
+              startY: event.clientY,
+              startHeight: extractionPanelHeight,
+            });
+          }}
+        />
 
         <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
           <div className="flex flex-wrap gap-1">

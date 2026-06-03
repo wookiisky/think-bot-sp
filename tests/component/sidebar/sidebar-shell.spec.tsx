@@ -180,6 +180,12 @@ describe('SidebarShell', () => {
     await waitFor(() => {
       expect(extractionPanel).toHaveStyle({ height: '280px' });
     });
+    expect(screen.getByTestId('sidebar-extraction-resize-handle')).toHaveClass(
+      'h-0.5',
+      'w-full',
+      'bg-muted-foreground/35',
+      'hover:bg-primary/50',
+    );
 
     fireEvent.pointerDown(screen.getByTestId('sidebar-extraction-resize-handle'), {
       clientY: 200,
