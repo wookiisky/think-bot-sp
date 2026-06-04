@@ -44,8 +44,8 @@ export const COMPACT_DRAG_HANDLE_BUTTON_CLASS =
 /** 整行选择按钮：用于导航、列表项、摘要行，不等同命令按钮。 */
 export const COMPACT_ROW_BUTTON_CLASS = 'min-w-0 text-left transition-colors';
 
-/** 聊天输入区控件：与 textarea 同行，需要保持 32px 高度。 */
-export const COMPACT_COMPOSER_CONTROL_CLASS = 'size-8 shrink-0 rounded-none';
+/** 聊天输入区图标控件：小于 textarea，给浮起态保留上边框空间。 */
+export const COMPACT_COMPOSER_CONTROL_CLASS = 'size-7 shrink-0 rounded-none';
 
 /** 聊天输入区模型选择框，与 composer 控件同高。 */
 export const COMPACT_COMPOSER_SELECT_CLASS =
