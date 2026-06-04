@@ -396,9 +396,9 @@ export const ChatThread = ({
     <section
       ref={threadViewportRef}
       data-testid="chat-thread-scroll-viewport"
-      className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2"
+      className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
     >
-      <div className="min-w-0 divide-y divide-border/70">
+      <div className="min-w-0 w-full divide-y divide-border/70">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
           const messageIndex = messages.findIndex((current) => current.id === message.id);
@@ -413,7 +413,7 @@ export const ChatThread = ({
               key={message.id}
               data-testid={`chat-message-${message.id}`}
               data-message-role={message.role}
-              className="group/message relative min-w-0"
+              className="group/message relative min-w-0 w-full"
               onMouseEnter={() => setHoveredMessageId(message.id)}
               onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
               onFocus={() => setHoveredMessageId(message.id)}
@@ -682,7 +682,7 @@ const AssistantBranchRail = ({
               }}
               data-testid={`branch-${branch.id}`}
               className={cn(
-                'group/branch relative w-full shrink-0 px-2.5 py-1.5 pr-4',
+                'group/branch relative w-full shrink-0 px-2 py-1.5 pr-10',
                 selectedBranchId === branch.id && 'border-t-2 border-t-primary',
               )}
               onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
@@ -893,9 +893,9 @@ const AssistantBranchRail = ({
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative min-w-0 grid gap-1 px-0.5 transition-colors',
-    role === 'assistant' && 'bg-background pr-0 text-foreground',
-    role === 'user' && 'bg-muted/55 px-2 py-1.5 pr-10 text-foreground',
+    'relative min-w-0 grid gap-1 transition-colors',
+    role === 'assistant' && 'w-full bg-background px-0 pr-0 text-foreground',
+    role === 'user' && 'w-full bg-muted/55 px-2 py-1.5 pr-10 text-foreground',
     role === 'system' && 'pr-0 text-amber-900',
     status === 'error' && 'text-destructive',
     status === 'cancelled' && 'text-muted-foreground',

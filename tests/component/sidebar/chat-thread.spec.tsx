@@ -143,9 +143,14 @@ describe('ChatThread', () => {
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('bg-muted/55');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('border');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-background');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('w-full');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('px-0.5');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('pr-0');
     expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-2');
     expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-primary');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('px-2');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('pr-10');
+    expect(screen.getByTestId('branch-branch-1').className).not.toContain('px-2.5');
     expect(screen.getByTestId('branch-branch-1').className).not.toContain('border-primary');
     expect(screen.getByTestId('branch-branch-1').className).not.toContain('bg-primary/5');
     expect(screen.queryByText('主分支')).toBeNull();
@@ -255,11 +260,15 @@ describe('ChatThread', () => {
     const messageList = screen.getByTestId('chat-thread-scroll-viewport').firstElementChild as HTMLDivElement;
     const messageCard = screen.getByTestId('chat-message-user-1');
     const messageBubble = screen.getByTestId('chat-message-bubble-user-1');
+    expect(screen.getByTestId('chat-thread-scroll-viewport').className).not.toContain('px-2');
+    expect(messageList.className).toContain('w-full');
     expect(messageList.className).toContain('divide-y');
     expect(messageList.className).toContain('divide-border/70');
     expect(messageCard).toHaveAttribute('data-message-role', 'user');
+    expect(messageCard.className).toContain('w-full');
     expect(messageCard.className).not.toContain('py-');
     expect(messageBubble.className).toContain('bg-muted/55');
+    expect(messageBubble.className).toContain('w-full');
     expect(messageBubble.className).not.toContain('border');
     expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('opacity-0');
 
