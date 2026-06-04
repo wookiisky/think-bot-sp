@@ -4,7 +4,7 @@ import { XIcon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
 import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
-import { cn } from '../../lib/utils';
+import { COMPACT_RESIZE_CORNER_BUTTON_CLASS } from '../../ui/compact-layout';
 import { ChatMarkdown } from './chat-markdown';
 import type { BranchPreviewDetail } from './workspace-state';
 import type { WorkspaceTranslator } from './workspace-copy';
@@ -144,7 +144,7 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
   return createPortal(
     <div
       data-testid="branch-preview-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/55 p-2"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
           onClose();
@@ -158,10 +158,10 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
         aria-labelledby={titleId}
         data-testid="branch-preview-dialog"
         tabIndex={-1}
-        className="relative flex max-w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-background shadow-2xl outline-none"
+        className="relative flex max-w-full flex-col overflow-hidden border border-border/80 bg-background ring-1 ring-foreground/8 outline-none"
         style={size}
       >
-        <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border/80 px-5 py-4">
+        <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border/80 px-3 py-2">
           <h2 id={titleId} className="min-w-0 truncate text-base font-semibold text-foreground">
             {preview.modelLabel}
           </h2>
@@ -170,7 +170,7 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
           </Button>
         </header>
 
-        <div data-testid="branch-preview-content" className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div data-testid="branch-preview-content" className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           <ChatMarkdown
             content={preview.content}
             className="text-sm leading-6"
@@ -189,10 +189,7 @@ export const BranchPreviewOverlay = ({ open, preview, t, assistantMarkdownDispla
             type="button"
             aria-label={t('workspace.resizeBranchPreview')}
             data-testid="branch-preview-resize-handle"
-            className={cn(
-              'pointer-events-auto h-5 w-5 cursor-se-resize rounded-sm border border-border/80 bg-background/90',
-              'bg-[linear-gradient(135deg,transparent_0_45%,rgba(148,163,184,.9)_45_55%,transparent_55_65%,rgba(148,163,184,.9)_65_75%,transparent_75_100%)]',
-            )}
+            className={COMPACT_RESIZE_CORNER_BUTTON_CLASS}
             onPointerDown={(event) => {
               event.preventDefault();
               setResizeState({

@@ -79,8 +79,8 @@ export const MultiSelectPopover = ({
           align="start"
           sideOffset={6}
           className={cn(
-            'z-50 w-[var(--radix-popover-trigger-width)] min-w-48 rounded-xl border border-border/70 bg-popover p-2 shadow-lg ring-1 ring-foreground/5',
-            'animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+            'z-50 w-[var(--radix-popover-trigger-width)] min-w-48 border border-border/70 bg-popover p-2 ring-1 ring-foreground/5',
+            'animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
           )}
         >
           {options.length > 0 ? (
@@ -92,7 +92,7 @@ export const MultiSelectPopover = ({
                   <label
                     key={option.value}
                     className={cn(
-                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/70',
+                      'flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm transition-colors hover:bg-muted/35',
                       option.disabled && 'cursor-not-allowed opacity-50',
                     )}
                   >

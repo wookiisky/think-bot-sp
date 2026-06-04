@@ -10,6 +10,15 @@ import { Tooltip } from '../../components/ui/tooltip';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import { isBuiltInBlacklistRuleId } from '../../domain/config/config-schema';
 import { createBlacklistService } from '../../services/blacklist/blacklist-service';
+import {
+  COMPACT_CARD_CONTENT_CLASS,
+  COMPACT_CARD_HEADER_CLASS,
+  COMPACT_LIST_ITEM_ACTIVE_CLASS,
+  COMPACT_LIST_ITEM_CLASS,
+  COMPACT_LIST_ITEM_IDLE_CLASS,
+  COMPACT_ROW_BUTTON_CLASS,
+  COMPACT_SECTION_CLASS,
+} from '../../ui/compact-layout';
 
 type BlacklistSettingsPanelProps = {
   /** 当前草稿配置。 */
@@ -153,17 +162,17 @@ export const BlacklistSettingsPanel = ({
       id="settings-panel-blacklist"
       role="tabpanel"
       aria-labelledby="settings-tab-blacklist"
-      className="grid gap-4"
+      className={COMPACT_SECTION_CLASS}
     >
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="grid gap-1">
               <CardTitle className="text-base">{t('settings.blacklistSettings')}</CardTitle>
               <CardDescription>{t('settings.blacklistDescription')}</CardDescription>
             </div>
 
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1">
               <Button size="sm" type="button" variant="outline" onClick={handleResetDefaults} disabled={disabled}>
                 {t('settings.blacklistResetDefaults')}
               </Button>
@@ -174,9 +183,9 @@ export const BlacklistSettingsPanel = ({
           </div>
         </CardHeader>
 
-        <CardContent className="grid gap-3 px-4 py-4">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
           {visibleRules.length > 0 ? (
-            <ul className="grid gap-2.5">
+            <ul className="grid gap-2">
               {visibleRules.map((rule) => {
                 const selected = rule.id === activeRule?.id;
                 return (
@@ -184,15 +193,17 @@ export const BlacklistSettingsPanel = ({
                     <button
                       type="button"
                       className={[
-                        'grid w-full gap-1 rounded-2xl border px-3 py-2.5 text-left transition-colors',
-                        selected ? 'border-primary bg-primary/8' : 'border-border/70 bg-muted/30 hover:bg-muted/60',
+                        COMPACT_LIST_ITEM_CLASS,
+                        COMPACT_ROW_BUTTON_CLASS,
+                        'w-full text-left',
+                        selected ? COMPACT_LIST_ITEM_ACTIVE_CLASS : COMPACT_LIST_ITEM_IDLE_CLASS,
                       ].join(' ')}
                       onClick={() => setSelectedRuleId(rule.id)}
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold">{rule.pattern || t('settings.blacklistRulePatternEmpty')}</span>
                         {isBuiltInBlacklistRuleId(rule.id) ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+                          <span className="border border-primary/25 bg-primary/8 px-2 py-0.5 text-[11px] text-primary">
                             {t('settings.blacklistBuiltIn')}
                           </span>
                         ) : null}
@@ -210,8 +221,8 @@ export const BlacklistSettingsPanel = ({
           )}
 
           {activeRule ? (
-            <section className="grid gap-3 rounded-2xl border border-border/70 bg-muted/20 px-3 py-3">
-              <div className="flex flex-wrap gap-1.5">
+            <section className="grid gap-2.5 border border-border/70 px-2.5 py-2.5">
+              <div className="flex flex-wrap gap-1">
                 <MiniConfirm
                   message={t('settings.deleteBlacklistRule')}
                   cancelLabel={t('common.cancel')}
@@ -266,7 +277,7 @@ export const BlacklistSettingsPanel = ({
                 <span className="font-medium">{t('settings.blacklistRuleEnabled')}</span>
               </label>
 
-              <fieldset className="grid gap-2.5 rounded-2xl border border-border/70 px-3 py-2.5">
+              <fieldset className="grid gap-2.5 border border-border/70 px-2.5 py-2">
                 <legend className="px-1 text-sm font-medium">{t('settings.blacklistRuleTest')}</legend>
                 <label className="grid gap-1.5">
                   <span className="text-sm font-medium">{t('settings.blacklistRuleTestUrl')}</span>

@@ -200,14 +200,15 @@ describe('ConversationsShell', () => {
     expect(pageItems[0]).toHaveClass('gap-1.5', 'px-2', 'py-1');
     expect(within(pageItems[0]).getByText('页面 A')).toHaveClass('text-xs', 'leading-4');
     expect(within(screen.getByTestId('conversations-page-list')).queryByText('https://example.com/article-a')).toBeNull();
+    expect(screen.getByTestId('conversations-shell').className).not.toContain('bg-[linear-gradient');
     expect(screen.getByTestId('conversations-sidebar-resize-handle')).toHaveClass(
       'w-0.5',
       'self-stretch',
       'bg-muted-foreground/35',
-      'hover:bg-primary/50',
+      'hover:bg-primary',
     );
     const detailHeader = screen.getByTestId('conversations-detail-header');
-    expect(detailHeader).toHaveClass('px-2.5', 'py-1.5');
+    expect(detailHeader).toHaveClass('px-2', 'py-1.5');
     expect(screen.getByTestId('conversations-detail-title')).toHaveClass('text-base');
     expect(within(detailHeader).getByText('https://example.com/article-a')).toHaveClass('text-xs');
     expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
@@ -251,7 +252,7 @@ describe('ConversationsShell', () => {
       'h-0.5',
       'w-full',
       'bg-muted-foreground/35',
-      'hover:bg-primary/50',
+      'hover:bg-primary',
     );
 
     fireEvent.pointerDown(screen.getByTestId('conversations-extraction-resize-handle'), {

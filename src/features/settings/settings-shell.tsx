@@ -12,6 +12,7 @@ import { createLogger } from '../../services/logger/logger';
 import { downloadTextFile } from '../../shared/download-file';
 import { ToastStack } from '../../components/ui/toast-stack';
 import { Icon } from '../../ui/icon';
+import { COMPACT_PAGE_SHELL_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
 import { BlacklistSettingsPanel } from './blacklist-settings-panel';
 import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
@@ -132,7 +133,7 @@ export const SettingsShell = () => {
 
   if (!savedConfig || !draftConfig || !localeResources || !cacheStats) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,_var(--color-background)_0%,_var(--color-muted)_56%,_var(--color-background)_100%)] px-6 py-8">
+      <main className={COMPACT_PAGE_SHELL_CLASS}>
         <p className="m-0 text-sm text-foreground">{loadError ? `${loadError.title}：${loadError.message}` : '正在加载设置页…'}</p>
       </main>
     );
@@ -392,24 +393,22 @@ export const SettingsShell = () => {
       data-layout="tab-page"
       data-theme={draftConfig.basic.theme}
       className={cn(
-        'min-h-screen px-3 py-4 text-foreground sm:px-4 sm:py-6',
-        'bg-[linear-gradient(180deg,color-mix(in_oklch,var(--color-background)_82%,white)_0%,color-mix(in_oklch,var(--color-muted)_66%,white)_52%,var(--color-background)_100%)]',
-        'before:pointer-events-none before:fixed before:inset-x-0 before:top-0 before:h-56 before:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_72%)] before:content-[\'\']',
+        COMPACT_PAGE_SHELL_CLASS,
         draftConfig.basic.theme === 'dark' && 'dark',
       )}
     >
       <ToastStack toasts={toast ? [toast] : []} />
 
-      <section className="relative mx-auto flex w-full max-w-7xl flex-col gap-4">
-        <header className="grid gap-4 rounded-[28px] border border-border/70 bg-card/85 p-4 shadow-[0_20px_64px_rgba(15,23,42,0.08)] backdrop-blur md:p-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex size-10 items-center justify-center rounded-[18px] bg-[linear-gradient(135deg,var(--color-primary),color-mix(in_oklch,var(--color-primary)_72%,white))] text-primary-foreground shadow-lg shadow-primary/20">
+      <section className="relative mx-auto flex w-full max-w-7xl flex-col gap-2">
+        <header className="grid gap-2 border border-border/70 px-3 py-2 ring-1 ring-foreground/8">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-7 items-center justify-center border border-border/70 text-primary">
                 <Icon name="settings" size={16} />
               </span>
               <div>
-                <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">Think Bot SP</p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
+                <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Think Bot SP</p>
+                <h1 className="mt-0.5 text-lg font-semibold">{t('settings.title')}</h1>
               </div>
             </div>
 
@@ -426,10 +425,10 @@ export const SettingsShell = () => {
           </div>
         </header>
 
-        <section className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+        <section className="grid gap-2 lg:grid-cols-[196px_minmax(0,1fr)] lg:items-start">
           <SettingsNav activeSection={activeSection} onSectionChange={setActiveSection} t={t} />
 
-          <section className="grid gap-4 lg:col-start-2">
+          <section className={cn(COMPACT_SECTION_CLASS, 'lg:col-start-2')}>
             {activeSection === 'basic' ? (
               <BasicSettingsPanel
                 config={draftConfig}
@@ -447,7 +446,7 @@ export const SettingsShell = () => {
                 id="settings-panel-promptTabs"
                 role="tabpanel"
                 aria-labelledby="settings-tab-promptTabs"
-                className="grid gap-6"
+                className={COMPACT_SECTION_CLASS}
               >
                 <QuickInputsPanel
                   config={draftConfig}

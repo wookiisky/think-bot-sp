@@ -154,6 +154,7 @@ describe('SidebarShell', () => {
 
     await waitFor(() => expect(api.getSidebarBootstrap).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('sidebar-shell').className).toContain('overflow-hidden');
+    expect(screen.getByTestId('sidebar-shell').className).not.toContain('bg-[linear-gradient');
     expect(screen.getByTestId('sidebar-extraction-panel')).toBeVisible();
     expect(screen.getByRole('tabpanel').className).toContain('min-w-0');
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
@@ -184,7 +185,7 @@ describe('SidebarShell', () => {
       'h-0.5',
       'w-full',
       'bg-muted-foreground/35',
-      'hover:bg-primary/50',
+      'hover:bg-primary',
     );
 
     fireEvent.pointerDown(screen.getByTestId('sidebar-extraction-resize-handle'), {

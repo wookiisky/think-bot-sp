@@ -25,6 +25,14 @@ import {
   getEnabledCompleteModels,
 } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
+import {
+  COMPACT_HEADER_CLASS,
+  COMPACT_PROMPT_TAB_ACTIVE_CLASS,
+  COMPACT_PROMPT_TAB_CLASS,
+  COMPACT_PROMPT_TAB_IDLE_CLASS,
+  COMPACT_ROW_BUTTON_CLASS,
+  COMPACT_WORKBENCH_CLASS,
+} from '../../ui/compact-layout';
 import { downloadTextFile } from '../../shared/download-file';
 import {
   CHAT_PROMPT_TAB_ID,
@@ -1259,15 +1267,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   return (
     <main
       data-testid="conversations-shell"
-      className="flex h-screen min-h-0 overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
+      className={cn('flex', COMPACT_WORKBENCH_CLASS)}
     >
       <aside
         data-testid="conversations-sidebar"
-        className="flex shrink-0 flex-col bg-card/80 backdrop-blur-sm"
+        className="flex shrink-0 flex-col border-r border-border/70"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <header className="border-b border-border px-3 py-2">
-          <label className="flex items-center gap-2 border border-input bg-input/20 px-2.5 py-1.5 text-xs text-muted-foreground">
+        <header className={COMPACT_HEADER_CLASS}>
+          <label className="flex items-center gap-1.5 border border-input px-2 py-1 text-xs text-muted-foreground">
             <SearchIcon className="size-3.5" />
             <input
               aria-label={t('conversations.searchLabel')}
@@ -1281,7 +1289,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section data-testid="conversations-page-list" className="min-h-0 flex-1 overflow-y-auto">
           {pages.length === 0 ? (
-            <div className="px-3 py-4 text-sm text-muted-foreground">
+            <div className="px-2 py-3 text-sm text-muted-foreground">
               {searchQuery.trim() ? t('conversations.emptySearch') : t('conversations.empty')}
             </div>
           ) : null}
@@ -1299,7 +1307,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               >
                 <button
                   type="button"
-                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  className={cn(COMPACT_ROW_BUTTON_CLASS, 'flex flex-1 items-center gap-1.5')}
                   onClick={() => setSelectedPageUrl(page.normalizedUrl)}
                 >
                   {page.faviconUrl ? (
@@ -1367,7 +1375,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <header
           data-testid="conversations-detail-header"
-          className="shrink-0 border-b border-border bg-card/80 px-2.5 py-1.5 backdrop-blur-sm"
+          className="shrink-0 border-b border-border px-2 py-1.5"
         >
           {detail.page ? (
             <div className="space-y-1">
@@ -1435,7 +1443,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         <section
           data-testid="conversations-extraction-panel"
           className={cn(
-            'box-border shrink-0 border-b border-border bg-background/80',
+            'box-border shrink-0 border-b border-border',
             isExtractionPanelCollapsed ? 'overflow-hidden px-0 py-0' : 'overflow-y-auto px-3 py-2',
           )}
           style={{ height: `${extractionPanelHeight}px` }}
@@ -1471,7 +1479,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           }}
         />
 
-        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
+        <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border px-2 py-[3px]">
           <div className="flex flex-wrap gap-1">
             {promptTabs.map((promptTab) => {
               const isActive = promptTab.id === activePromptTabId;
@@ -1490,15 +1498,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   type="button"
                   title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                   className={cn(
-                    'relative inline-flex items-center gap-1.5 overflow-hidden border px-1.5 py-[2px] text-left text-[11px] shadow-sm transition-colors',
+                    COMPACT_PROMPT_TAB_CLASS,
                     showLoadingRing && 'tab-loading-border border-transparent',
                     isActive
                       ? showLoadingRing
-                        ? 'bg-primary/10 text-foreground'
-                        : 'border-primary/30 bg-primary/10 text-foreground'
+                        ? 'bg-primary/8 text-foreground'
+                        : COMPACT_PROMPT_TAB_ACTIVE_CLASS
                       : showLoadingRing
-                        ? 'bg-background/90 text-foreground hover:bg-muted'
-                        : 'border-border bg-background/90 hover:bg-muted',
+                        ? 'text-foreground hover:bg-muted/35'
+                        : COMPACT_PROMPT_TAB_IDLE_CLASS,
                   )}
                   onClick={() => {
                     setActivePromptTabId(promptTab.id);
@@ -1518,7 +1526,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   {hasPromptTabText && !showLoadingRing ? (
                     <span
                       data-testid={`prompt-tab-line-${promptTab.id}`}
-                      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary"
                     />
                   ) : null}
                 </button>
@@ -1528,7 +1536,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
 
         {activeChatNotice ? (
-          <div className="shrink-0 border-b border-border px-3 py-1">
+          <div className="shrink-0 border-b border-border px-2 py-1">
             <Badge variant="outline">{activeChatNotice}</Badge>
           </div>
         ) : null}

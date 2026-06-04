@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils';
+import { COMPACT_ROW_BUTTON_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
 import { Icon } from '../../ui/icon';
 import { settingsSections, type SettingsSection } from './settings-shell-state';
 
@@ -16,12 +17,12 @@ export const SettingsNav = ({ activeSection, onSectionChange, t }: SettingsNavPr
   <nav
     aria-label={t('settings.nav')}
     data-testid="settings-shell-nav"
-    className="grid gap-1.5 self-start lg:sticky lg:top-4"
+    className="grid gap-1 self-start lg:sticky lg:top-2"
   >
     <div
       role="tablist"
       aria-orientation="vertical"
-      className="grid gap-1.5 rounded-[24px] border border-border/70 bg-card/85 p-2.5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur ring-1 ring-foreground/6"
+      className={cn(COMPACT_SECTION_CLASS, 'border border-border/70 p-1.5 ring-1 ring-foreground/6')}
     >
       {settingsSections.map((section) => {
         const selected = section.id === activeSection;
@@ -35,10 +36,11 @@ export const SettingsNav = ({ activeSection, onSectionChange, t }: SettingsNavPr
             aria-controls={`settings-panel-${section.id}`}
             data-section-icon={section.icon}
             className={cn(
-              'flex min-w-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs/relaxed font-medium transition-all',
+              COMPACT_ROW_BUTTON_CLASS,
+              'flex items-center gap-1.5 px-2 py-1.5 text-xs/relaxed font-medium',
               selected
-                ? 'bg-[linear-gradient(135deg,var(--color-primary),color-mix(in_oklch,var(--color-primary)_74%,white))] text-primary-foreground shadow-lg shadow-primary/15'
-                : 'bg-transparent text-foreground hover:bg-muted/70 hover:text-foreground',
+                ? 'border-l-2 border-primary bg-primary/8 text-foreground'
+                : 'border-l-2 border-transparent text-foreground hover:bg-muted/35 hover:text-foreground',
             )}
             onClick={() => onSectionChange(section.id)}
           >

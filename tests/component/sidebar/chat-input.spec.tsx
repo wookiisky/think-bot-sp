@@ -221,7 +221,7 @@ describe('ChatInput', () => {
       'h-0.5',
       'w-full',
       'bg-muted-foreground/35',
-      'hover:bg-primary/50',
+      'hover:bg-primary',
     );
 
     fireEvent.pointerDown(screen.getByTestId('chat-input-resize-handle'), {

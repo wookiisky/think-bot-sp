@@ -30,6 +30,13 @@ import {
 } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import {
+  COMPACT_HEADER_CLASS,
+  COMPACT_PROMPT_TAB_ACTIVE_CLASS,
+  COMPACT_PROMPT_TAB_CLASS,
+  COMPACT_PROMPT_TAB_IDLE_CLASS,
+  COMPACT_WORKBENCH_CLASS,
+} from '../../ui/compact-layout';
+import {
   CHAT_PROMPT_TAB_ID,
   appendAssistantBranches,
   buildActiveSessionIdMap,
@@ -1329,11 +1336,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   return (
     <main
       data-testid="sidebar-shell"
-      className="flex h-screen min-h-0 flex-col overflow-hidden bg-[linear-gradient(180deg,var(--color-background)_0%,var(--color-muted)_100%)] text-foreground"
+      className={cn('flex flex-col', COMPACT_WORKBENCH_CLASS)}
     >
       <ToastStack toasts={toast ? [toast] : []} />
-      <header className="shrink-0 border-b border-border bg-card/90 px-3 py-1.5 backdrop-blur-sm">
-        <div className="flex items-start justify-between gap-3">
+      <header className={COMPACT_HEADER_CLASS}>
+        <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1">
             <Tooltip content={t('sidebar.method.readability')}>
               <Button
@@ -1412,7 +1419,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       <section
         data-testid="sidebar-extraction-panel"
         className={cn(
-          'box-border shrink-0 border-b border-border bg-background/80',
+          'box-border shrink-0 border-b border-border',
           isExtractionPanelCollapsed ? 'overflow-hidden px-0 py-0' : 'overflow-y-auto px-3 py-1.5',
         )}
         style={{ height: `${extractionPanelHeight}px` }}
@@ -1435,7 +1442,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ) : null}
         {!normalizedExtractionContent && state === 'blocked' ? (
           <div className="flex h-full items-center justify-center">
-            <div className="grid max-w-sm gap-3 border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+            <div className="grid max-w-sm gap-2.5 border border-amber-300/70 bg-amber-500/8 px-3 py-3 text-sm text-amber-900 dark:text-amber-300">
               <div className="flex items-center gap-2">
                 <ShieldAlertIcon className="size-4" />
                 <span className="font-medium">{t('sidebar.state.blockedTitle')}</span>
@@ -1482,7 +1489,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }}
       />
 
-      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border bg-muted/20 px-3 py-[3px]">
+      <section role="tablist" aria-label={t('sidebar.tablistLabel')} className="shrink-0 border-b border-border px-2 py-[3px]">
         <div className="flex flex-wrap gap-1">
           {promptTabs.map((promptTab) => {
             const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
@@ -1502,15 +1509,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 type="button"
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
-                  'relative inline-flex items-center gap-1.5 overflow-hidden border px-1.5 py-[2px] text-left text-[11px] shadow-sm transition-colors',
+                  COMPACT_PROMPT_TAB_CLASS,
                   showLoadingRing && 'tab-loading-border border-transparent',
                   isActive
                     ? showLoadingRing
-                      ? 'bg-primary/10 text-foreground'
-                      : 'border-primary/30 bg-primary/10 text-foreground'
+                      ? 'bg-primary/8 text-foreground'
+                      : COMPACT_PROMPT_TAB_ACTIVE_CLASS
                     : showLoadingRing
-                      ? 'bg-background/90 text-foreground hover:bg-muted'
-                      : 'border-border bg-background/90 hover:bg-muted',
+                      ? 'text-foreground hover:bg-muted/35'
+                      : COMPACT_PROMPT_TAB_IDLE_CLASS,
                 )}
                 onClick={() => {
                   setActivePromptTabId(promptTab.id);
@@ -1534,7 +1541,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 {hasPromptTabText && !showLoadingRing ? (
                   <span
                     data-testid={`prompt-tab-line-${promptTab.id}`}
-                    className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-[linear-gradient(90deg,#38bdf8_0%,#34d399_100%)]"
+                    className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 bg-primary"
                   />
                 ) : null}
               </button>
@@ -1544,7 +1551,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       </section>
 
       {activeChatNotice ? (
-        <div className="shrink-0 border-b border-border px-3 py-1">
+        <div className="shrink-0 border-b border-border px-2 py-1">
           <Badge variant="outline">{activeChatNotice}</Badge>
         </div>
       ) : null}

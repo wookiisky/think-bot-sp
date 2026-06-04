@@ -38,8 +38,8 @@ export const Tooltip = ({
           align={align}
           sideOffset={sideOffset}
           className={cn(
-            'z-50 max-w-56 rounded-md border border-border/70 bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground shadow-md',
-            'animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+            'z-50 max-w-56 border border-border/70 bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground',
+            'animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
             className,
           )}
         >

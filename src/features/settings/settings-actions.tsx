@@ -36,8 +36,8 @@ export const SettingsActions = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-wrap items-center justify-end gap-1.5" data-testid="settings-shell-actions">
+    <div className="grid gap-1.5">
+      <div className="flex flex-wrap items-center justify-end gap-1" data-testid="settings-shell-actions">
         <Button type="button" size="sm" onClick={onSave} disabled={disabled}>
           <Icon name="save" size={12} />
           {t('settings.save')}
@@ -71,7 +71,7 @@ export const SettingsActions = ({
         </Button>
       </div>
       {hasUnsavedChanges ? (
-        <p className="m-0 justify-self-end rounded-full bg-amber-500/10 px-2.5 py-1 text-right text-xs/relaxed text-amber-700 dark:text-amber-300">
+        <p className="m-0 justify-self-end border border-amber-500/25 bg-amber-500/8 px-2 py-0.5 text-right text-xs/relaxed text-amber-700 dark:text-amber-300">
           {t('settings.unsavedChanges')}
         </p>
       ) : null}

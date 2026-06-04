@@ -14,6 +14,15 @@ import { Textarea } from '../../components/ui/textarea';
 import { Tooltip } from '../../components/ui/tooltip';
 import { getEnabledCompleteModels, sanitizeParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import {
+  COMPACT_CARD_CONTENT_CLASS,
+  COMPACT_CARD_HEADER_CLASS,
+  COMPACT_DRAG_HANDLE_BUTTON_CLASS,
+  COMPACT_LIST_ITEM_ACTIVE_CLASS,
+  COMPACT_LIST_ITEM_CLASS,
+  COMPACT_LIST_ITEM_IDLE_CLASS,
+  COMPACT_ROW_BUTTON_CLASS,
+} from '../../ui/compact-layout';
 
 type QuickInputsPanelProps = {
   /** 当前草稿配置。 */
@@ -96,14 +105,14 @@ const SortableQuickInputCard = ({
     >
       <section
         className={[
-          'grid gap-2.5 rounded-2xl border px-3 py-2.5 transition-colors',
-          expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
+          COMPACT_LIST_ITEM_CLASS,
+          expanded ? COMPACT_LIST_ITEM_ACTIVE_CLASS : COMPACT_LIST_ITEM_IDLE_CLASS,
         ].join(' ')}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className={COMPACT_DRAG_HANDLE_BUTTON_CLASS}
             aria-label={`${t('settings.dragQuickInput')}:${item.name}`}
             disabled={disabled}
             {...attributes}
@@ -114,7 +123,7 @@ const SortableQuickInputCard = ({
 
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-left"
+            className={`${COMPACT_ROW_BUTTON_CLASS} flex flex-1 items-baseline gap-2 overflow-hidden`}
             data-testid={`quick-input-summary-${item.id}`}
             onClick={onToggle}
           >
@@ -122,7 +131,7 @@ const SortableQuickInputCard = ({
             <span className="truncate text-xs text-muted-foreground">{preview}</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <Tooltip content={t('settings.moveUp')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveUp')} onClick={onMoveUp} disabled={disabled}>
                 <ArrowUpIcon />
@@ -157,7 +166,7 @@ const SortableQuickInputCard = ({
           </div>
         </div>
 
-        {expanded ? <div className="grid gap-3 border-t border-border/70 pt-3">{children}</div> : null}
+        {expanded ? <div className="grid gap-2.5 border-t border-border/70 pt-2.5">{children}</div> : null}
       </section>
     </li>
   );
@@ -303,15 +312,15 @@ export const QuickInputsPanel = ({
   };
 
   return (
-    <Card size="sm" aria-label={t('settings.promptTabs')} className="rounded-[26px] bg-card/90 py-0 shadow-xl ring-1 ring-foreground/8">
-      <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+    <Card size="sm" aria-label={t('settings.promptTabs')}>
+      <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="grid gap-1">
             <CardTitle className="text-base">{t('settings.promptTabs')}</CardTitle>
             <CardDescription>{t('settings.quickInputsDescription')}</CardDescription>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             <Button size="sm" type="button" variant="outline" onClick={onImportTemplates} disabled={disabled || importingTemplates}>
               {importingTemplates ? t('settings.importingQuickInputTemplates') : t('settings.importQuickInputTemplates')}
             </Button>
@@ -322,11 +331,11 @@ export const QuickInputsPanel = ({
         </div>
       </CardHeader>
 
-      <CardContent className="grid gap-3 px-4 py-4">
+      <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
         {visibleQuickInputs.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={visibleQuickInputs.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-              <ul className="grid gap-2.5">
+              <ul className="grid gap-2">
                 {visibleQuickInputs.map((item) => {
                   const expanded = item.id === expandedQuickInputId;
                   const hasMissingModelReference =
@@ -371,7 +380,7 @@ export const QuickInputsPanel = ({
                       </label>
 
                       <div className="grid gap-1.5">
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-2.5 md:grid-cols-2">
                           <label className="grid gap-1.5">
                             <span className="text-sm font-medium">{t('settings.quickInputModel')}</span>
                             <Select

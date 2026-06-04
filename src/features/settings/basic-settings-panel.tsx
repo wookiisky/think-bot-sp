@@ -1,4 +1,5 @@
 import { MultiSelectPopover } from '../../components/ui/multi-select-popover';
+import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -14,6 +15,7 @@ import {
 } from '../../domain/config/config-schema';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
 import { cn } from '../../lib/utils';
+import { COMPACT_CARD_CONTENT_CLASS, COMPACT_CARD_HEADER_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
 
 type CacheStats = {
   /** 本地缓存页面数。 */
@@ -86,15 +88,15 @@ export const BasicSettingsPanel = ({
       id="settings-panel-basic"
       role="tabpanel"
       aria-labelledby="settings-tab-basic"
-      className="grid gap-4"
+      className={COMPACT_SECTION_CLASS}
     >
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
           <CardTitle className="text-base">{t('settings.basic')}</CardTitle>
           <CardDescription>{t('settings.basicDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3.5 px-4 py-4">
-          <div className="grid gap-3 lg:grid-cols-2">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
+          <div className="grid gap-2.5 lg:grid-cols-2">
             <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.language')}</span>
               <Select
@@ -181,7 +183,7 @@ export const BasicSettingsPanel = ({
             />
           </label>
 
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid gap-2.5 lg:grid-cols-2">
             <label className="grid gap-1.5">
               <span className="text-sm font-medium">{t('settings.extractionMethod')}</span>
               <Select
@@ -229,7 +231,7 @@ export const BasicSettingsPanel = ({
           </div>
 
           <label className="grid gap-2.5">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium">{t('settings.extractionTextFontSize')}</span>
               <span
                 className={cn(
@@ -315,12 +317,12 @@ export const BasicSettingsPanel = ({
         </CardContent>
       </Card>
 
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
           <CardTitle className="text-base">{t('settings.cache')}</CardTitle>
           <CardDescription>{t('settings.cacheDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 px-4 py-4">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
           <div className="grid gap-1.5 text-sm text-foreground">
             <span data-testid="cache-page-count">
               {t('settings.savedPages')}：{pageCount} 个页面
@@ -329,14 +331,15 @@ export const BasicSettingsPanel = ({
               {t('settings.cacheSize')}：{formatCacheBytes(cacheStats.bytes)}
             </span>
           </div>
-          <button
+          <Button
             type="button"
-            className="inline-flex h-6 w-fit items-center rounded-md border border-border px-2.5 text-xs/relaxed hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            size="sm"
+            variant="outline"
             disabled={disabled}
             onClick={onClearCache}
           >
             {t('settings.clearCache')}
-          </button>
+          </Button>
         </CardContent>
       </Card>
     </section>

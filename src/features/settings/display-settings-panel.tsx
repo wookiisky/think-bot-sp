@@ -8,6 +8,7 @@ import {
   type AssistantMarkdownDisplayConfig,
 } from '../../domain/config/assistant-markdown-display-config';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { COMPACT_CARD_CONTENT_CLASS, COMPACT_CARD_HEADER_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
 
 type DisplayFieldKey = keyof AssistantMarkdownDisplayConfig;
 
@@ -71,15 +72,15 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
       id="settings-panel-display"
       role="tabpanel"
       aria-labelledby="settings-tab-display"
-      className="grid gap-4"
+      className={COMPACT_SECTION_CLASS}
     >
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
           <CardTitle className="text-base">{t('settings.display')}</CardTitle>
           <CardDescription>{t('settings.displayDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3.5 px-4 py-4">
-          <div className="flex flex-wrap gap-2">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
+          <div className="flex flex-wrap gap-1">
             {ASSISTANT_MARKDOWN_DISPLAY_PRESETS.map((preset) => (
               <Button
                 key={preset.id}
@@ -94,14 +95,14 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
             ))}
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             {displayFields.map((field) => {
               const styleConfig = assistantMarkdown[field.key];
               const label = t(field.labelKey);
 
               return (
-                <article key={field.key} className="grid gap-2.5 rounded-2xl border border-border/70 bg-muted/25 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <article key={field.key} className="grid gap-2 border border-border/70 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="grid gap-1">
                       <h3 className="m-0 text-sm font-medium">{label}</h3>
                       <p className="m-0 text-xs text-muted-foreground">{t('settings.displayFieldDescription')}</p>
@@ -118,7 +119,7 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
                     </label>
                   </div>
 
-                  <div className="grid gap-3 md:grid-cols-[140px_140px_minmax(0,1fr)]">
+                  <div className="grid gap-2.5 md:grid-cols-[140px_140px_minmax(0,1fr)]">
                     <label className="grid gap-1.5">
                       <span className="text-sm font-medium">{t('settings.displayFontSize')}</span>
                       <Input
@@ -156,7 +157,7 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
 
                     <div className="grid gap-1.5">
                       <span className="text-sm font-medium">{t('settings.displayPreview')}</span>
-                      <div className="rounded-xl border border-border/70 bg-background px-3 py-2.5">
+                      <div className="border border-border/70 px-2 py-1.5">
                         <span
                           style={{
                             fontSize: `${styleConfig.fontSizePx}px`,
@@ -177,12 +178,12 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
         </CardContent>
       </Card>
 
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
           <CardTitle className="text-base">{t('settings.displaySampleTitle')}</CardTitle>
           <CardDescription>{t('settings.displaySampleDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 px-4 py-4">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
           <h1
             className="m-0 font-semibold"
             style={{

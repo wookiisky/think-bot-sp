@@ -14,6 +14,16 @@ import {
   type ExtensionConfig,
   type ModelConfig,
 } from '../../domain/config/config-schema';
+import {
+  COMPACT_CARD_CONTENT_CLASS,
+  COMPACT_CARD_HEADER_CLASS,
+  COMPACT_DRAG_HANDLE_BUTTON_CLASS,
+  COMPACT_LIST_ITEM_ACTIVE_CLASS,
+  COMPACT_LIST_ITEM_CLASS,
+  COMPACT_LIST_ITEM_IDLE_CLASS,
+  COMPACT_ROW_BUTTON_CLASS,
+  COMPACT_SECTION_CLASS,
+} from '../../ui/compact-layout';
 import { ModelForm } from './model-form';
 
 type LanguageModelsPanelProps = {
@@ -97,14 +107,14 @@ const SortableModelCard = ({
     >
       <section
         className={[
-          'grid gap-2.5 rounded-2xl border px-3 py-2.5 transition-colors',
-          expanded ? 'border-primary bg-primary/6' : 'border-border/70 bg-muted/20',
+          COMPACT_LIST_ITEM_CLASS,
+          expanded ? COMPACT_LIST_ITEM_ACTIVE_CLASS : COMPACT_LIST_ITEM_IDLE_CLASS,
         ].join(' ')}
       >
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border/70 text-sm text-muted-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className={COMPACT_DRAG_HANDLE_BUTTON_CLASS}
             aria-label={`${t('settings.dragModel')}:${model.name}`}
             disabled={disabled}
             {...attributes}
@@ -115,7 +125,7 @@ const SortableModelCard = ({
 
           <button
             type="button"
-            className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden text-left"
+            className={`${COMPACT_ROW_BUTTON_CLASS} flex flex-1 items-baseline gap-2 overflow-hidden`}
             data-testid={`language-model-summary-${model.id}`}
             onClick={onSelect}
           >
@@ -123,7 +133,7 @@ const SortableModelCard = ({
             <span className="truncate text-xs text-muted-foreground">{summary}</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <Tooltip content={t('settings.copyModel')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.copyModel')} onClick={onCopy} disabled={disabled}>
                 <CopyIcon />
@@ -163,7 +173,7 @@ const SortableModelCard = ({
           </div>
         </div>
 
-        {expanded ? <div className="grid gap-3 border-t border-border/70 pt-3">{children}</div> : null}
+        {expanded ? <div className="grid gap-2.5 border-t border-border/70 pt-2.5">{children}</div> : null}
       </section>
     </li>
   );
@@ -372,11 +382,11 @@ export const LanguageModelsPanel = ({
       id="settings-panel-models"
       role="tabpanel"
       aria-labelledby="settings-tab-models"
-      className="grid gap-4"
+      className={COMPACT_SECTION_CLASS}
     >
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="grid gap-1">
               <CardTitle className="text-base">{t('settings.languageModels')}</CardTitle>
               <CardDescription>{t('settings.modelsDescription')}</CardDescription>
@@ -387,11 +397,11 @@ export const LanguageModelsPanel = ({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 px-4 py-4">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
           {visibleModels.length > 0 ? (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={visibleModels.map((model) => model.id)} strategy={verticalListSortingStrategy}>
-                <ul className="grid gap-2.5">
+                <ul className="grid gap-2">
                   {visibleModels.map((model) => (
                     <SortableModelCard
                       key={model.id}

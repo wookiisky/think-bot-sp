@@ -141,7 +141,13 @@ describe('ChatThread', () => {
     expect(screen.getByText('分支结果')).toBeVisible();
     expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支模型');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('bg-muted/55');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('border');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-background');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('pr-0');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-2');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-primary');
+    expect(screen.getByTestId('branch-branch-1').className).not.toContain('border-primary');
+    expect(screen.getByTestId('branch-branch-1').className).not.toContain('bg-primary/5');
     expect(screen.queryByText('主分支')).toBeNull();
     expect(screen.queryByText('分支')).toBeNull();
     expect(screen.queryByText('#1')).toBeNull();
@@ -217,9 +223,11 @@ describe('ChatThread', () => {
     const branchCard = screen.getByTestId('branch-assistant-legacy:primary');
     expect(branchRail).toHaveAttribute('data-reading-layout', 'single');
     expect(branchRail.className).toContain('overflow-x-hidden');
+    expect(screen.queryByTestId('branch-rail-top-scroll-assistant-legacy')).toBeNull();
     expect(branchGrid.className).toContain('w-full');
     expect(branchGrid.getAttribute('style')).toContain('minmax(0, 1fr)');
     expect(branchCard.className).toContain('w-full');
+    expect(branchCard.className).not.toContain('border');
     expect(branchCard).toHaveTextContent('只有主回答');
     expect(screen.queryByTestId('chat-message-actions-assistant-legacy')).toBeNull();
   });
@@ -244,8 +252,15 @@ describe('ChatThread', () => {
       />,
     );
 
+    const messageList = screen.getByTestId('chat-thread-scroll-viewport').firstElementChild as HTMLDivElement;
     const messageCard = screen.getByTestId('chat-message-user-1');
+    const messageBubble = screen.getByTestId('chat-message-bubble-user-1');
+    expect(messageList.className).toContain('divide-y');
+    expect(messageList.className).toContain('divide-border/70');
     expect(messageCard).toHaveAttribute('data-message-role', 'user');
+    expect(messageCard.className).not.toContain('py-');
+    expect(messageBubble.className).toContain('bg-muted/55');
+    expect(messageBubble.className).not.toContain('border');
     expect(screen.getByTestId('chat-message-actions-user-1').className).toContain('opacity-0');
 
     await user.hover(messageCard);
@@ -320,7 +335,14 @@ describe('ChatThread', () => {
     clientHeightSpy.mockRestore();
   });
 
-  it('顶部滚动条和分支区滚动位置保持同步', () => {
+  it('顶部滚动条和分支区滚动位置保持同步', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('data-testid') === 'branch-rail-content-assistant-sync' ? 960 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('data-testid') === 'branch-rail-assistant-sync' ? 600 : 240;
+    });
+
     render(
       <ChatThread
         {...createBaseProps()}
@@ -350,6 +372,15 @@ describe('ChatThread', () => {
                 status: 'done',
                 errorMessage: null,
               },
+              {
+                id: 'branch-3',
+                modelId: 'model-3',
+                modelLabel: '模型三',
+                isPrimary: false,
+                content: '分支三',
+                status: 'done',
+                errorMessage: null,
+              },
             ],
             selectedBranchId: 'branch-1',
           },
@@ -357,9 +388,11 @@ describe('ChatThread', () => {
       />,
     );
 
-    const topScrollbar = screen.getByTestId('branch-rail-top-scroll-assistant-sync');
+    const topScrollbar = await screen.findByTestId('branch-rail-top-scroll-assistant-sync');
     const branchRail = screen.getByTestId('branch-rail-assistant-sync');
+    const branchGrid = screen.getByTestId('branch-rail-content-assistant-sync');
 
+    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
     topScrollbar.scrollLeft = 96;
     fireEvent.scroll(topScrollbar);
     expect(branchRail.scrollLeft).toBe(96);
@@ -531,7 +564,7 @@ describe('ChatThread', () => {
     });
   });
 
-  it('助手分支在两列模式下保持 2 列并由外层容器承载横向滚动', () => {
+  it('助手分支在两列模式下平分宽度且不展示横向滚动条', () => {
     render(
       <ChatThread
         {...createBaseProps()}
@@ -570,13 +603,29 @@ describe('ChatThread', () => {
 
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
     const branchGrid = branchRail.firstElementChild as HTMLDivElement;
-    expect(screen.getByTestId('branch-rail-top-scroll-assistant-1')).toBeVisible();
+    expect(screen.queryByTestId('branch-rail-top-scroll-assistant-1')).toBeNull();
     expect(branchRail).toHaveAttribute('data-reading-layout', 'responsive-two-columns');
-    expect(branchRail.className).toContain('overflow-x-scroll');
-    expect(branchGrid.getAttribute('style')).toContain(`repeat(2, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
+    expect(branchRail.parentElement?.className).not.toContain('mt-');
+    expect(branchRail.className).toContain('overflow-x-hidden');
+    expect(branchRail.className).not.toContain('pb-');
+    expect(branchGrid.className).toContain('divide-x');
+    expect(branchGrid.className).toContain('divide-border/70');
+    expect(branchGrid.getAttribute('style')).toContain('repeat(2, minmax(0, 1fr))');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-2');
+    expect(screen.getByTestId('branch-branch-1').className).toContain('border-t-primary');
+    expect(screen.getByTestId('branch-branch-1').className).not.toContain('border-primary');
+    expect(screen.getByTestId('branch-branch-1').className).not.toContain('bg-primary/5');
+    expect(screen.getByTestId('branch-branch-2').className).not.toContain('border');
   });
 
-  it('助手分支超过两列后统一使用最小列宽', () => {
+  it('助手分支超过两列且宽度充足时平分宽度并隐藏顶部滚动条', async () => {
+    vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('data-testid') === 'branch-rail-content-assistant-1' ? 900 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.getAttribute('data-testid') === 'branch-rail-assistant-1' ? 900 : 240;
+    });
+
     render(
       <ChatThread
         {...createBaseProps()}
@@ -623,13 +672,17 @@ describe('ChatThread', () => {
     );
 
     const branchRail = screen.getByTestId('branch-rail-assistant-1');
-    const branchGrid = branchRail.firstElementChild as HTMLDivElement;
+    const branchGrid = screen.getByTestId('branch-rail-content-assistant-1');
+    await waitFor(() => expect(screen.queryByTestId('branch-rail-top-scroll-assistant-1')).toBeNull());
     expect(branchRail).toHaveAttribute('data-reading-layout', 'fixed-multi-columns');
+    expect(branchRail.parentElement?.className).not.toContain('mt-');
     expect(branchRail.className).toContain('w-full');
     expect(branchRail.className).toContain('max-w-full');
-    expect(screen.getByTestId('branch-rail-top-scroll-assistant-1').className).toContain('max-w-full');
-    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, ${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px)`);
+    expect(branchRail.className).toContain('overflow-x-auto');
+    expect(branchRail.className).not.toContain('pb-');
+    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
     expect(branchGrid.className).toContain('min-w-full');
+    expect(branchGrid.className).toContain('divide-x');
   });
 
   it('继续新增分支从分支卡片按钮打开模型列表，且不再显示同模型序号', async () => {

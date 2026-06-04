@@ -78,16 +78,16 @@ export const MiniConfirm = ({
           sideOffset={sideOffset}
           data-testid={contentTestId}
           className={cn(
-            'z-50 w-52 rounded-xl border border-border/70 bg-popover p-3 shadow-lg ring-1 ring-foreground/5',
-            'animate-in fade-in-0 zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+            'z-50 w-52 border border-border/70 bg-popover p-2.5 ring-1 ring-foreground/5',
+            'animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
             className,
           )}
         >
-          <div className="grid gap-3">
+          <div className="grid gap-2">
             <p id={descriptionId} className="m-0 text-xs leading-5 text-foreground">
               {message}
             </p>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-1.5">
               <Button
                 type="button"
                 variant="outline"

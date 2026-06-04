@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Input } from '../../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { COMPACT_CARD_CONTENT_CLASS, COMPACT_CARD_HEADER_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
 
 type SyncFeedback = {
   /** 反馈语气。 */
@@ -58,13 +59,13 @@ export const CloudSyncPanel = ({
   const showWebdavFields = config.sync.provider === 'webdav';
 
   return (
-    <section id="settings-panel-sync" role="tabpanel" aria-labelledby="settings-tab-sync" className="grid gap-4">
-      <Card size="sm" className="rounded-[26px] bg-card py-0 ring-1 ring-foreground/8">
-        <CardHeader className="gap-1.5 border-b border-border/70 px-4 py-3">
+    <section id="settings-panel-sync" role="tabpanel" aria-labelledby="settings-tab-sync" className={COMPACT_SECTION_CLASS}>
+      <Card size="sm">
+        <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
           <CardTitle className="text-base">{t('settings.syncPanel')}</CardTitle>
           <CardDescription>{t('settings.syncDescription')}</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3.5 px-4 py-4">
+        <CardContent className={COMPACT_CARD_CONTENT_CLASS}>
           <label className="flex items-center gap-2 text-sm">
             <input
               aria-label={t('settings.syncEnabled')}
@@ -150,7 +151,7 @@ export const CloudSyncPanel = ({
             </>
           ) : null}
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             <Button size="sm" type="button" variant="outline" onClick={() => void onTestConnection()} disabled={disabled || testing}>
               {testing ? `${t('settings.syncTest')}...` : t('settings.syncTest')}
             </Button>
@@ -167,7 +168,7 @@ export const CloudSyncPanel = ({
             <section
               role="status"
               className={[
-                'rounded-2xl px-3 py-2.5 text-sm',
+                'border px-2 py-1.5 text-sm',
                 feedback.tone === 'success'
                   ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                   : 'border border-destructive/20 bg-destructive/10 text-destructive',

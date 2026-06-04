@@ -23,13 +23,13 @@ export const ToastStack = ({ toasts }: ToastStackProps) => {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2 px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-2 z-50 flex flex-col items-center gap-1.5 px-2">
       {toasts.map((toast) => (
         <section
           key={toast.id}
           role="alert"
           className={cn(
-            'pointer-events-auto w-full max-w-xl rounded-2xl border px-4 py-3 shadow-lg backdrop-blur',
+            'pointer-events-auto w-full max-w-xl border px-3 py-2 ring-1 ring-foreground/8',
             toast.tone === 'error'
               ? 'border-destructive/30 bg-destructive/10 text-destructive'
               : 'border-primary/20 bg-primary/10 text-foreground',

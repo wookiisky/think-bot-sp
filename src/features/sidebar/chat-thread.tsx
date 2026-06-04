@@ -23,6 +23,7 @@ import { Tooltip } from '../../components/ui/tooltip';
 import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
 import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
+import { COMPACT_FLOATING_ACTION_CLASS } from '../../ui/compact-layout';
 import { ChatMarkdown } from '../workspace/chat-markdown';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
@@ -312,7 +313,7 @@ const FloatingActionBar = ({
         data-testid={testId}
         data-action-orientation={orientation}
         className={cn(
-          'rounded-md border border-border/80 bg-background/95 p-0.5 shadow-sm transition-opacity',
+          COMPACT_FLOATING_ACTION_CLASS,
           orientation === 'vertical'
             ? verticalPositionMode === 'visible-center'
               ? 'absolute right-0 flex -translate-y-1/2 flex-col'
@@ -395,9 +396,9 @@ export const ChatThread = ({
     <section
       ref={threadViewportRef}
       data-testid="chat-thread-scroll-viewport"
-      className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-2 py-1"
+      className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2"
     >
-      <div className="min-w-0 space-y-0.5">
+      <div className="min-w-0 divide-y divide-border/70">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message) => {
           const messageIndex = messages.findIndex((current) => current.id === message.id);
@@ -412,7 +413,7 @@ export const ChatThread = ({
               key={message.id}
               data-testid={`chat-message-${message.id}`}
               data-message-role={message.role}
-              className="group/message relative min-w-0 py-0.5"
+              className="group/message relative min-w-0"
               onMouseEnter={() => setHoveredMessageId(message.id)}
               onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
               onFocus={() => setHoveredMessageId(message.id)}
@@ -642,12 +643,12 @@ const AssistantBranchRail = ({
     }
   };
 
-  const showTopScrollbar = branches.length > 1;
-  const topScrollbarWidth = Math.max(contentWidth, viewportWidth, branches.length * MIN_ASSISTANT_BRANCH_COLUMN_WIDTH);
+  const hasHorizontalOverflow = branches.length > 2 && contentWidth > viewportWidth;
+  const topScrollbarWidth = Math.max(contentWidth, viewportWidth);
 
   return (
-    <div className="mt-1 min-w-0 w-full">
-      {showTopScrollbar ? (
+    <div className="min-w-0 w-full">
+      {hasHorizontalOverflow ? (
         <div
           ref={topScrollRef}
           data-testid={`branch-rail-top-scroll-${messageId}`}
@@ -662,10 +663,15 @@ const AssistantBranchRail = ({
         ref={bottomScrollRef}
         data-testid={`branch-rail-${messageId}`}
         data-reading-layout={resolveBranchRailLayout(branches)}
-        className={cn(branches.length <= 1 ? 'w-full max-w-full overflow-x-hidden pb-2' : 'w-full max-w-full overflow-x-scroll pb-2')}
+        className={cn(branches.length <= 2 ? 'w-full max-w-full overflow-x-hidden' : 'w-full max-w-full overflow-x-auto')}
         onScroll={() => syncScroll('bottom')}
       >
-        <div ref={contentRef} className="grid min-w-full w-full gap-2" style={buildBranchRailStyle(branches.length)}>
+        <div
+          ref={contentRef}
+          data-testid={`branch-rail-content-${messageId}`}
+          className="grid min-w-full w-full divide-x divide-border/70"
+          style={buildBranchRailStyle(branches.length)}
+        >
           {branches.map((branch) => (
             <section
               key={branch.id}
@@ -676,8 +682,8 @@ const AssistantBranchRail = ({
               }}
               data-testid={`branch-${branch.id}`}
               className={cn(
-                'group/branch relative w-full shrink-0 border border-border/80 bg-background/70 px-2.5 py-1.5 pr-4',
-                selectedBranchId === branch.id && 'border-primary bg-primary/5',
+                'group/branch relative w-full shrink-0 px-2.5 py-1.5 pr-4',
+                selectedBranchId === branch.id && 'border-t-2 border-t-primary',
               )}
               onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
               onMouseLeave={(event) => {
@@ -723,7 +729,7 @@ const AssistantBranchRail = ({
                           side="left"
                           sideOffset={8}
                           align="center"
-                          className="z-50 w-56 rounded-xl border border-border/80 bg-background/95 p-2 shadow-md backdrop-blur"
+                          className="z-50 w-56 border border-border/80 bg-popover p-2 ring-1 ring-foreground/8"
                         >
                           <div className="mb-2 text-xs font-medium text-muted-foreground">{t('workspace.selectBranchModel')}</div>
                           {availableBranchModels.length === 0 ? (
@@ -887,9 +893,9 @@ const AssistantBranchRail = ({
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
-    'relative min-w-0 grid gap-1 px-0.5 py-0.5 transition-colors',
-    role === 'assistant' && 'pr-0 text-foreground',
-    role === 'user' && 'pr-10 text-foreground',
+    'relative min-w-0 grid gap-1 px-0.5 transition-colors',
+    role === 'assistant' && 'bg-background pr-0 text-foreground',
+    role === 'user' && 'bg-muted/55 px-2 py-1.5 pr-10 text-foreground',
     role === 'system' && 'pr-0 text-amber-900',
     status === 'error' && 'text-destructive',
     status === 'cancelled' && 'text-muted-foreground',
@@ -936,10 +942,10 @@ const buildBranchRailStyle = (branchCount: number) => {
   }
   if (branchCount <= 2) {
     return {
-      gridTemplateColumns: `repeat(2, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`,
+      gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     };
   }
   return {
-    gridTemplateColumns: `repeat(${branchCount}, ${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px)`,
+    gridTemplateColumns: `repeat(${branchCount}, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`,
   };
 };

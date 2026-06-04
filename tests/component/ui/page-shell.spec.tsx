@@ -23,5 +23,6 @@ describe('PageShell', () => {
     expect(within(routeCard).getByText(sidePanelRoute)).toBeInTheDocument();
     expect(within(main).getByText(/environment/i)).toBeInTheDocument();
     expect(main).toHaveClass('min-h-screen');
+    expect(main.className).not.toContain('radial-gradient');
   });
 });

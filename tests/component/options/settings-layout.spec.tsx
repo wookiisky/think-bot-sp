@@ -59,6 +59,7 @@ describe('SettingsLayout', () => {
     render(<SettingsShell />);
 
     expect(await screen.findByRole('tab', { name: '基础设置' })).toBeInTheDocument();
+    expect(screen.getByTestId('settings-shell').className).not.toContain('linear-gradient');
     expect(screen.getAllByRole('tab')).toHaveLength(6);
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('data-section-icon', 'settings');
