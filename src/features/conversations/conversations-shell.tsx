@@ -33,6 +33,7 @@ import {
   COMPACT_ROW_BUTTON_CLASS,
   COMPACT_WORKBENCH_CLASS,
 } from '../../ui/compact-layout';
+import { type ThemePreference, useDocumentTheme } from '../../ui/theme-mode';
 import { downloadTextFile } from '../../shared/download-file';
 import {
   CHAT_PROMPT_TAB_ID,
@@ -156,12 +157,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [assistantMarkdownDisplayConfig, setAssistantMarkdownDisplayConfig] = useState<AssistantMarkdownDisplayConfig>(
     DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   );
+  const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const [branchPreviewTarget, setBranchPreviewTarget] = useState<BranchPreviewTarget | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const themeRootAttributes = useDocumentTheme(themePreference);
   const t = createWorkspaceTranslator(localeResources, localeCode);
 
   const selectedPage = pages.find((page) => page.normalizedUrl === selectedPageUrl) ?? detail.page ?? null;
@@ -339,6 +342,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
       setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
       setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
+      setThemePreference(configResponse.config.basic.theme);
       setConfigLoaded(true);
 
       const initialPage = pagesResponse.pages[0] ?? null;
@@ -419,6 +423,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
+        setThemePreference(configResponse.config.basic.theme);
         applyDetailState({
           detail: {
             page: detailResponse.page,
@@ -1267,6 +1272,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   return (
     <main
       data-testid="conversations-shell"
+      data-theme={themeRootAttributes.dataTheme}
+      data-resolved-theme={themeRootAttributes.dataResolvedTheme}
       className={cn('flex', COMPACT_WORKBENCH_CLASS)}
     >
       <aside
@@ -1502,10 +1509,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     showLoadingRing && 'tab-loading-border border-transparent',
                     isActive
                       ? showLoadingRing
-                        ? 'bg-primary/8 text-foreground'
+                        ? 'bg-background text-foreground'
                         : COMPACT_PROMPT_TAB_ACTIVE_CLASS
                       : showLoadingRing
-                        ? 'text-foreground hover:bg-muted/35'
+                        ? 'bg-background text-foreground hover:bg-muted/35'
                         : COMPACT_PROMPT_TAB_IDLE_CLASS,
                   )}
                   onClick={() => {

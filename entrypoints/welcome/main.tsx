@@ -12,15 +12,7 @@ renderEntrypointApp(
       route={EXTENSION_PAGES.welcome}
       description="Landing page for new installs and onboarding."
     />
-    <section
-      style={{
-        margin: '1.25rem auto',
-        maxWidth: '960px',
-        textAlign: 'center',
-        fontSize: '0.9rem',
-        color: '#4b5563',
-      }}
-    >
+    <section className="mx-auto mt-5 max-w-5xl text-center text-sm text-muted-foreground">
       <p style={{ margin: '0.25rem 0' }}>Locale seed: {localeParam}</p>
       <p style={{ margin: '0.25rem 0' }}>Environment: development</p>
     </section>

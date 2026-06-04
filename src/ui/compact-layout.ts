@@ -1,10 +1,10 @@
 /** 入口页使用的紧凑外壳，页面背景沿用 body，避免重复装饰背景。 */
 export const COMPACT_PAGE_SHELL_CLASS =
-  'min-h-screen px-2 py-2 text-foreground sm:px-3 sm:py-3';
+  'min-h-screen bg-background px-2 py-2 text-foreground sm:px-3 sm:py-3';
 
 /** 全高工作台外壳，供 sidebar 和 conversations 共享。 */
 export const COMPACT_WORKBENCH_CLASS =
-  'h-screen min-h-0 overflow-hidden text-foreground';
+  'h-screen min-h-0 overflow-hidden bg-background text-foreground';
 
 /** 页面或工作台顶部工具区的统一密度。 */
 export const COMPACT_HEADER_CLASS = 'shrink-0 border-b border-border px-2 py-1';

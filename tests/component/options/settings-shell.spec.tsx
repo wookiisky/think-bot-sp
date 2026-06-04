@@ -40,6 +40,7 @@ mocks.getRecentError.mockResolvedValue(null);
 describe('SettingsShell', () => {
   afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(window, 'matchMedia');
     vi.restoreAllMocks();
     mocks.getConfig.mockReset();
     mocks.getRecentError.mockReset();
@@ -61,6 +62,43 @@ describe('SettingsShell', () => {
     await user.click(screen.getByRole('combobox', { name: label }));
     const listbox = await screen.findByRole('listbox');
     await user.click(within(listbox).getByText(optionText));
+  };
+
+  /** 模拟浏览器系统深浅色设置。 */
+  const mockBrowserDarkMode = (matches: boolean) => {
+    let currentMatches = matches;
+    const listeners = new Set<() => void>();
+    const mediaQuery = {
+      get matches() {
+        return currentMatches;
+      },
+      media: '(prefers-color-scheme: dark)',
+      onchange: null,
+      addEventListener: (_event: 'change', listener: () => void) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_event: 'change', listener: () => void) => {
+        listeners.delete(listener);
+      },
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    };
+
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockReturnValue(mediaQuery),
+    });
+
+    return {
+      setMatches(nextMatches: boolean) {
+        currentMatches = nextMatches;
+        for (const listener of listeners) {
+          listener();
+        }
+      },
+    };
   };
 
   it('加载配置并展示缓存统计', async () => {
@@ -217,7 +255,7 @@ describe('SettingsShell', () => {
     expect(screen.getByRole('combobox', { name: '主题' })).toHaveTextContent('Dark');
   });
 
-  it('主题切换后保留 data-theme 并更新根节点主题 class', async () => {
+  it('主题切换后保留 data-theme 并更新 html 主题 class', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
@@ -229,7 +267,45 @@ describe('SettingsShell', () => {
 
     const shell = screen.getByTestId('settings-shell');
     expect(shell).toHaveAttribute('data-theme', 'dark');
-    expect(shell).toHaveClass('dark');
+    expect(shell).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveClass('dark');
+  });
+
+  it('system 主题跟随浏览器深色设置', async () => {
+    mockBrowserDarkMode(true);
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    const shell = await screen.findByTestId('settings-shell');
+    expect(shell).toHaveAttribute('data-theme', 'system');
+    expect(shell).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'system');
+    expect(document.documentElement).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveClass('dark');
+  });
+
+  it('system 主题跟随浏览器深浅色变化', async () => {
+    const browserTheme = mockBrowserDarkMode(false);
+    mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
+    mocks.getRecentError.mockResolvedValueOnce(null);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+
+    render(<SettingsShell />);
+
+    const shell = await screen.findByTestId('settings-shell');
+    expect(shell).toHaveAttribute('data-resolved-theme', 'light');
+    expect(document.documentElement).not.toHaveClass('dark');
+
+    browserTheme.setMatches(true);
+
+    await waitFor(() => expect(shell).toHaveAttribute('data-resolved-theme', 'dark'));
+    expect(document.documentElement).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveClass('dark');
   });
 
   it('触发保存时提交当前配置', async () => {

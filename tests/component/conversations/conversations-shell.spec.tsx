@@ -216,6 +216,29 @@ describe('ConversationsShell', () => {
     expect(screen.getByTestId('conversations-extraction-panel')).toHaveStyle({ height: `${DEFAULT_EXTRACTION_PANEL_HEIGHT}px` });
   });
 
+  it('配置为 dark 时在根节点应用深色主题', async () => {
+    const api = createConversationsApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            theme: 'dark',
+          },
+        }),
+      }),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    const shell = await screen.findByTestId('conversations-shell');
+    await waitFor(() => expect(shell).toHaveAttribute('data-theme', 'dark'));
+    expect(shell).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveClass('dark');
+  });
+
   it('支持搜索过滤历史页面', async () => {
     const user = userEvent.setup();
     const api = createConversationsApi();

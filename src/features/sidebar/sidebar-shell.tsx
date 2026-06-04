@@ -36,6 +36,7 @@ import {
   COMPACT_PROMPT_TAB_IDLE_CLASS,
   COMPACT_WORKBENCH_CLASS,
 } from '../../ui/compact-layout';
+import { type ThemePreference, useDocumentTheme } from '../../ui/theme-mode';
 import {
   CHAT_PROMPT_TAB_ID,
   appendAssistantBranches,
@@ -158,7 +159,9 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [assistantMarkdownDisplayConfig, setAssistantMarkdownDisplayConfig] = useState<AssistantMarkdownDisplayConfig>(
     DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   );
+  const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
+  const themeRootAttributes = useDocumentTheme(themePreference);
   const t = createWorkspaceTranslator(localeResources, localeCode);
 
   const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? promptTabs[0] ?? null;
@@ -749,6 +752,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
+        setThemePreference(configResponse.config.basic.theme);
 
         if (bootstrap.blockedByBlacklist) {
           setState('blocked');
@@ -1336,6 +1340,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   return (
     <main
       data-testid="sidebar-shell"
+      data-theme={themeRootAttributes.dataTheme}
+      data-resolved-theme={themeRootAttributes.dataResolvedTheme}
       className={cn('flex flex-col', COMPACT_WORKBENCH_CLASS)}
     >
       <ToastStack toasts={toast ? [toast] : []} />
@@ -1513,10 +1519,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   showLoadingRing && 'tab-loading-border border-transparent',
                   isActive
                     ? showLoadingRing
-                      ? 'bg-primary/8 text-foreground'
+                      ? 'bg-background text-foreground'
                       : COMPACT_PROMPT_TAB_ACTIVE_CLASS
                     : showLoadingRing
-                      ? 'text-foreground hover:bg-muted/35'
+                      ? 'bg-background text-foreground hover:bg-muted/35'
                       : COMPACT_PROMPT_TAB_IDLE_CLASS,
                 )}
                 onClick={() => {

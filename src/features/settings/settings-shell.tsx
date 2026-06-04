@@ -13,6 +13,7 @@ import { downloadTextFile } from '../../shared/download-file';
 import { ToastStack } from '../../components/ui/toast-stack';
 import { Icon } from '../../ui/icon';
 import { COMPACT_PAGE_SHELL_CLASS, COMPACT_SECTION_CLASS } from '../../ui/compact-layout';
+import { useDocumentTheme } from '../../ui/theme-mode';
 import { BlacklistSettingsPanel } from './blacklist-settings-panel';
 import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
@@ -71,6 +72,8 @@ export const SettingsShell = () => {
   const [loadError, setLoadError] = useState<SettingsViewError | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<FeedbackMessage | null>(null);
   const [toast, setToast] = useState<SettingsToast | null>(null);
+  const themePreference = draftConfig?.basic.theme ?? 'system';
+  const themeRootAttributes = useDocumentTheme(themePreference);
 
   useEffect(() => {
     if (!toast) {
@@ -133,7 +136,11 @@ export const SettingsShell = () => {
 
   if (!savedConfig || !draftConfig || !localeResources || !cacheStats) {
     return (
-      <main className={COMPACT_PAGE_SHELL_CLASS}>
+      <main
+        data-theme={themeRootAttributes.dataTheme}
+        data-resolved-theme={themeRootAttributes.dataResolvedTheme}
+        className={COMPACT_PAGE_SHELL_CLASS}
+      >
         <p className="m-0 text-sm text-foreground">{loadError ? `${loadError.title}：${loadError.message}` : '正在加载设置页…'}</p>
       </main>
     );
@@ -391,11 +398,9 @@ export const SettingsShell = () => {
     <main
       data-testid="settings-shell"
       data-layout="tab-page"
-      data-theme={draftConfig.basic.theme}
-      className={cn(
-        COMPACT_PAGE_SHELL_CLASS,
-        draftConfig.basic.theme === 'dark' && 'dark',
-      )}
+      data-theme={themeRootAttributes.dataTheme}
+      data-resolved-theme={themeRootAttributes.dataResolvedTheme}
+      className={COMPACT_PAGE_SHELL_CLASS}
     >
       <ToastStack toasts={toast ? [toast] : []} />
 

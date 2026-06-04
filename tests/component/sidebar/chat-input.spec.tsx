@@ -218,11 +218,15 @@ describe('ChatInput', () => {
     const textarea = screen.getByLabelText('聊天输入');
     expect(textarea).toHaveStyle({ height: '32px' });
     expect(screen.getByTestId('chat-input-resize-handle')).toHaveClass(
-      'h-0.5',
-      'w-full',
-      'bg-muted-foreground/35',
-      'hover:bg-primary',
+      'absolute',
+      'inset-x-0',
+      '-top-1',
+      'h-2',
+      'bg-transparent',
+      'after:bg-transparent',
+      'hover:after:bg-primary',
     );
+    expect(screen.getByTestId('chat-input-resize-handle')).not.toHaveClass('bg-muted-foreground/35', 'hover:bg-primary');
 
     fireEvent.pointerDown(screen.getByTestId('chat-input-resize-handle'), {
       clientY: 260,

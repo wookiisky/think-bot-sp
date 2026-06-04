@@ -2,19 +2,25 @@ import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader } from '../components/ui/card';
 import { cn } from '../lib/utils';
 import { COMPACT_CARD_CONTENT_CLASS, COMPACT_CARD_HEADER_CLASS, COMPACT_PAGE_SHELL_CLASS } from './compact-layout';
+import { type ThemePreference, useDocumentTheme } from './theme-mode';
 
 type PageShellProps = {
   title: string;
   route: string;
   description: string;
   className?: string;
+  theme?: ThemePreference;
 };
 
 /** 通用入口页壳层，统一占位页的布局和主题基线。 */
-export const PageShell = ({ title, route, description, className }: PageShellProps) => {
+export const PageShell = ({ title, route, description, className, theme = 'system' }: PageShellProps) => {
+  const themeRootAttributes = useDocumentTheme(theme);
+
   return (
     <main
       data-testid="page-shell"
+      data-theme={themeRootAttributes.dataTheme}
+      data-resolved-theme={themeRootAttributes.dataResolvedTheme}
       className={cn(
         COMPACT_PAGE_SHELL_CLASS,
         className,

@@ -8,7 +8,6 @@ import { Tooltip } from '../../components/ui/tooltip';
 import { cn } from '../../lib/utils';
 import { COMPACT_COMPOSER_CONTROL_CLASS, COMPACT_COMPOSER_SELECT_CLASS } from '../../ui/compact-layout';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
-import { WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS } from '../workspace/workspace-resize-handle-style';
 
 /** Textarea 单行高度。 */
 const SINGLE_LINE_HEIGHT = 32;
@@ -125,13 +124,13 @@ export const ChatInput = ({
   }, [resizeSession]);
 
   return (
-    <section data-testid="chat-input-section" className="shrink-0 border-t border-border px-2 py-1">
+    <section data-testid="chat-input-section" className="relative shrink-0 border-t border-border px-2 py-1">
       <div
         role="separator"
         aria-orientation="horizontal"
         aria-label={t('workspace.resizeComposer')}
         data-testid="chat-input-resize-handle"
-        className={cn(WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS, 'mb-1')}
+        className="absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize bg-transparent after:absolute after:inset-x-0 after:top-1/2 after:h-0.5 after:-translate-y-1/2 after:bg-transparent after:transition-colors after:content-[''] hover:after:bg-primary"
         onPointerDown={(event) => {
           setResizeSession({
             startY: event.clientY,

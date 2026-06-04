@@ -162,6 +162,29 @@ describe('SidebarShell', () => {
     expect(screen.queryByText('浏览器标签')).toBeNull();
   });
 
+  it('配置为 dark 时在根节点应用深色主题', async () => {
+    const api = createSidebarApi({
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            ...createDefaultConfig().basic,
+            theme: 'dark',
+          },
+        }),
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    const shell = await screen.findByTestId('sidebar-shell');
+    await waitFor(() => expect(shell).toHaveAttribute('data-theme', 'dark'));
+    expect(shell).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(document.documentElement).toHaveAttribute('data-resolved-theme', 'dark');
+    expect(document.documentElement).toHaveClass('dark');
+  });
+
   it('支持拖拽调整提取区高度', async () => {
     const api = createSidebarApi({
       getConfig: vi.fn().mockResolvedValue({
