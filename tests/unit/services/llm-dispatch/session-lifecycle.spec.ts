@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { createDefaultConfig } from '../../../../src/domain/config/config-schema';
 import { createChromeLocalAdapter } from '../../../../src/repositories/chrome-local-adapter';
 import { createConversationRepository } from '../../../../src/repositories/conversation-repository';
 import { createChatDispatchService } from '../../../../src/services/llm-dispatch/chat-dispatch-service';
@@ -580,6 +581,190 @@ describe('chat-dispatch-service session lifecycle', () => {
         status: 'error',
       },
     ]);
+  });
+
+  it('流式 API 错误优先展示原始响应内容', async () => {
+    const storage = createFakeStorageArea();
+    const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+    const publishToPromptTab = vi.fn();
+    const apiError = Object.assign(new Error('wrapped provider error'), {
+      responseBody: '{"error":{"message":"raw provider response"}}',
+    });
+    const service = createChatDispatchService({
+      configRepository: {
+        getModelById: vi.fn().mockResolvedValue({
+          id: 'model-raw-error',
+          name: '主模型',
+          provider: 'openai-compatible',
+          enabled: true,
+          model: 'gpt-4.1-mini',
+          baseUrl: 'https://api.example.com',
+          apiKey: 'token',
+          deployment: '',
+          temperature: 0,
+          tools: [],
+          thinkingBudget: null,
+          maxOutputTokens: null,
+          supportsImages: true,
+          order: 0,
+          deletedAt: null,
+        }),
+      },
+      providerRegistry: {
+        resolveProviderModel: vi.fn().mockReturnValue({
+          providerId: 'openai-compatible',
+          modelId: 'gpt-4.1-mini',
+          modelLabel: '主模型',
+          supportsImages: true,
+          sdkModel: { kind: 'sdk-model' },
+        }),
+      },
+      conversationRepository,
+      portBus: {
+        publishToPromptTab,
+      },
+      streamText: vi.fn().mockResolvedValue({
+        textStream: (async function* () {
+          yield* [];
+          throw apiError;
+        })(),
+      }),
+      createSessionId: () => 'session-raw-error',
+      createMessageId: (() => {
+        const ids = ['user-raw-error', 'assistant-raw-error', 'branch-raw-error'];
+        return () => ids.shift() ?? 'exhausted';
+      })(),
+      now: (() => {
+        const values = [30, 31, 32, 33];
+        return () => values.shift() ?? 99;
+      })(),
+    });
+
+    const session = await service.dispatchChat({
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      modelId: 'model-raw-error',
+      content: '继续补全',
+      images: [],
+      pageContent: '',
+    });
+
+    await expect(session.done).resolves.toMatchObject({
+      status: 'error',
+      errorMessage: '{"error":{"message":"raw provider response"}}',
+    });
+    await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toEqual(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'assistant-raw-error',
+            status: 'error',
+            errorMessage: '{"error":{"message":"raw provider response"}}',
+          }),
+        ]),
+      }),
+    );
+    expect(collectPublishedEvents(publishToPromptTab)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'CHAT_STREAM_FAILED',
+          errorMessage: '{"error":{"message":"raw provider response"}}',
+        }),
+      ]),
+    );
+  });
+
+  it('大模型调用超时会标记助手失败而不是取消', async () => {
+    vi.useFakeTimers();
+    try {
+      const storage = createFakeStorageArea();
+      const conversationRepository = createConversationRepository(createChromeLocalAdapter(storage));
+      const publishToPromptTab = vi.fn();
+      const service = createChatDispatchService({
+        configRepository: {
+          getConfig: vi.fn().mockResolvedValue(
+            createDefaultConfig({
+              basic: {
+                llmRequestTimeoutSeconds: 1,
+              },
+            }),
+          ),
+          getModelById: vi.fn().mockResolvedValue({
+            id: 'model-timeout',
+            name: '主模型',
+            provider: 'openai-compatible',
+            enabled: true,
+            model: 'gpt-4.1-mini',
+            baseUrl: 'https://api.example.com',
+            apiKey: 'token',
+            deployment: '',
+            temperature: 0,
+            tools: [],
+            thinkingBudget: null,
+            maxOutputTokens: null,
+            supportsImages: true,
+            order: 0,
+            deletedAt: null,
+          }),
+        },
+        providerRegistry: {
+          resolveProviderModel: vi.fn().mockReturnValue({
+            providerId: 'openai-compatible',
+            modelId: 'gpt-4.1-mini',
+            modelLabel: '主模型',
+            supportsImages: true,
+            sdkModel: { kind: 'sdk-model' },
+          }),
+        },
+        conversationRepository,
+        portBus: {
+          publishToPromptTab,
+        },
+        streamText: vi.fn().mockImplementation(async ({ abortSignal }: { abortSignal: AbortSignal }) => ({
+          textStream: (async function* () {
+            yield* [];
+            await new Promise<void>((_resolve, reject) => {
+              abortSignal.addEventListener('abort', () => {
+                const error = new Error('aborted');
+                error.name = 'AbortError';
+                reject(error);
+              });
+            });
+          })(),
+        })),
+        createSessionId: () => 'session-timeout',
+        createMessageId: (() => {
+          const ids = ['user-timeout', 'assistant-timeout', 'branch-timeout'];
+          return () => ids.shift() ?? 'exhausted';
+        })(),
+      });
+
+      const session = await service.dispatchChat({
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'chat',
+        modelId: 'model-timeout',
+        content: '继续补全',
+        images: [],
+        pageContent: '',
+      });
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      await expect(session.done).resolves.toMatchObject({
+        status: 'error',
+        errorMessage: '大模型调用超时（1 秒）',
+      });
+      expect(collectPublishedEvents(publishToPromptTab)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'CHAT_STREAM_FAILED',
+            errorMessage: '大模型调用超时（1 秒）',
+          }),
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('首轮快捷输入失败且要求回滚时，不保留用户消息和助手错误态', async () => {

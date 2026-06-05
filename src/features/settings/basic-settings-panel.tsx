@@ -9,8 +9,10 @@ import type { ModelConfig } from '../../domain/config/config-schema';
 import {
   MAX_EXTRACTION_PANEL_HEIGHT,
   MAX_EXTRACTION_TEXT_FONT_SIZE,
+  MAX_LLM_REQUEST_TIMEOUT_SECONDS,
   MIN_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_TEXT_FONT_SIZE,
+  MIN_LLM_REQUEST_TIMEOUT_SECONDS,
   sanitizeParallelModelIds,
 } from '../../domain/config/config-schema';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
@@ -201,6 +203,32 @@ export const BasicSettingsPanel = ({
                   <SelectItem value="jina">Jina</SelectItem>
                 </SelectContent>
               </Select>
+            </label>
+
+            <label className="grid gap-1.5">
+              <span className="text-sm font-medium">{t('settings.llmRequestTimeoutSeconds')}</span>
+              <Input
+                aria-label={t('settings.llmRequestTimeoutSeconds')}
+                type="number"
+                min={MIN_LLM_REQUEST_TIMEOUT_SECONDS}
+                max={MAX_LLM_REQUEST_TIMEOUT_SECONDS}
+                step={1}
+                value={config.basic.llmRequestTimeoutSeconds}
+                disabled={disabled}
+                onChange={(event) => {
+                  const value = Number.parseInt(event.target.value, 10);
+                  if (Number.isNaN(value)) {
+                    return;
+                  }
+
+                  updateBasic({
+                    llmRequestTimeoutSeconds: Math.min(
+                      MAX_LLM_REQUEST_TIMEOUT_SECONDS,
+                      Math.max(MIN_LLM_REQUEST_TIMEOUT_SECONDS, value),
+                    ),
+                  });
+                }}
+              />
             </label>
 
             <label className="grid gap-1.5">

@@ -151,11 +151,17 @@ describe('config-commands', () => {
     });
     expect(syncService.testConnection).toHaveBeenCalledWith(config.sync);
 
-    await expect(handler({ type: 'TEST_MODEL', model: config.models[0] })).resolves.toEqual({
+    await expect(
+      handler({
+        type: 'TEST_MODEL',
+        model: config.models[0],
+        llmRequestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
+      }),
+    ).resolves.toEqual({
       type: 'TEST_MODEL_SUCCESS',
       result: { provider: 'openai-compatible', text: 'hi' },
     });
-    expect(modelTestService.testModel).toHaveBeenCalledWith(config.models[0]);
+    expect(modelTestService.testModel).toHaveBeenCalledWith(config.models[0], config.basic.llmRequestTimeoutSeconds);
 
     await expect(handler({ type: 'SYNC_NOW', config })).resolves.toEqual({
       type: 'SYNC_NOW_SUCCESS',

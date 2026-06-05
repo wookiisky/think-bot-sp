@@ -83,6 +83,12 @@
       - 类型：`boolean`
       - 必填：是
       - 含义：发送时是否默认附带页面正文。
+    - `llmRequestTimeoutSeconds`
+      - 类型：`number`
+      - 必填：是
+      - 默认值：`60`
+      - 含义：所有大模型调用共用的请求超时秒数。
+      - 约束：范围固定在 `1 ~ 600`。
 - `models`
   - 类型：`ModelConfig[]`
   - 必填：是
@@ -252,7 +258,7 @@
 - 模型、快捷输入、黑名单内部对象必须带稳定 `id`。
 - 删除模型和快捷输入采用软删除标记，不直接丢失历史引用。
 - 系统内置快捷输入和系统内置黑名单规则都使用稳定 id，迁移时只补缺失项，不覆盖已有同 id 项。
-- 兼容旧配置时，缺失的 `extractionPanelHeight / extractionTextFontSize / jinaApiKey / jinaResponseTemplate / parallelModelIds / display` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
+- 兼容旧配置时，缺失的 `extractionPanelHeight / extractionTextFontSize / llmRequestTimeoutSeconds / jinaApiKey / jinaResponseTemplate / parallelModelIds / display` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
 - 设置页中的模型项采用“列表摘要 + 展开编辑”形态，但持久化仍以完整对象保存，不拆分多 key。
 - 设置页中的模型列表与快捷输入列表都支持拖拽排序，但持久化仍只写回 `order`，不引入额外排序元数据。
 - Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。

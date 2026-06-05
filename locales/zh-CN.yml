@@ -87,6 +87,7 @@ settings.multiSelectPlaceholder: 请选择
 settings.multiSelectSummary: "已选 {count} 项"
 settings.extractionMethod: 默认提取方式
 settings.extractionPanelHeight: 默认提取区高度
+settings.llmRequestTimeoutSeconds: 大模型调用超时（秒）
 settings.extractionTextFontSize: 提取区文本字体大小
 settings.extractionTextFontSizePreview: 示例文本
 settings.extractionTextFontSizeMin: 最小

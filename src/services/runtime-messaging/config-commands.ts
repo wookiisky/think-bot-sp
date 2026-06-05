@@ -1,7 +1,13 @@
 import { z } from 'zod';
 
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import { extensionConfigSchema, modelConfigSchema, syncConfigSchema } from '../../domain/config/config-schema';
+import {
+  MAX_LLM_REQUEST_TIMEOUT_SECONDS,
+  MIN_LLM_REQUEST_TIMEOUT_SECONDS,
+  extensionConfigSchema,
+  modelConfigSchema,
+  syncConfigSchema,
+} from '../../domain/config/config-schema';
 
 type SupportedCommandType =
   | 'GET_CONFIG'
@@ -60,6 +66,11 @@ const testSyncConnectionCommandSchema = z.object({
 const testModelCommandSchema = z.object({
   type: z.literal('TEST_MODEL'),
   model: modelConfigSchema,
+  llmRequestTimeoutSeconds: z
+    .number()
+    .int()
+    .min(MIN_LLM_REQUEST_TIMEOUT_SECONDS)
+    .max(MAX_LLM_REQUEST_TIMEOUT_SECONDS),
 });
 
 const syncNowCommandSchema = z.object({
@@ -103,7 +114,7 @@ type SyncService = {
 
 type ModelTestService = {
   /** 测试单个模型。 */
-  testModel: (model: ExtensionConfig['models'][number]) => Promise<{ provider: string; text: string }>;
+  testModel: (model: ExtensionConfig['models'][number], llmRequestTimeoutSeconds: number) => Promise<{ provider: string; text: string }>;
 };
 
 /** 创建配置相关的 runtime command 处理器。 */
@@ -173,7 +184,7 @@ export const createConfigCommandHandler = ({
         const command = testModelCommandSchema.parse(input);
         return {
           type: 'TEST_MODEL_SUCCESS',
-          result: await modelTestService.testModel(command.model),
+          result: await modelTestService.testModel(command.model, command.llmRequestTimeoutSeconds),
         };
       }
       case 'SYNC_NOW': {

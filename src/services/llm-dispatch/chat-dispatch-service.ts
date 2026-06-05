@@ -594,9 +594,89 @@ type ChatDispatchServiceDeps = {
 const isAbortError = (error: unknown): boolean =>
   error instanceof Error && (error.name === 'AbortError' || error.message === 'aborted');
 
+/** 判断未知值是否可按普通对象读取。 */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+/** 把原始 API 错误载荷转成可展示文本。 */
+const stringifyRawErrorPayload = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return null;
+  }
+};
+
+/** 优先提取 provider 原始响应，避免只展示 SDK 包装后的摘要。 */
+const getRawApiErrorMessage = (error: unknown): string | null => {
+  if (!isRecord(error)) {
+    return null;
+  }
+
+  const responseBody = stringifyRawErrorPayload(error.responseBody);
+  if (responseBody) {
+    return responseBody;
+  }
+
+  const data = stringifyRawErrorPayload(error.data);
+  if (data) {
+    return data;
+  }
+
+  return getRawApiErrorMessage(error.cause);
+};
+
 /** 统一提取错误文本。 */
 const getErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message.trim() ? error.message : fallback;
+  getRawApiErrorMessage(error) ?? (error instanceof Error && error.message.trim() ? error.message : fallback);
+
+/** 创建带超时的模型请求取消域。 */
+const createModelAbortScope = (timeoutSeconds: number) => {
+  const abortController = new AbortController();
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    abortController.abort();
+  }, timeoutSeconds * 1000);
+
+  return {
+    signal: abortController.signal,
+    cancel: () => abortController.abort(),
+    clear: () => clearTimeout(timeoutId),
+    isTimedOut: () => timedOut,
+  };
+};
+
+/** 根据取消来源判断最终流状态。 */
+const resolveStreamFailure = (error: unknown, abortScope: ReturnType<typeof createModelAbortScope>, timeoutSeconds: number) => {
+  if (abortScope.isTimedOut()) {
+    return {
+      status: 'error' as const,
+      errorMessage: `大模型调用超时（${timeoutSeconds} 秒）`,
+    };
+  }
+
+  if (isAbortError(error)) {
+    return {
+      status: 'cancelled' as const,
+      errorMessage: 'stream cancelled',
+    };
+  }
+
+  return {
+    status: 'error' as const,
+    errorMessage: getErrorMessage(error, 'chat dispatch failed'),
+  };
+};
 
 /** 构造最终系统提示词，页面正文始终追加在末尾。 */
 const buildEffectiveSystemPrompt = (input: PromptContext): string => {
@@ -849,13 +929,15 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     branchId: string;
     /** 分支模型配置。 */
     model: ModelConfig;
+    /** 大模型调用超时秒数。 */
+    requestTimeoutSeconds: number;
     /** 流式对话历史。 */
     streamMessages: ConversationHistoryMessage[];
     /** 可选的开始前准备。 */
     prepare?: (sessionId: string) => Promise<void>;
   }): BranchStreamSession => {
     const sessionId = createSessionId();
-    const abortController = new AbortController();
+    const abortScope = createModelAbortScope(input.requestTimeoutSeconds);
     const resolvedModel = deps.providerRegistry.resolveProviderModel(input.model);
     const done = (async (): Promise<ChatStreamResult> => {
       let result: ChatStreamResult;
@@ -885,7 +967,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           buildModelInvocation({
             resolvedModel,
             messages: input.streamMessages,
-            abortSignal: abortController.signal,
+            abortSignal: abortScope.signal,
           }),
         );
 
@@ -949,8 +1031,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           persisted: true,
         };
       } catch (error) {
-        const status = isAbortError(error) ? 'cancelled' : 'error';
-        const errorMessage = status === 'cancelled' ? 'branch stream cancelled' : getErrorMessage(error, 'branch dispatch failed');
+        const failure = resolveStreamFailure(error, abortScope, input.requestTimeoutSeconds);
+        const status = failure.status;
+        const errorMessage =
+          status === 'cancelled'
+            ? 'branch stream cancelled'
+            : failure.errorMessage === 'chat dispatch failed'
+              ? 'branch dispatch failed'
+              : failure.errorMessage;
         await deps.conversationRepository.failAssistantBranch({
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
@@ -1004,6 +1092,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         };
       }
 
+      abortScope.clear();
       await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, input.branchId);
       return result;
     })();
@@ -1015,7 +1104,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       modelId: input.model.id,
       modelLabel: resolvedModel.modelLabel,
       cancel: () => {
-        abortController.abort();
+        abortScope.cancel();
       },
       done,
     };
@@ -1066,7 +1155,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const abortController = new AbortController();
+      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
       const shouldRollbackOnFailure = input.rollbackOnFailure ?? false;
       const getLifecycleScope = () => ({
         normalizedUrl: input.normalizedUrl,
@@ -1161,6 +1250,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           messageId: assistantMessageId,
           branchId: plan.branchId,
           model: plan.model,
+          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
           prepare: async (branchSessionId) => {
             await deps.conversationRepository.upsertBranchLoadingState({
@@ -1204,7 +1294,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             buildModelInvocation({
               resolvedModel,
               messages: streamMessages,
-              abortSignal: abortController.signal,
+              abortSignal: abortScope.signal,
             }),
           );
 
@@ -1264,8 +1354,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             persisted: true,
           };
         } catch (error) {
-          const status = isAbortError(error) ? 'cancelled' : 'error';
-          const errorMessage = status === 'cancelled' ? 'stream cancelled' : getErrorMessage(error, 'chat dispatch failed');
+          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
 
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
@@ -1334,6 +1423,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             persisted: !(shouldRollbackOnFailure && status === 'error'),
           };
         }
+        abortScope.clear();
         const branchResults = await branchResultsPromise;
         await removeLoadingStateSafely();
         publishToPromptTabSafely({
@@ -1360,7 +1450,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         })),
         branchSessions,
         cancel: () => {
-          abortController.abort();
+          abortScope.cancel();
           for (const branchSession of branchSessions) {
             branchSession.cancel();
           }
@@ -1429,7 +1519,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const abortController = new AbortController();
+      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
       const removeLoadingStateSafely = async () => {
         try {
           await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
@@ -1469,6 +1559,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           messageId: assistantMessageId,
           branchId: plan.branchId,
           model: plan.model,
+          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
           prepare: async (branchSessionId) => {
             await deps.conversationRepository.upsertBranchLoadingState({
@@ -1511,7 +1602,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             buildModelInvocation({
               resolvedModel,
               messages: streamMessages,
-              abortSignal: abortController.signal,
+              abortSignal: abortScope.signal,
             }),
           );
 
@@ -1571,8 +1662,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             persisted: true,
           };
         } catch (error) {
-          const status = isAbortError(error) ? 'cancelled' : 'error';
-          const errorMessage = status === 'cancelled' ? 'stream cancelled' : getErrorMessage(error, 'chat dispatch failed');
+          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
@@ -1626,6 +1716,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           };
         }
 
+        abortScope.clear();
         const branchResults = await branchResultsPromise;
         await removeLoadingStateSafely();
         publishToPromptTabSafely({
@@ -1651,7 +1742,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         })),
         branchSessions,
         cancel: () => {
-          abortController.abort();
+          abortScope.cancel();
           for (const branchSession of branchSessions) {
             branchSession.cancel();
           }
@@ -1726,7 +1817,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       if (!primaryBranch) {
         throw new Error(`primary branch plan missing: ${input.promptTabId}`);
       }
-      const abortController = new AbortController();
+      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
       const removeLoadingStateSafely = async () => {
         try {
           await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
@@ -1770,6 +1861,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           messageId: assistantMessageId,
           branchId: plan.branchId,
           model: plan.model,
+          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
           prepare: async (branchSessionId) => {
             await deps.conversationRepository.upsertBranchLoadingState({
@@ -1812,7 +1904,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             buildModelInvocation({
               resolvedModel,
               messages: streamMessages,
-              abortSignal: abortController.signal,
+              abortSignal: abortScope.signal,
             }),
           );
 
@@ -1872,8 +1964,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             persisted: true,
           };
         } catch (error) {
-          const status = isAbortError(error) ? 'cancelled' : 'error';
-          const errorMessage = status === 'cancelled' ? 'stream cancelled' : getErrorMessage(error, 'chat dispatch failed');
+          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
@@ -1927,6 +2018,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           };
         }
 
+        abortScope.clear();
         const branchResults = await branchResultsPromise;
         await removeLoadingStateSafely();
         publishToPromptTabSafely({
@@ -1952,7 +2044,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         })),
         branchSessions,
         cancel: () => {
-          abortController.abort();
+          abortScope.cancel();
           for (const branchSession of branchSessions) {
             branchSession.cancel();
           }
@@ -2021,6 +2113,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         messageId: input.messageId,
         branchId: input.branchId,
         model,
+        requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
         streamMessages,
         prepare: async (sessionId) => {
           await deps.conversationRepository.upsertBranchLoadingState({
@@ -2096,6 +2189,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           messageId: input.messageId,
           branchId,
           model,
+          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages: branchMessages,
           prepare: async (sessionId) => {
             await deps.conversationRepository.upsertBranchLoadingState({

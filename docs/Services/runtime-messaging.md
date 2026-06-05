@@ -53,6 +53,7 @@ one-shot command：
   - `GET_LOCAL_CACHE_STATS`
   - `CLEAR_LOCAL_CACHE`
   - `TEST_SYNC_CONNECTION`
+  - `TEST_MODEL`
   - `SYNC_NOW`
 - 当前已实现的对话管理页命令：
   - `LIST_PAGES`
@@ -81,7 +82,7 @@ long-lived port 事件：
 
 阶段 4 当前落地边界：
 
-- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / SYNC_NOW`。
+- 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / TEST_MODEL / SYNC_NOW`。
 - 已落地补充：`RE_EXTRACT_CONTENT` 现在显式区分提取来源，只有侧边栏打开流程中的提取成功后，background 才会触发自动触发去重编排；手动重提取和点击快捷标签补提取都不会顺带触发其他 `promptTab`。
 - 未落地：对话管理页复用同一条流式订阅、快捷输入远端模板命令。
 - 已落地补充：对话管理页复用 `SEND_CHAT / STOP_SESSION / STOP_BRANCH / DELETE_BRANCH / EDIT_USER_MESSAGE / RETRY_USER_MESSAGE / RETRY_MESSAGE / EXPAND_MESSAGE_BRANCHES / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 与同一条流式事件协议。
@@ -116,6 +117,7 @@ long-lived port 事件：
   - `GET_LOCAL_CACHE_STATS`
   - `CLEAR_LOCAL_CACHE`
   - `TEST_SYNC_CONNECTION`
+  - `TEST_MODEL`
   - `SYNC_NOW`
 - 对话管理页使用：
   - `LIST_PAGES`
@@ -146,6 +148,7 @@ long-lived port 事件：
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
 - 自动触发不暴露新的 one-shot command；由“侧边栏打开流程”的 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
 - `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
+- `TEST_MODEL` 只校验当前模型表单，并显式携带当前草稿的 `basic.llmRequestTimeoutSeconds`，不依赖已保存配置。
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。
 - 设置页当前只覆盖本地配置闭环和最小同步闭环，不包含快捷输入远端模板导入。
 - `EDIT_USER_MESSAGE`、`RETRY_USER_MESSAGE`、`RETRY_MESSAGE`、`EXPAND_MESSAGE_BRANCHES`、`STOP_BRANCH`、`DELETE_BRANCH` 都复用同一条 typed command 管线和 schema 校验。

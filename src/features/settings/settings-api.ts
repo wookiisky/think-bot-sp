@@ -76,10 +76,11 @@ export const settingsApi = {
   },
 
   /** 测试单个模型连通性。 */
-  async testModel(model: ModelConfig) {
+  async testModel(model: ModelConfig, llmRequestTimeoutSeconds: number) {
     const response = await requestConfig<RuntimeResponse<{ result: { provider: string; text: string } }>>({
       type: 'TEST_MODEL',
       model,
+      llmRequestTimeoutSeconds,
     });
     return response.result;
   },

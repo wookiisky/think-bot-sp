@@ -13,6 +13,12 @@ export const MIN_EXTRACTION_PANEL_HEIGHT = 1;
 export const DEFAULT_EXTRACTION_PANEL_HEIGHT = 240;
 /** 提取区最大默认高度。 */
 export const MAX_EXTRACTION_PANEL_HEIGHT = 420;
+/** 大模型调用超时最小秒数。 */
+export const MIN_LLM_REQUEST_TIMEOUT_SECONDS = 1;
+/** 大模型调用默认超时秒数。 */
+export const DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS = 60;
+/** 大模型调用超时最大秒数。 */
+export const MAX_LLM_REQUEST_TIMEOUT_SECONDS = 600;
 /** 提取区文本字号最小档位。 */
 export const MIN_EXTRACTION_TEXT_FONT_SIZE = 1;
 /** 提取区文本字号默认档位。 */
@@ -390,6 +396,12 @@ export const extensionConfigSchema = z
           .max(MAX_EXTRACTION_PANEL_HEIGHT)
           .default(DEFAULT_EXTRACTION_PANEL_HEIGHT),
         extractionTextFontSize: extractionTextFontSizeSchema.default(DEFAULT_EXTRACTION_TEXT_FONT_SIZE),
+        llmRequestTimeoutSeconds: z
+          .number()
+          .int()
+          .min(MIN_LLM_REQUEST_TIMEOUT_SECONDS)
+          .max(MAX_LLM_REQUEST_TIMEOUT_SECONDS)
+          .default(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS),
         jinaApiKey: z.string().default(''),
         jinaResponseTemplate: z.string().default(DEFAULT_JINA_RESPONSE_TEMPLATE),
         includePageContentByDefault: z.boolean(),
@@ -503,6 +515,7 @@ export const createDefaultConfig = (overrides: ExtensionConfigOverrides = {}): E
       extractionMethod: 'readability',
       extractionPanelHeight: DEFAULT_EXTRACTION_PANEL_HEIGHT,
       extractionTextFontSize: DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
+      llmRequestTimeoutSeconds: DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
       jinaApiKey: '',
       jinaResponseTemplate: DEFAULT_JINA_RESPONSE_TEMPLATE,
       includePageContentByDefault: true,

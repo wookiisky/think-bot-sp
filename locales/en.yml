@@ -87,6 +87,7 @@ settings.multiSelectPlaceholder: Please Select
 settings.multiSelectSummary: "{count} selected"
 settings.extractionMethod: Default Extraction Method
 settings.extractionPanelHeight: Default Extraction Panel Height
+settings.llmRequestTimeoutSeconds: LLM Request Timeout (seconds)
 settings.extractionTextFontSize: Extraction Text Font Size
 settings.extractionTextFontSizePreview: Preview Text
 settings.extractionTextFontSizeMin: Smallest

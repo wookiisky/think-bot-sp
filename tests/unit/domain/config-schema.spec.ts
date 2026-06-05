@@ -18,6 +18,7 @@ import {
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
   DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_JINA_RESPONSE_TEMPLATE,
+  DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
   DEFAULT_BLACKLIST_RULES,
   DEFAULT_QUICK_INPUTS,
   applySystemConfigSeeds,
@@ -44,6 +45,7 @@ describe('config schema', () => {
     expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
     expect(config.basic.extractionTextFontSize).toBe(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
+    expect(config.basic.llmRequestTimeoutSeconds).toBe(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.models).toEqual([]);
@@ -51,11 +53,12 @@ describe('config schema', () => {
     expect(config.blacklist.map((item) => item.id)).toEqual(DEFAULT_BLACKLIST_RULES.map((item) => item.id));
   });
 
-  it('旧配置缺少 parallelModelIds 和提取参数时 parse 后自动补默认值', () => {
+  it('旧配置缺少 parallelModelIds、提取参数和模型调用超时时 parse 后自动补默认值', () => {
     const config = extensionConfigSchema.parse({
       ...createDefaultConfig(),
       basic: {
         ...createDefaultConfig().basic,
+        llmRequestTimeoutSeconds: undefined,
       },
       quickInputs: [
         {
@@ -73,6 +76,7 @@ describe('config schema', () => {
     expect(config.basic.parallelModelIds).toEqual([]);
     expect(config.basic.extractionPanelHeight).toBe(DEFAULT_EXTRACTION_PANEL_HEIGHT);
     expect(config.basic.extractionTextFontSize).toBe(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
+    expect(config.basic.llmRequestTimeoutSeconds).toBe(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
     expect(config.basic.jinaApiKey).toBe('');
     expect(config.basic.jinaResponseTemplate).toBe(DEFAULT_JINA_RESPONSE_TEMPLATE);
     expect(config.quickInputs[0]?.parallelModelIds).toEqual([]);

@@ -64,9 +64,10 @@ Provider 适配规则：
 请求参数透传规则：
 
 - `temperature`、`maxOutputTokens` 会进入所有真实 `streamText / generateText` 调用。
+- `basic.llmRequestTimeoutSeconds` 是全局大模型调用超时，默认 `60` 秒；真实聊天流和设置页测试模型都会通过 `AbortSignal` 按该值中止请求。
 - `gemini / google-vertex` 的 `url_context / google_search` 通过 provider tools 透传。
 - `anthropic / gemini / google-vertex / amazon-bedrock` 的 `reasoningEffort` 会映射到各自 SDK 的 providerOptions。
-- 设置页“测试模型”走 background 命令链路，并统一发送 `hi` 做最小连通性校验。
+- 设置页“测试模型”走 background 命令链路，并统一发送 `hi` 做最小连通性校验；命令会携带当前草稿中的全局超时值。
 
 ## 5. 关键流程
 
@@ -79,7 +80,8 @@ Provider 适配规则：
    - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
 6. 主分支与并行分支分别建立流式会话；每个 chunk 都先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
 7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
-7.1. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
+7.1. Provider 返回 `APICallError.responseBody` 或 `data` 时，错误文本优先使用该原始 API 返回内容，再回退到 SDK 错误消息。
+7.2. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
 8. 所有首轮分支都收敛后，统一通过 `LOADING_STATE_UPDATE` 结束该轮 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
 9. 继续新增分支时，前端必须先让用户选择 `modelId`，后台只为这一个模型追加单分支请求。
 10. 手动新增分支的候选模型固定来自“所有启用且配置完整的模型”，包含当前主模型。

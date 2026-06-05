@@ -121,16 +121,24 @@ export default defineBackground(() => {
     recentErrorRepository,
     syncService,
     modelTestService: {
-      async testModel(model) {
+      async testModel(model, llmRequestTimeoutSeconds) {
         const resolvedModel = resolveProviderModel(model);
+        const abortController = new AbortController();
+        let timedOut = false;
+        const timeoutId = setTimeout(() => {
+          timedOut = true;
+          abortController.abort();
+        }, llmRequestTimeoutSeconds * 1000);
         const request = {
           model: resolvedModel.sdkModel,
           prompt: 'hi',
           temperature: resolvedModel.temperature,
+          abortSignal: abortController.signal,
         } as {
           model: LanguageModel;
           prompt: string;
           temperature: number;
+          abortSignal: AbortSignal;
           maxOutputTokens?: number;
           tools?: ToolSet;
           providerOptions?: ProviderOptions;
@@ -144,7 +152,14 @@ export default defineBackground(() => {
         if (resolvedModel.providerOptions) {
           request.providerOptions = resolvedModel.providerOptions;
         }
-        const response = await generateText(request);
+        const response = await generateText(request)
+          .catch((error: unknown) => {
+            if (timedOut) {
+              throw new Error(`大模型调用超时（${llmRequestTimeoutSeconds} 秒）`);
+            }
+            throw error;
+          })
+          .finally(() => clearTimeout(timeoutId));
 
         return {
           provider: resolvedModel.providerId,

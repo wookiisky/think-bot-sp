@@ -779,7 +779,10 @@ describe('SettingsShell', () => {
     fireEvent.click(screen.getByRole('button', { name: '测试模型' }));
 
     await waitFor(() => {
-      expect(mocks.testModel).toHaveBeenCalledWith(expect.objectContaining({ id: 'model-1' }));
+      expect(mocks.testModel).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'model-1' }),
+        config.basic.llmRequestTimeoutSeconds,
+      );
     });
     expect(await screen.findByText('模型测试成功')).toBeInTheDocument();
     expect(screen.getByText('hello')).toBeInTheDocument();
