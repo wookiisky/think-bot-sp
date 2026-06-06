@@ -118,6 +118,8 @@ settings.noQuickInputs: 暂无快捷输入
 settings.addQuickInput: 新增快捷输入
 settings.importQuickInputTemplates: 导入远端模板
 settings.importingQuickInputTemplates: 正在导入模板
+settings.quickInputTemplateUrl: 远端模板网址
+settings.confirmImportQuickInputTemplates: 导入
 settings.deleteQuickInput: 删除快捷输入
 settings.dragQuickInput: 拖拽快捷输入
 settings.quickInputName: 快捷输入名称

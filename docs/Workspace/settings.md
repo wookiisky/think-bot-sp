@@ -68,6 +68,9 @@
 - 旧配置读取与导入时采用“补缺不覆盖”：只补齐缺失的内置快捷输入，不覆盖已有同 id 项。
 - 快捷输入当前可编辑 `name / prompt / autoTrigger / modelId / parallelModelIds / order / deletedAt`。
 - 快捷输入支持从公开 `quick_input_tabs.json` 导入远端模板：
+  - 点击“导入远端模板”后先弹出网址输入框，默认地址为 `https://raw.githubusercontent.com/wookiisky/think-bot/refs/heads/main/quick_input_tabs.json`。
+  - 远端默认格式为 `{ "quickInputs": [{ "id", "displayText", "sendText", "autoTrigger", "branchModelIds" }] }`。
+  - 导入时把 `displayText` 映射为本地 `name`，把 `sendText` 映射为本地 `prompt`，把 `branchModelIds` 映射为本地 `parallelModelIds`。
   - 导入时为模板重建本地 ID。
   - 按 `name + prompt` 跳过已存在项，只追加新模板。
 - 失效 `modelId` 会降级成 `null`，失效 `parallelModelIds` 会在导入时过滤。

@@ -539,6 +539,45 @@ describe('SettingsShell', () => {
     expect(screen.getAllByRole('listitem')[1]).toHaveTextContent('总结');
   });
 
+  it('按用户输入的网址导入远端快捷输入模板', async () => {
+    const config = createDefaultConfig({
+      quickInputs: [],
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          quickInputs: [
+            {
+              displayText: '远端总结',
+              sendText: '请总结远端页面',
+              autoTrigger: false,
+              branchModelIds: [],
+            },
+          ],
+        }),
+    } as Response);
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
+
+    render(<SettingsShell />);
+
+    await screen.findByRole('heading', { name: '设置' });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: '快捷输入' }));
+    await user.click(screen.getByRole('button', { name: '导入远端模板' }));
+
+    const templateUrlInput = await screen.findByRole('textbox', { name: '远端模板网址' });
+    await user.clear(templateUrlInput);
+    await user.type(templateUrlInput, 'https://example.com/custom-tabs.json');
+    await user.click(screen.getByRole('button', { name: '导入' }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith('https://example.com/custom-tabs.json');
+    });
+    expect(await screen.findByText('远端总结')).toBeInTheDocument();
+  });
+
   it('默认模型不完整时阻止保存', async () => {
     const config = createDefaultConfig({
       basic: {

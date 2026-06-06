@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
+import { DEFAULT_QUICK_INPUT_TEMPLATE_URL } from '../../../src/features/settings/quick-input-template-service';
 import { QuickInputsPanel } from '../../../src/features/settings/quick-inputs-panel';
 
 const t = (key: string) =>
@@ -15,6 +16,8 @@ const t = (key: string) =>
     'settings.addQuickInput': '新增快捷输入',
     'settings.importQuickInputTemplates': '导入远端模板',
     'settings.importingQuickInputTemplates': '正在导入模板',
+    'settings.quickInputTemplateUrl': '远端模板网址',
+    'settings.confirmImportQuickInputTemplates': '导入',
     'settings.deleteQuickInput': '删除快捷输入',
     'settings.dragQuickInput': '拖拽快捷输入',
     'settings.moveUp': '上移',
@@ -66,6 +69,7 @@ const ControlledQuickInputsPanel = ({ config: initialConfig }: { config?: Return
       config={config}
       disabled={false}
       importingTemplates={false}
+      defaultImportTemplateUrl={DEFAULT_QUICK_INPUT_TEMPLATE_URL}
       onChange={setConfig}
       onImportTemplates={() => undefined}
       t={t}
@@ -231,6 +235,7 @@ describe('QuickInputsPanel', () => {
         })}
         disabled={false}
         importingTemplates={false}
+        defaultImportTemplateUrl={DEFAULT_QUICK_INPUT_TEMPLATE_URL}
         onChange={() => undefined}
         onImportTemplates={onImportTemplates}
         t={t}
@@ -250,7 +255,13 @@ describe('QuickInputsPanel', () => {
     expect(screen.queryByLabelText('快捷输入名称')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '导入远端模板' }));
-    expect(onImportTemplates).toHaveBeenCalledTimes(1);
+    const templateUrlInput = await screen.findByRole('textbox', { name: '远端模板网址' });
+    expect(templateUrlInput).toHaveValue(DEFAULT_QUICK_INPUT_TEMPLATE_URL);
+
+    await user.clear(templateUrlInput);
+    await user.type(templateUrlInput, 'https://example.com/custom-tabs.json');
+    await user.click(screen.getByRole('button', { name: '导入' }));
+    expect(onImportTemplates).toHaveBeenCalledWith('https://example.com/custom-tabs.json');
   });
 
   it('标题栏单行展示名称与提示词预览，并在右侧切换自动触发', async () => {

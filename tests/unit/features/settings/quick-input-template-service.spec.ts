@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../../src/domain/config/config-schema';
 import {
+  DEFAULT_QUICK_INPUT_TEMPLATE_URL,
   appendQuickInputTemplates,
   fetchQuickInputTemplates,
   parseQuickInputTemplateDocument,
@@ -32,6 +33,32 @@ describe('quick-input-template-service', () => {
         }),
       ),
     ).toHaveLength(1);
+  });
+
+  it('支持解析远端默认模板格式', () => {
+    expect(
+      parseQuickInputTemplateDocument(
+        JSON.stringify({
+          quickInputs: [
+            {
+              id: 'default_summarize',
+              displayText: '概括',
+              sendText: '使用一句话概括Page Content内容',
+              autoTrigger: false,
+              branchModelIds: ['model-1'],
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        name: '概括',
+        prompt: '使用一句话概括Page Content内容',
+        autoTrigger: false,
+        modelId: null,
+        parallelModelIds: ['model-1'],
+      },
+    ]);
   });
 
   it('导入时会过滤重复项和失效模型引用', () => {
@@ -109,5 +136,26 @@ describe('quick-input-template-service', () => {
     });
 
     await expect(fetchQuickInputTemplates({ fetcher })).rejects.toThrow(/404/);
+  });
+
+  it('拉取模板时支持覆盖远端地址', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          quickInputs: [
+            {
+              displayText: '翻译',
+              sendText: '请翻译当前页面',
+            },
+          ],
+        }),
+    });
+
+    await expect(fetchQuickInputTemplates({ fetcher, url: 'https://example.com/custom-tabs.json' })).resolves.toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledWith('https://example.com/custom-tabs.json');
+    expect(DEFAULT_QUICK_INPUT_TEMPLATE_URL).toBe(
+      'https://raw.githubusercontent.com/wookiisky/think-bot/refs/heads/main/quick_input_tabs.json',
+    );
   });
 });

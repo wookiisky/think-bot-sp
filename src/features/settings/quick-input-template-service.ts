@@ -5,7 +5,7 @@ import type { ExtensionConfig } from '../../domain/config/config-schema';
 
 /** 默认远端快捷输入模板地址。 */
 export const DEFAULT_QUICK_INPUT_TEMPLATE_URL =
-  'https://raw.githubusercontent.com/wookiisky/think-bot-sp/main/quick_input_tabs.json';
+  'https://raw.githubusercontent.com/wookiisky/think-bot/refs/heads/main/quick_input_tabs.json';
 
 const quickInputTemplateItemSchema = z.preprocess(
   (value) => {
@@ -13,14 +13,16 @@ const quickInputTemplateItemSchema = z.preprocess(
       return value;
     }
 
-    const input = value as { parallelModelIds?: string[]; branchModelIds?: string[] };
-    if (Array.isArray(input.parallelModelIds)) {
-      return input;
-    }
-
+    const input = value as Record<string, unknown>;
     return {
       ...input,
-      parallelModelIds: Array.isArray(input.branchModelIds) ? input.branchModelIds : [],
+      name: typeof input.name === 'string' ? input.name : input.displayText,
+      prompt: typeof input.prompt === 'string' ? input.prompt : input.sendText,
+      parallelModelIds: Array.isArray(input.parallelModelIds)
+        ? input.parallelModelIds
+        : Array.isArray(input.branchModelIds)
+          ? input.branchModelIds
+          : [],
     };
   },
   z.object({

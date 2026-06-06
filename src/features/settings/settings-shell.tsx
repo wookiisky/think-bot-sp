@@ -19,7 +19,7 @@ import { BasicSettingsPanel } from './basic-settings-panel';
 import { CloudSyncPanel } from './cloud-sync-panel';
 import { DisplaySettingsPanel } from './display-settings-panel';
 import { LanguageModelsPanel } from './language-models-panel';
-import { appendQuickInputTemplates, fetchQuickInputTemplates } from './quick-input-template-service';
+import { DEFAULT_QUICK_INPUT_TEMPLATE_URL, appendQuickInputTemplates, fetchQuickInputTemplates } from './quick-input-template-service';
 import { QuickInputsPanel } from './quick-inputs-panel';
 import { settingsApi } from './settings-api';
 import { SettingsActions } from './settings-actions';
@@ -296,10 +296,15 @@ export const SettingsShell = () => {
     await persistDraftConfig();
   };
 
-  const handleImportQuickInputTemplates = async () => {
+  const handleImportQuickInputTemplates = async (templateUrl: string) => {
+    const normalizedTemplateUrl = templateUrl.trim();
+    if (!normalizedTemplateUrl) {
+      return;
+    }
+
     setImportingQuickInputTemplates(true);
     try {
-      const templates = await fetchQuickInputTemplates();
+      const templates = await fetchQuickInputTemplates({ url: normalizedTemplateUrl });
       const result = appendQuickInputTemplates({
         config: draftConfig,
         templates,
@@ -457,6 +462,7 @@ export const SettingsShell = () => {
                   config={draftConfig}
                   disabled={saving}
                   importingTemplates={importingQuickInputTemplates}
+                  defaultImportTemplateUrl={DEFAULT_QUICK_INPUT_TEMPLATE_URL}
                   onChange={updateDraftConfig}
                   onImportTemplates={handleImportQuickInputTemplates}
                   t={t}

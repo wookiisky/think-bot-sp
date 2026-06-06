@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { Popover as PopoverPrimitive } from 'radix-ui';
 import { ArrowDownIcon, ArrowUpIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
 
 import { Button } from '../../components/ui/button';
@@ -31,10 +32,12 @@ type QuickInputsPanelProps = {
   disabled: boolean;
   /** 是否正在导入远端模板。 */
   importingTemplates: boolean;
+  /** 默认远端模板地址。 */
+  defaultImportTemplateUrl: string;
   /** 配置变更回调。 */
   onChange(nextConfig: ExtensionConfig): void;
   /** 导入远端模板。 */
-  onImportTemplates(): void;
+  onImportTemplates(templateUrl: string): void;
   /** 文案翻译函数。 */
   t(key: string): string;
 };
@@ -109,7 +112,7 @@ const SortableQuickInputCard = ({
           expanded ? COMPACT_LIST_ITEM_ACTIVE_CLASS : COMPACT_LIST_ITEM_IDLE_CLASS,
         ].join(' ')}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 md:flex-nowrap">
           <button
             type="button"
             className={COMPACT_DRAG_HANDLE_BUTTON_CLASS}
@@ -123,15 +126,15 @@ const SortableQuickInputCard = ({
 
           <button
             type="button"
-            className={`${COMPACT_ROW_BUTTON_CLASS} flex flex-1 items-baseline gap-2 overflow-hidden`}
+            className={`${COMPACT_ROW_BUTTON_CLASS} flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden`}
             data-testid={`quick-input-summary-${item.id}`}
             onClick={onToggle}
           >
-            <span className="truncate text-xs font-semibold">{item.name}</span>
-            <span className="truncate text-xs text-muted-foreground">{preview}</span>
+            <span className="min-w-0 shrink-0 truncate text-xs font-semibold">{item.name}</span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">{preview}</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1">
+          <div className="ml-9 flex w-[calc(100%-2.25rem)] shrink-0 items-center justify-end gap-1 md:ml-0 md:w-auto">
             <Tooltip content={t('settings.moveUp')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('settings.moveUp')} onClick={onMoveUp} disabled={disabled}>
                 <ArrowUpIcon />
@@ -177,11 +180,14 @@ export const QuickInputsPanel = ({
   config,
   disabled,
   importingTemplates,
+  defaultImportTemplateUrl,
   onChange,
   onImportTemplates,
   t,
 }: QuickInputsPanelProps) => {
   const [expandedQuickInputId, setExpandedQuickInputId] = useState<string | null>(null);
+  const [importTemplatePopoverOpen, setImportTemplatePopoverOpen] = useState(false);
+  const [importTemplateUrl, setImportTemplateUrl] = useState(defaultImportTemplateUrl);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -311,6 +317,17 @@ export const QuickInputsPanel = ({
     reorderVisibleQuickInputs(arrayMove(visibleQuickInputs, currentIndex, targetIndex));
   };
 
+  /** 提交远端模板地址，并把导入副作用交给设置页壳层。 */
+  const handleSubmitRemoteTemplateUrl = () => {
+    const templateUrl = importTemplateUrl.trim();
+    if (!templateUrl) {
+      return;
+    }
+
+    onImportTemplates(templateUrl);
+    setImportTemplatePopoverOpen(false);
+  };
+
   return (
     <Card size="sm" aria-label={t('settings.promptTabs')}>
       <CardHeader className={COMPACT_CARD_HEADER_CLASS}>
@@ -321,9 +338,66 @@ export const QuickInputsPanel = ({
           </div>
 
           <div className="flex flex-wrap gap-1">
-            <Button size="sm" type="button" variant="outline" onClick={onImportTemplates} disabled={disabled || importingTemplates}>
-              {importingTemplates ? t('settings.importingQuickInputTemplates') : t('settings.importQuickInputTemplates')}
-            </Button>
+            <PopoverPrimitive.Root
+              open={importTemplatePopoverOpen}
+              onOpenChange={(nextOpen) => {
+                if (disabled || importingTemplates) {
+                  return;
+                }
+                setImportTemplatePopoverOpen(nextOpen);
+              }}
+            >
+              <PopoverPrimitive.Trigger asChild>
+                <Button size="sm" type="button" variant="outline" disabled={disabled || importingTemplates}>
+                  {importingTemplates ? t('settings.importingQuickInputTemplates') : t('settings.importQuickInputTemplates')}
+                </Button>
+              </PopoverPrimitive.Trigger>
+              <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Content
+                  side="bottom"
+                  align="end"
+                  sideOffset={6}
+                  aria-label={t('settings.quickInputTemplateUrl')}
+                  className={[
+                    'z-50 w-[min(32rem,calc(100vw-2rem))] border border-border/70 bg-popover p-2.5 ring-1 ring-foreground/5',
+                    'animate-in fade-in-0 data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+                  ].join(' ')}
+                >
+                  <form
+                    className="grid gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleSubmitRemoteTemplateUrl();
+                    }}
+                  >
+                    <label className="grid gap-1.5">
+                      <span className="text-xs font-medium">{t('settings.quickInputTemplateUrl')}</span>
+                      <Input
+                        type="url"
+                        aria-label={t('settings.quickInputTemplateUrl')}
+                        value={importTemplateUrl}
+                        disabled={disabled || importingTemplates}
+                        onChange={(event) => setImportTemplateUrl(event.target.value)}
+                      />
+                    </label>
+                    <div className="flex justify-end gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={importingTemplates}
+                        onClick={() => setImportTemplatePopoverOpen(false)}
+                      >
+                        {t('common.cancel')}
+                      </Button>
+                      <Button type="submit" variant="outline" size="xs" disabled={disabled || importingTemplates || !importTemplateUrl.trim()}>
+                        {t('settings.confirmImportQuickInputTemplates')}
+                      </Button>
+                    </div>
+                  </form>
+                </PopoverPrimitive.Content>
+              </PopoverPrimitive.Portal>
+            </PopoverPrimitive.Root>
             <Button size="sm" type="button" variant="outline" onClick={handleAddQuickInput} disabled={disabled}>
               {t('settings.addQuickInput')}
             </Button>

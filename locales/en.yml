@@ -118,6 +118,8 @@ settings.noQuickInputs: No quick inputs configured
 settings.addQuickInput: Add Quick Input
 settings.importQuickInputTemplates: Import Remote Templates
 settings.importingQuickInputTemplates: Importing Templates
+settings.quickInputTemplateUrl: Remote Template URL
+settings.confirmImportQuickInputTemplates: Import
 settings.deleteQuickInput: Delete Quick Input
 settings.dragQuickInput: Drag Quick Input
 settings.quickInputName: Quick Input Name
