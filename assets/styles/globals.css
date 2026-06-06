@@ -167,10 +167,10 @@
     background:
       linear-gradient(
         90deg,
-        oklch(0.66 0.15 210 / 0.86),
+        rgb(72 208 200 / 0.86),
         oklch(0.9 0.1 198 / 0.94),
         oklch(0.62 0.18 214 / 0.9),
-        oklch(0.66 0.15 210 / 0.86)
+        rgb(72 208 200 / 0.86)
       )
       0 0 / 200% 100%;
     animation: tab-border-flow 2s linear infinite;
@@ -190,10 +190,10 @@
     background:
       linear-gradient(
         90deg,
-        oklch(0.7 0.13 210 / 0.78),
+        rgb(72 208 200 / 0.78),
         oklch(0.9 0.1 198 / 0.9),
         oklch(0.78 0.15 214 / 0.82),
-        oklch(0.7 0.13 210 / 0.78)
+        rgb(72 208 200 / 0.78)
       )
       0 0 / 200% 100%;
   }
