@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import config, { appendDevExtensionConnectSrc } from '../../wxt.config';
+import config, { appendDevExtensionConnectSrc, extensionIconPaths } from '../../wxt.config';
 
 /** 读取当前测试覆盖的静态 manifest 配置。 */
 const getStaticManifest = () => {
@@ -15,6 +15,17 @@ const getStaticManifest = () => {
 };
 
 describe('wxt manifest config', () => {
+  it('扩展和浏览器 action 使用本地给定图标', () => {
+    const manifest = getStaticManifest();
+
+    expect(manifest.icons).toEqual(extensionIconPaths);
+    expect(manifest.action?.default_icon).toEqual(extensionIconPaths);
+
+    for (const iconPath of Object.values(extensionIconPaths)) {
+      expect(fs.existsSync(path.resolve(__dirname, '../../', iconPath))).toBe(true);
+    }
+  });
+
   it('设置页通过 options 入口的 manifest 元信息声明独立 tab 打开', () => {
     const optionsHtml = fs.readFileSync(
       path.resolve(__dirname, '../../entrypoints/options/index.html'),

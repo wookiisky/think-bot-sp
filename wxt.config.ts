@@ -3,6 +3,13 @@ import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 
+/** 扩展安装图标和浏览器 action 图标路径。 */
+export const extensionIconPaths = {
+  16: 'icons/icon16.png',
+  48: 'icons/icon48.png',
+  128: 'icons/icon128.png',
+} as const;
+
 /** 开发态扩展页既要连本地 HMR，也不能拦住真实远端请求。 */
 export const appendDevExtensionConnectSrc = (extensionPagesCsp: string): string => {
   const directives = extensionPagesCsp
@@ -48,6 +55,20 @@ export default defineConfig({
     disabled: true,
   },
   hooks: {
+    'build:publicAssets': (_wxt, files) => {
+      const existingAssetPaths = new Set(files.map((file) => file.relativeDest));
+
+      for (const iconPath of Object.values(extensionIconPaths)) {
+        if (existingAssetPaths.has(iconPath)) {
+          continue;
+        }
+
+        files.push({
+          absoluteSrc: path.resolve(__dirname, iconPath),
+          relativeDest: iconPath,
+        });
+      }
+    },
     'vite:devServer:extendConfig': (config) => {
       config.server ??= {};
       config.server.watch = {
@@ -87,6 +108,7 @@ export default defineConfig({
     },
   }),
   manifest: {
+    icons: extensionIconPaths,
     permissions: [
       'storage',
       'sidePanel',
@@ -102,6 +124,7 @@ export default defineConfig({
       'https://r.jina.ai/*',
     ],
     action: {
+      default_icon: extensionIconPaths,
       default_title: 'think-bot-sp',
     },
   },
