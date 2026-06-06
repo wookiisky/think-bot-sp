@@ -56,4 +56,4 @@ export const COMPACT_FLOATING_ACTION_CLASS = 'border border-border/80 p-0.5 tran
 
 /** 尺寸调整角标：用于 resize handle，不等同普通按钮。 */
 export const COMPACT_RESIZE_CORNER_BUTTON_CLASS =
-  'pointer-events-auto h-5 w-5 cursor-se-resize rounded-sm border border-border/80';
+  'pointer-events-auto inline-flex h-5 w-5 cursor-se-resize items-center justify-center rounded-sm border border-border/80 bg-background/90 text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground';

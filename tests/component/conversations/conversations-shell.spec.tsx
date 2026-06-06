@@ -517,13 +517,49 @@ describe('ConversationsShell', () => {
     await user.hover(screen.getByTestId('branch-branch-preview'));
     await user.click(screen.getByRole('button', { name: '打开分支预览' }));
 
-    expect(await screen.findByTestId('branch-preview-dialog')).toBeVisible();
+    const dialog = await screen.findByTestId('branch-preview-dialog');
+    expect(dialog).toBeVisible();
     expect(screen.getByRole('heading', { name: '模型一' })).toBeVisible();
     expect(screen.queryByText('分支内容预览')).toBeNull();
     expect(screen.queryByText('预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。')).toBeNull();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('历史分支')).toBeVisible();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览项')).toBeVisible();
 
+    fireEvent.mouseEnter(dialog);
+    const previewActions = screen.getByTestId('branch-preview-actions');
+    expect(within(previewActions).getByRole('button', { name: '定位到消息顶部' })).toBeVisible();
+    expect(within(previewActions).getByRole('button', { name: '定位到消息底部' })).toBeVisible();
+    expect(within(previewActions).getByRole('button', { name: '复制纯文本' })).toBeVisible();
+    expect(within(previewActions).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
+
+    const initialLeft = Number.parseFloat(dialog.style.left);
+    const initialTop = Number.parseFloat(dialog.style.top);
+    fireEvent.pointerDown(screen.getByTestId('branch-preview-titlebar'), {
+      clientX: 300,
+      clientY: 180,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: 340,
+      clientY: 210,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(Number.parseFloat(dialog.style.left)).toBeGreaterThan(initialLeft);
+    expect(Number.parseFloat(dialog.style.top)).toBeGreaterThan(initialTop);
+
+    fireEvent.pointerDown(screen.getByTestId('branch-preview-titlebar'), {
+      clientX: 340,
+      clientY: 210,
+    });
+    fireEvent.pointerMove(window, {
+      clientX: -1000,
+      clientY: -1000,
+    });
+    fireEvent.pointerUp(window);
+
+    expect(dialog).toHaveStyle({ left: '16px', top: '16px' });
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     fireEvent.click(screen.getByTestId('branch-preview-overlay'));
 
     await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());

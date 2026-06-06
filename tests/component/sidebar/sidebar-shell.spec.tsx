@@ -1446,6 +1446,11 @@ describe('SidebarShell', () => {
 
   it('侧边栏支持分支独立预览层，并可拖拽尺寸后按 Esc 关闭且不丢草稿', async () => {
     const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -1527,6 +1532,26 @@ describe('SidebarShell', () => {
     expect(screen.queryByText('预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。')).toBeNull();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览标题')).toBeVisible();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览内容')).toBeVisible();
+    expect(screen.getByTestId('branch-preview-resize-handle').querySelector('svg')).not.toBeNull();
+
+    fireEvent.mouseEnter(dialog);
+    const previewActions = screen.getByTestId('branch-preview-actions');
+    const previewContent = screen.getByTestId('branch-preview-content');
+    Object.defineProperty(previewContent, 'scrollHeight', {
+      value: 1800,
+      configurable: true,
+    });
+    previewContent.scrollTop = 240;
+    await user.click(within(previewActions).getByRole('button', { name: '定位到消息顶部' }));
+    expect(previewContent.scrollTop).toBe(0);
+    await user.click(within(previewActions).getByRole('button', { name: '定位到消息底部' }));
+    expect(previewContent.scrollTop).toBe(1800);
+    await user.click(within(previewActions).getByRole('button', { name: '复制纯文本' }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('预览标题\n\n预览内容'));
+    expect(screen.getByText('已复制纯文本')).toBeVisible();
+    await user.click(within(previewActions).getByRole('button', { name: '复制 Markdown' }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('# 预览标题\n\n- 预览内容'));
+    expect(screen.getByText('已复制 Markdown')).toBeVisible();
 
     fireEvent.pointerDown(screen.getByTestId('branch-preview-resize-handle'), {
       clientX: 760,
@@ -1539,6 +1564,8 @@ describe('SidebarShell', () => {
     fireEvent.pointerUp(window);
 
     expect(dialog).toHaveStyle({ width: '820px', height: '620px' });
+    fireEvent.click(screen.getByTestId('branch-preview-overlay'));
+    expect(screen.getByTestId('branch-preview-dialog')).toBeVisible();
 
     fireEvent.keyDown(window, { key: 'Escape' });
 

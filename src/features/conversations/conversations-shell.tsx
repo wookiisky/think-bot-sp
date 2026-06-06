@@ -213,6 +213,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }));
   };
 
+  /** 更新当前分支预览所属标签提示。 */
+  const setBranchPreviewNotice = (notice: string) => {
+    if (!branchPreviewTarget) {
+      return;
+    }
+
+    setPromptTabNotice(branchPreviewTarget.promptTabId, notice);
+  };
+
   /** 更新单个标签编辑态。 */
   const setPromptTabEditing = (promptTabId: string, editing: EditingState | null) => {
     setEditingMap((current) => ({
@@ -1597,6 +1606,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           t={t}
           assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
           onClose={() => setBranchPreviewTarget(null)}
+          onNotice={setBranchPreviewNotice}
         />
 
         <ChatInput

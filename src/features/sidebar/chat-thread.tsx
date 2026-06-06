@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   CheckIcon,
   ChevronsDownIcon,
@@ -13,7 +13,6 @@ import {
   Trash2Icon,
   XIcon,
 } from 'lucide-react';
-import removeMarkdown from 'remove-markdown';
 import { Popover as PopoverPrimitive } from 'radix-ui';
 
 import { Button } from '../../components/ui/button';
@@ -23,17 +22,15 @@ import { Tooltip } from '../../components/ui/tooltip';
 import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
 import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
-import { COMPACT_FLOATING_ACTION_CLASS } from '../../ui/compact-layout';
 import { ChatMarkdown } from '../workspace/chat-markdown';
+import { FloatingActionBar } from '../workspace/floating-action-bar';
+import { normalizeMessageCopyContent, type MessageCopyMode } from '../workspace/message-copy';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
 
 type ChatThreadMessage = ChatThreadProps['messages'][number];
 type ChatThreadBranch = ChatThreadMessage['branches'][number];
-type FloatingActionOrientation = 'vertical' | 'horizontal';
 
-const FLOATING_ACTION_GAP_PX = 2;
-const FLOATING_ACTION_BAR_PADDING_PX = 4;
 const USER_MESSAGE_ACTION_BUTTON_SIZE_PX = 24;
 const USER_MESSAGE_ACTION_COUNT = 4;
 const ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX = 20;
@@ -161,176 +158,9 @@ type AssistantBranchRailProps = {
   /** 定位到分支位置。 */
   onScrollToBranch: (...input: [branchId: string, block: 'start' | 'end']) => void;
   /** 复制消息内容。 */
-  onCopyMessage: (...input: [{ content: string; mode: 'plain' | 'markdown' }]) => Promise<void>;
+  onCopyMessage: (...input: [{ content: string; mode: MessageCopyMode }]) => Promise<void>;
   /** 删除分支。 */
   onDeleteBranch: ChatThreadProps['onDeleteBranch'];
-};
-
-type FloatingActionBarProps = {
-  /** 浮层测试标识。 */
-  testId: string;
-  /** 当前是否展示。 */
-  visible: boolean;
-  /** 垂直布局时的按钮数量。 */
-  actionCount: number;
-  /** 单个按钮视觉尺寸。 */
-  buttonSizePx: number;
-  /** 垂直布局容器定位。 */
-  verticalWrapperClassName: string;
-  /** 横向布局容器定位。 */
-  horizontalWrapperClassName: string;
-  /** 纵向布局定位模式。 */
-  verticalPositionMode?: 'owner-center' | 'visible-center';
-  /** 纵向滚动视口引用。 */
-  scrollViewportRef?: RefObject<HTMLElement | null>;
-  /** 按钮内容。 */
-  children: ReactNode;
-};
-
-/** 统一计算纵向按钮条高度，供定位逻辑复用。 */
-const resolveFloatingActionBarHeight = (actionCount: number, buttonSizePx: number) =>
-  actionCount * buttonSizePx + Math.max(actionCount - 1, 0) * FLOATING_ACTION_GAP_PX + FLOATING_ACTION_BAR_PADDING_PX * 2;
-
-/** 根据容器高度选择悬浮按钮方向，避免短消息被竖排按钮撑高。 */
-const resolveFloatingActionOrientation = (
-  containerHeight: number,
-  actionCount: number,
-  buttonSizePx: number,
-): FloatingActionOrientation => {
-  if (containerHeight <= 0) {
-    return 'vertical';
-  }
-  const requiredVerticalHeight =
-    actionCount * buttonSizePx +
-    Math.max(actionCount - 1, 0) * FLOATING_ACTION_GAP_PX +
-    FLOATING_ACTION_BAR_PADDING_PX * 2;
-  return containerHeight < requiredVerticalHeight ? 'horizontal' : 'vertical';
-};
-
-/** 统一悬浮按钮条，按宿主高度在横排和竖排之间切换。 */
-const FloatingActionBar = ({
-  testId,
-  visible,
-  actionCount,
-  buttonSizePx,
-  verticalWrapperClassName,
-  horizontalWrapperClassName,
-  verticalPositionMode = 'owner-center',
-  scrollViewportRef,
-  children,
-}: FloatingActionBarProps) => {
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const [orientation, setOrientation] = useState<FloatingActionOrientation>('vertical');
-  const [visibleCenterOffsetPx, setVisibleCenterOffsetPx] = useState<number | null>(null);
-
-  useEffect(() => {
-    const overlayElement = overlayRef.current;
-    const ownerElement =
-      overlayElement?.parentElement?.closest<HTMLElement>('[data-testid^="chat-message-bubble-"], [data-testid^="branch-"]') ??
-      overlayElement?.parentElement;
-    if (!ownerElement) {
-      return;
-    }
-
-    const updateOrientation = () => {
-      setOrientation(resolveFloatingActionOrientation(ownerElement.clientHeight, actionCount, buttonSizePx));
-    };
-
-    updateOrientation();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', updateOrientation);
-      return () => {
-        window.removeEventListener('resize', updateOrientation);
-      };
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateOrientation();
-    });
-    resizeObserver.observe(ownerElement);
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [actionCount, buttonSizePx]);
-
-  useEffect(() => {
-    const overlayElement = overlayRef.current;
-    const ownerElement =
-      overlayElement?.parentElement?.closest<HTMLElement>('[data-testid^="chat-message-bubble-"], [data-testid^="branch-"]') ??
-      overlayElement?.parentElement;
-    const viewportElement = scrollViewportRef?.current ?? null;
-    if (!overlayElement || !ownerElement || !viewportElement || orientation !== 'vertical' || verticalPositionMode !== 'visible-center') {
-      setVisibleCenterOffsetPx(null);
-      return;
-    }
-
-    const halfActionBarHeight = resolveFloatingActionBarHeight(actionCount, buttonSizePx) / 2;
-    const updateVerticalPosition = () => {
-      const ownerRect = ownerElement.getBoundingClientRect();
-      const viewportRect = viewportElement.getBoundingClientRect();
-      const ownerHeight = ownerRect.height > 0 ? ownerRect.height : Math.max(ownerRect.bottom - ownerRect.top, 0);
-      const visibleTop = Math.max(ownerRect.top, viewportRect.top);
-      const visibleBottom = Math.min(ownerRect.bottom, viewportRect.bottom);
-      const visibleCenterY = visibleBottom > visibleTop ? (visibleTop + visibleBottom) / 2 : ownerRect.top + ownerHeight / 2;
-      const rawOffsetPx = visibleCenterY - ownerRect.top;
-      const maxOffsetPx = Math.max(ownerHeight - halfActionBarHeight, halfActionBarHeight);
-      const nextOffsetPx = Math.min(Math.max(rawOffsetPx, halfActionBarHeight), maxOffsetPx);
-      setVisibleCenterOffsetPx(nextOffsetPx);
-    };
-
-    updateVerticalPosition();
-    viewportElement.addEventListener('scroll', updateVerticalPosition, { passive: true });
-    window.addEventListener('resize', updateVerticalPosition);
-
-    if (typeof ResizeObserver === 'undefined') {
-      return () => {
-        viewportElement.removeEventListener('scroll', updateVerticalPosition);
-        window.removeEventListener('resize', updateVerticalPosition);
-      };
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateVerticalPosition();
-    });
-    resizeObserver.observe(ownerElement);
-    resizeObserver.observe(viewportElement);
-    return () => {
-      viewportElement.removeEventListener('scroll', updateVerticalPosition);
-      window.removeEventListener('resize', updateVerticalPosition);
-      resizeObserver.disconnect();
-    };
-  }, [actionCount, buttonSizePx, orientation, scrollViewportRef, verticalPositionMode]);
-
-  return (
-    <div
-      ref={overlayRef}
-      className={cn(
-        'pointer-events-none absolute z-20',
-        orientation === 'vertical' ? verticalWrapperClassName : horizontalWrapperClassName,
-      )}
-    >
-      <div
-        data-testid={testId}
-        data-action-orientation={orientation}
-        className={cn(
-          COMPACT_FLOATING_ACTION_CLASS,
-          orientation === 'vertical'
-            ? verticalPositionMode === 'visible-center'
-              ? 'absolute right-0 flex -translate-y-1/2 flex-col'
-              : 'sticky top-1/2 flex -translate-y-1/2 flex-col'
-            : 'ml-auto flex flex-row items-center',
-          visible ? 'pointer-events-auto visible opacity-100' : 'pointer-events-none invisible opacity-0',
-        )}
-        style={
-          orientation === 'vertical' && verticalPositionMode === 'visible-center' && visibleCenterOffsetPx !== null
-            ? { top: `${visibleCenterOffsetPx}px`, right: 0 }
-            : undefined
-        }
-      >
-        {children}
-      </div>
-    </div>
-  );
 };
 
 /** 侧边栏聊天消息区。 */
@@ -364,13 +194,8 @@ export const ChatThread = ({
   const handleOpenBranchPreview = onOpenBranchPreview ?? (() => {});
 
   /** 复制指定格式的消息内容。 */
-  const handleCopyMessage = async (input: { content: string; mode: 'plain' | 'markdown' }) => {
-    const nextContent =
-      input.mode === 'plain'
-        ? removeMarkdown(input.content)
-            .replace(/\n{3,}/g, '\n\n')
-            .trim()
-        : input.content;
+  const handleCopyMessage = async (input: { content: string; mode: MessageCopyMode }) => {
+    const nextContent = normalizeMessageCopyContent(input.content, input.mode);
     if (!nextContent.trim()) {
       return;
     }

@@ -257,6 +257,15 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }));
   };
 
+  /** 更新当前分支预览所属标签提示语。 */
+  const setBranchPreviewNotice = (notice: string) => {
+    if (!branchPreviewTarget) {
+      return;
+    }
+
+    setPromptTabNotice(branchPreviewTarget.promptTabId, notice);
+  };
+
   /** 推送页面级 toast。 */
   const pushToast = (tone: SidebarToast['tone'], message: string) => {
     setToast({
@@ -1613,6 +1622,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         t={t}
         assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
         onClose={() => setBranchPreviewTarget(null)}
+        onNotice={setBranchPreviewNotice}
       />
 
       <ChatInput
