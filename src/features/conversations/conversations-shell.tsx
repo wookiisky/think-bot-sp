@@ -8,9 +8,9 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
+import { ToastStack } from '../../components/ui/toast-stack';
 import { Tooltip } from '../../components/ui/tooltip';
 import {
   DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
@@ -72,6 +72,7 @@ import {
   type WorkspaceLocaleCode,
 } from '../workspace/workspace-copy';
 import { normalizeExtractionText } from '../workspace/extraction-text';
+import type { WorkspaceToastPayload } from '../workspace/workspace-toast';
 import type { ConversationsApi } from './conversations-api';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
 import { sidebarPortEventSchema } from '../../services/runtime-messaging/sidebar-contract';
@@ -113,6 +114,14 @@ type BranchPreviewTarget = {
   /** 目标分支 id。 */
   branchId: string;
 };
+type ConversationsToast = {
+  /** toast 稳定 id。 */
+  id: number;
+  /** 反馈语气。 */
+  tone: 'success' | 'error';
+  /** 反馈正文。 */
+  message: string;
+};
 
 /** 左侧历史栏最小宽度。 */
 const MIN_SIDEBAR_WIDTH = 280;
@@ -149,8 +158,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [composerMap, setComposerMap] = useState<Record<string, ComposerState>>({});
   const [editingMap, setEditingMap] = useState<Record<string, EditingState | null>>({});
   const [includePageContent, setIncludePageContent] = useState(true);
-  const [pageNotice, setPageNotice] = useState('');
-  const [chatNotices, setChatNotices] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<ConversationsToast | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
   const [extractionTextFontSize, setExtractionTextFontSize] = useState<ExtractionTextFontSize>(DEFAULT_EXTRACTION_TEXT_FONT_SIZE);
@@ -171,7 +179,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? null;
   const activeComposer = activePromptTab ? composerMap[activePromptTab.id] ?? null : null;
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
-  const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
@@ -205,21 +212,18 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }));
   };
 
-  /** 更新单个标签提示。 */
-  const setPromptTabNotice = (promptTabId: string, notice: string) => {
-    setChatNotices((current) => ({
-      ...current,
-      [promptTabId]: notice,
-    }));
+  /** 推送页面级 toast。 */
+  const pushToast = (tone: ConversationsToast['tone'], message: string) => {
+    setToast({
+      id: Date.now(),
+      tone,
+      message,
+    });
   };
 
-  /** 更新当前分支预览所属标签提示。 */
-  const setBranchPreviewNotice = (notice: string) => {
-    if (!branchPreviewTarget) {
-      return;
-    }
-
-    setPromptTabNotice(branchPreviewTarget.promptTabId, notice);
+  /** 推送工作台一次性 toast。 */
+  const pushWorkspaceToast = (nextToast: WorkspaceToastPayload) => {
+    pushToast(nextToast.tone, nextToast.message);
   };
 
   /** 更新单个标签编辑态。 */
@@ -276,7 +280,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     setActiveSessionIds(buildActiveSessionIdMap(nextPromptTabs, input.detail.loadingStates));
     setComposerMap(buildComposerStateMap(nextPromptTabs));
     setEditingMap(Object.fromEntries(nextPromptTabs.map((promptTab) => [promptTab.id, null])));
-    setChatNotices({});
     setActivePromptTabId(input.activePromptTabId);
     setIncludePageContent(input.detail.page?.includePageContent ?? input.defaultIncludePageContent);
     setTitleDraft(input.detail.page?.title ?? '');
@@ -287,6 +290,20 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setBranchPreviewTarget(null);
     }
   }, [branchPreview, branchPreviewTarget]);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 4000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (!sidebarResizeState) {
@@ -731,15 +748,15 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   /** 复制提取内容。 */
   const handleCopyExtraction = async () => {
     if (!normalizedExtractionContent) {
-      setPageNotice(t('conversations.notice.emptyExtraction'));
+      pushToast('error', t('conversations.notice.emptyExtraction'));
       return;
     }
 
     try {
       await navigator.clipboard.writeText(normalizedExtractionContent);
-      setPageNotice(t('conversations.notice.copySuccess'));
+      pushToast('success', t('conversations.notice.copySuccess'));
     } catch {
-      setPageNotice(t('conversations.notice.copyFailed'));
+      pushToast('error', t('conversations.notice.copyFailed'));
     }
   };
 
@@ -752,7 +769,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     try {
       await api.openSourcePage(detail.page.url);
     } catch {
-      setPageNotice(t('conversations.notice.openSourceFailed'));
+      pushToast('error', t('conversations.notice.openSourceFailed'));
     }
   };
 
@@ -783,7 +800,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     } catch {
       setTitleDraft(detail.page.title);
       setIsTitleEditing(false);
-      setPageNotice(t('conversations.notice.titleSaveFailed'));
+      pushToast('error', t('conversations.notice.titleSaveFailed'));
     }
   };
 
@@ -796,7 +813,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       return;
     }
 
-    setPromptTabNotice(promptTabId, '');
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
     const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
     setPromptTabMessages(promptTabId, (current) => [
@@ -876,7 +892,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       });
     } catch {
       setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
-      setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
+      pushToast('error', t('workspace.notice.sendFailed'));
     }
   };
 
@@ -962,7 +978,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.editFailed'));
+      pushToast('error', t('workspace.notice.editFailed'));
     }
   };
 
@@ -973,7 +989,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
 
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.retryUserMessage({
         pageUrl: selectedPage.url,
         promptTabId,
@@ -1021,7 +1036,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+      pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
@@ -1032,7 +1047,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
 
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.retryMessage({
         pageUrl: selectedPage.url,
         promptTabId,
@@ -1071,7 +1085,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+      pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
@@ -1082,7 +1096,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
 
     try {
-      setPromptTabNotice(promptTabId, '');
       await api.selectAssistantBranch({
         pageUrl: selectedPage.url,
         promptTabId,
@@ -1100,7 +1113,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.selectPrimaryBranchFailed'));
+      pushToast('error', t('workspace.notice.selectPrimaryBranchFailed'));
     }
   };
 
@@ -1111,7 +1124,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     }
 
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.expandMessageBranches({
         pageUrl: selectedPage.url,
         promptTabId,
@@ -1130,7 +1142,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.expandBranchFailed'));
+      pushToast('error', t('workspace.notice.expandBranchFailed'));
     }
   };
 
@@ -1160,7 +1172,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         branchId,
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.stopBranchFailed'));
+      pushToast('error', t('workspace.notice.stopBranchFailed'));
     }
   };
 
@@ -1188,7 +1200,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.deleteBranchFailed'));
+      pushToast('error', t('workspace.notice.deleteBranchFailed'));
     }
   };
 
@@ -1213,9 +1225,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         [promptTabId]: null,
       }));
       setPromptTabEditing(promptTabId, null);
-      setPromptTabNotice(promptTabId, t('workspace.notice.clearTabSuccess'));
+      pushToast('success', t('workspace.notice.clearTabSuccess'));
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.clearTabFailed'));
+      pushToast('error', t('workspace.notice.clearTabFailed'));
     }
   };
 
@@ -1228,7 +1240,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     const messages = messageMap[promptTabId] ?? [];
     const hasExportableMessage = messages.some((message) => message.content.trim().length > 0);
     if (!hasExportableMessage) {
-      setPromptTabNotice(promptTabId, t('workspace.notice.emptyExport'));
+      pushToast('error', t('workspace.notice.emptyExport'));
       return;
     }
 
@@ -1243,7 +1255,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         mimeType: exported.payload.mimeType,
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.exportFailed'));
+      pushToast('error', t('workspace.notice.exportFailed'));
     }
   };
 
@@ -1268,13 +1280,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           setComposerMap({});
         }
       }
-      setPageNotice(
+      pushToast(
+        'success',
         response.payload.deleteMode === 'soft'
           ? t('conversations.notice.pageDeletedSoft')
           : t('conversations.notice.pageDeletedHard'),
       );
     } catch {
-      setPageNotice(t('conversations.notice.pageDeleteFailed'));
+      pushToast('error', t('conversations.notice.pageDeleteFailed'));
     }
   };
 
@@ -1285,6 +1298,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       data-resolved-theme={themeRootAttributes.dataResolvedTheme}
       className={cn('flex', COMPACT_WORKBENCH_CLASS)}
     >
+      <ToastStack toasts={toast ? [toast] : []} />
       <aside
         data-testid="conversations-sidebar"
         className="flex shrink-0 flex-col border-r border-border/70"
@@ -1447,7 +1461,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                   </Tooltip>
                 </div>
               </div>
-              {pageNotice ? <Badge variant="outline">{pageNotice}</Badge> : null}
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">
@@ -1551,12 +1564,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           </div>
         </section>
 
-        {activeChatNotice ? (
-          <div className="shrink-0 border-b border-border px-2 py-1">
-            <Badge variant="outline">{activeChatNotice}</Badge>
-          </div>
-        ) : null}
-
         <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {promptTabs.map((promptTab) => (
             <div
@@ -1594,7 +1601,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
                 onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
                 onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
-                onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
+                onToast={pushWorkspaceToast}
               />
             </div>
           ))}
@@ -1606,7 +1613,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           t={t}
           assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
           onClose={() => setBranchPreviewTarget(null)}
-          onNotice={setBranchPreviewNotice}
+          onToast={pushWorkspaceToast}
         />
 
         <ChatInput

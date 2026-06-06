@@ -27,6 +27,7 @@ import { FloatingActionBar } from '../workspace/floating-action-bar';
 import { normalizeMessageCopyContent, type MessageCopyMode } from '../workspace/message-copy';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
+import type { WorkspaceToastPayload } from '../workspace/workspace-toast';
 
 type ChatThreadMessage = ChatThreadProps['messages'][number];
 type ChatThreadBranch = ChatThreadMessage['branches'][number];
@@ -112,8 +113,8 @@ type ChatThreadProps = {
   onDeleteBranch: (...input: [messageId: string, branchId: string]) => Promise<void>;
   /** 打开单个分支的预览层。 */
   onOpenBranchPreview?: (...input: [messageId: string, branchId: string]) => void;
-  /** 更新当前工作台提示。 */
-  onNotice: (...input: [notice: string]) => void;
+  /** 推送当前工作台 toast。 */
+  onToast: (...input: [toast: WorkspaceToastPayload]) => void;
 };
 
 type AssistantBranchRailProps = {
@@ -184,7 +185,7 @@ export const ChatThread = ({
   onStopBranch,
   onDeleteBranch,
   onOpenBranchPreview,
-  onNotice,
+  onToast,
 }: ChatThreadProps) => {
   const branchRefs = useRef<Record<string, HTMLElement | null>>({});
   const threadViewportRef = useRef<HTMLElement | null>(null);
@@ -202,9 +203,15 @@ export const ChatThread = ({
 
     try {
       await navigator.clipboard.writeText(nextContent);
-      onNotice(input.mode === 'plain' ? t('workspace.notice.copyPlainSuccess') : t('workspace.notice.copyMarkdownSuccess'));
+      onToast({
+        tone: 'success',
+        message: input.mode === 'plain' ? t('workspace.notice.copyPlainSuccess') : t('workspace.notice.copyMarkdownSuccess'),
+      });
     } catch {
-      onNotice(input.mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'));
+      onToast({
+        tone: 'error',
+        message: input.mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'),
+      });
     }
   };
 

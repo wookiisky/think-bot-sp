@@ -344,6 +344,7 @@ describe('ConversationsShell', () => {
     await user.click(screen.getByLabelText('删除页面 页面 A 新标题'));
     await user.click(within(screen.getByTestId('delete-page-confirm-https://example.com/article-a')).getByRole('button', { name: '删除页面' }));
     await waitFor(() => expect(api.deletePage).toHaveBeenCalledWith('https://example.com/article-a'));
+    expect(within(screen.getByRole('alert')).getByText('页面已软删并写入 tombstone')).toBeVisible();
   });
 
   it('提取区显示和复制都会统一删除空行，标签下划线与 tab 等宽', async () => {
@@ -443,10 +444,17 @@ describe('ConversationsShell', () => {
 
     await user.click(screen.getByRole('button', { name: '复制提取内容' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('## 正文标题\n- 要点一\n结论'));
+    expect(within(screen.getByRole('alert')).getByText('已复制提取内容')).toBeVisible();
   });
 
   it('历史页支持分支独立预览层，并可通过遮罩关闭且不丢当前草稿', async () => {
     const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
     const api = createConversationsApi({
       getPageDetail: vi.fn().mockResolvedValue({
         type: 'GET_PAGE_DETAIL_SUCCESS',
@@ -531,6 +539,9 @@ describe('ConversationsShell', () => {
     expect(within(previewActions).getByRole('button', { name: '定位到消息底部' })).toBeVisible();
     expect(within(previewActions).getByRole('button', { name: '复制纯文本' })).toBeVisible();
     expect(within(previewActions).getByRole('button', { name: '复制 Markdown' })).toBeVisible();
+    await user.click(within(previewActions).getByRole('button', { name: '复制纯文本' }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('历史分支\n\n预览项'));
+    expect(within(screen.getByRole('alert')).getByText('已复制纯文本')).toBeVisible();
 
     const initialLeft = Number.parseFloat(dialog.style.left);
     const initialTop = Number.parseFloat(dialog.style.top);

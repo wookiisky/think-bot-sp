@@ -372,7 +372,7 @@ describe('SidebarShell', () => {
     await user.type(await screen.findByLabelText('聊天输入'), '保留这段草稿');
     await user.click(screen.getByRole('button', { name: '复制提取内容' }));
     expect(writeText).toHaveBeenCalledWith('提取内容');
-    expect(screen.getByText('已复制提取内容')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('已复制提取内容')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: '打开历史页' }));
     await user.click(screen.getByRole('button', { name: '打开设置页' }));
@@ -389,7 +389,7 @@ describe('SidebarShell', () => {
     });
     expect(screen.getAllByText('还没有聊天记录').length).toBeGreaterThan(0);
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留这段草稿');
-    expect(screen.getByText('已清空当前页面数据')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('已清空当前页面数据')).toBeVisible();
   });
 
   it('优先恢复页面级 includePageContent，而不是只使用设置默认值', async () => {
@@ -1001,7 +1001,7 @@ describe('SidebarShell', () => {
     });
 
     await waitFor(() => expect(within(screen.getByRole('tabpanel', { name: /总结/ })).queryByText('总结')).toBeNull());
-    expect(screen.getByText('发送失败，请重试')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('发送失败，请重试')).toBeVisible();
   });
 
   it('清空当前标签只影响当前 promptTab，会保留提取内容和其他标签历史', async () => {
@@ -1172,7 +1172,7 @@ describe('SidebarShell', () => {
       promptTabId: 'quick-summary',
     });
     expect(screen.getByTestId('sidebar-extraction-panel')).toHaveTextContent('提取内容');
-    expect(screen.getByText('已清空当前标签聊天记录')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('已清空当前标签聊天记录')).toBeVisible();
     expect(screen.getByText('还没有聊天记录')).toBeVisible();
 
     await user.click(screen.getByRole('tab', { name: /聊天/ }));
@@ -1548,10 +1548,10 @@ describe('SidebarShell', () => {
     expect(previewContent.scrollTop).toBe(1800);
     await user.click(within(previewActions).getByRole('button', { name: '复制纯文本' }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('预览标题\n\n预览内容'));
-    expect(screen.getByText('已复制纯文本')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('已复制纯文本')).toBeVisible();
     await user.click(within(previewActions).getByRole('button', { name: '复制 Markdown' }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith('# 预览标题\n\n- 预览内容'));
-    expect(screen.getByText('已复制 Markdown')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('已复制 Markdown')).toBeVisible();
 
     fireEvent.pointerDown(screen.getByTestId('branch-preview-resize-handle'), {
       clientX: 760,
@@ -1662,7 +1662,7 @@ describe('SidebarShell', () => {
     await user.click(await screen.findByRole('button', { name: '继续新增分支' }));
     await user.click(await screen.findByRole('button', { name: '主模型' }));
 
-    await waitFor(() => expect(screen.getByText('新增分支失败，请重试')).toBeVisible());
+    await waitFor(() => expect(within(screen.getByRole('alert')).getByText('新增分支失败，请重试')).toBeVisible());
     expect(screen.queryByTestId('branch-branch-1')).toBeNull();
   });
 

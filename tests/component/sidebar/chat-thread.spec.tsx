@@ -78,7 +78,7 @@ const createBaseProps = () => ({
   onStopBranch: vi.fn(),
   onDeleteBranch: vi.fn(),
   onOpenBranchPreview: vi.fn(),
-  onNotice: vi.fn(),
+  onToast: vi.fn(),
 });
 
 afterEach(() => {

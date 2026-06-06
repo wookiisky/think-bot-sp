@@ -11,7 +11,6 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { ToastStack } from '../../components/ui/toast-stack';
@@ -71,6 +70,7 @@ import {
 import { WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS } from '../workspace/workspace-resize-handle-style';
 import { normalizeExtractionText } from '../workspace/extraction-text';
 import { WorkspaceStatusGlyph } from '../workspace/workspace-status';
+import type { WorkspaceToastPayload } from '../workspace/workspace-toast';
 import { downloadTextFile } from '../../shared/download-file';
 import { ChatInput } from './chat-input';
 import { ChatThread } from './chat-thread';
@@ -149,7 +149,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [models, setModels] = useState<ModelOption[]>([]);
   const [includePageContent, setIncludePageContent] = useState(true);
   const [toast, setToast] = useState<SidebarToast | null>(null);
-  const [chatNotices, setChatNotices] = useState<Record<string, string>>({});
   const [editingMap, setEditingMap] = useState<Record<string, EditingState | null>>({
     [CHAT_PROMPT_TAB_ID]: null,
   });
@@ -172,7 +171,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       selectedModelId: '',
     };
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
-  const activeChatNotice = activePromptTab ? chatNotices[activePromptTab.id] ?? '' : '';
   const normalizedExtractionContent = normalizeExtractionText(content);
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
@@ -249,23 +247,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }));
   };
 
-  /** 更新单个标签提示语。 */
-  const setPromptTabNotice = (promptTabId: string, notice: string) => {
-    setChatNotices((current) => ({
-      ...current,
-      [promptTabId]: notice,
-    }));
-  };
-
-  /** 更新当前分支预览所属标签提示语。 */
-  const setBranchPreviewNotice = (notice: string) => {
-    if (!branchPreviewTarget) {
-      return;
-    }
-
-    setPromptTabNotice(branchPreviewTarget.promptTabId, notice);
-  };
-
   /** 推送页面级 toast。 */
   const pushToast = (tone: SidebarToast['tone'], message: string) => {
     setToast({
@@ -273,6 +254,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       tone,
       message,
     });
+  };
+
+  /** 推送工作台一次性 toast。 */
+  const pushWorkspaceToast = (nextToast: WorkspaceToastPayload) => {
+    pushToast(nextToast.tone, nextToast.message);
   };
 
   /** 更新单个标签的编辑态。 */
@@ -334,7 +320,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       setMessageMap(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, []])));
       setRestoreMessageIds(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, null])));
       setActiveSessionIds(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, null])));
-      setChatNotices({});
       setEditingMap(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, null])));
       setPromptTabs((current) =>
         current.map((promptTab) => ({
@@ -518,7 +503,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               setPromptTabMessages(promptTabId, (current) =>
                 current.filter((message) => message.id !== payload.messageId && message.id !== payload.userMessageId),
               );
-              setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
+              pushToast('error', t('workspace.notice.sendFailed'));
               return;
             }
             if (typeof payload.messageId === 'string') {
@@ -754,7 +739,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           }),
         );
         setActiveSessionIds(nextActiveSessionIds);
-        setChatNotices({});
         setEditingMap(Object.fromEntries(nextPromptTabs.map((promptTab) => [promptTab.id, null])));
         setActivePromptTabId(pickInitialPromptTabId(nextPromptTabs, bootstrap.loadingStates));
         setIncludePageContent(bootstrap.page?.includePageContent ?? configResponse.config.basic.includePageContentByDefault);
@@ -869,7 +853,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       rollbackOnFailure?: boolean;
     },
   ) => {
-    setPromptTabNotice(promptTabId, '');
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
     const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
     setPromptTabMessages(promptTabId, (current) => [
@@ -962,7 +945,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       });
     } catch {
       setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
-      setPromptTabNotice(promptTabId, t('workspace.notice.sendFailed'));
+      pushToast('error', t('workspace.notice.sendFailed'));
     }
   };
 
@@ -981,7 +964,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         await runExtraction(method, 'prompt_tab_click');
       } catch {
         setState('error');
-        setPromptTabNotice(promptTab.id, t('sidebar.notice.reExtractFailed'));
+        pushToast('error', t('sidebar.notice.reExtractFailed'));
         return;
       }
     }
@@ -999,7 +982,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   /** 编辑用户消息后，裁剪其后的结果并立刻重发。 */
   const handleEditUserMessage = async (promptTabId: string, messageId: string, text: string) => {
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.editUserMessage({
         tabId,
         pageUrl,
@@ -1057,14 +1039,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.editFailed'));
+      pushToast('error', t('workspace.notice.editFailed'));
     }
   };
 
   /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
   const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.retryUserMessage({
         tabId,
         pageUrl,
@@ -1113,14 +1094,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+      pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
   /** 重试目标助手分支。 */
   const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.retryMessage({
         tabId,
         pageUrl,
@@ -1162,14 +1142,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           );
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.retryFailed'));
+      pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
   /** 切换当前轮继续对话使用的主分支。 */
   const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
     try {
-      setPromptTabNotice(promptTabId, '');
       await api.selectAssistantBranch({
         tabId,
         pageUrl,
@@ -1188,7 +1167,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.selectPrimaryBranchFailed'));
+      pushToast('error', t('workspace.notice.selectPrimaryBranchFailed'));
     }
   };
 
@@ -1224,7 +1203,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         [promptTabId]: null,
       }));
       setPromptTabEditing(promptTabId, null);
-      setPromptTabNotice(promptTabId, t('workspace.notice.clearTabSuccess'));
+      pushToast('success', t('workspace.notice.clearTabSuccess'));
       setPromptTabs((current) =>
         current.map((promptTab) =>
           promptTab.id === promptTabId
@@ -1244,7 +1223,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.clearTabFailed'));
+      pushToast('error', t('workspace.notice.clearTabFailed'));
     }
   };
 
@@ -1253,12 +1232,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     const messages = messageMap[promptTabId] ?? [];
     const hasExportableMessage = messages.some((message) => message.content.trim().length > 0);
     if (!hasExportableMessage) {
-      setPromptTabNotice(promptTabId, t('workspace.notice.emptyExport'));
+      pushToast('error', t('workspace.notice.emptyExport'));
       return;
     }
 
     try {
-      setPromptTabNotice(promptTabId, '');
       const exported = await api.exportConversation({
         tabId,
         pageUrl,
@@ -1270,14 +1248,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         mimeType: exported.payload.mimeType,
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.exportFailed'));
+      pushToast('error', t('workspace.notice.exportFailed'));
     }
   };
 
   /** 针对既有助手消息继续新增分支。 */
   const handleExpandBranches = async (promptTabId: string, messageId: string, modelId: string) => {
     try {
-      setPromptTabNotice(promptTabId, '');
       const response = await api.expandMessageBranches({
         tabId,
         pageUrl,
@@ -1297,7 +1274,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.expandBranchFailed'));
+      pushToast('error', t('workspace.notice.expandBranchFailed'));
     }
   };
 
@@ -1311,7 +1288,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         branchId,
       });
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.stopBranchFailed'));
+      pushToast('error', t('workspace.notice.stopBranchFailed'));
     }
   };
 
@@ -1342,7 +1319,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }),
       );
     } catch {
-      setPromptTabNotice(promptTabId, t('workspace.notice.deleteBranchFailed'));
+      pushToast('error', t('workspace.notice.deleteBranchFailed'));
     }
   };
 
@@ -1565,12 +1542,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         </div>
       </section>
 
-      {activeChatNotice ? (
-        <div className="shrink-0 border-b border-border px-2 py-1">
-          <Badge variant="outline">{activeChatNotice}</Badge>
-        </div>
-      ) : null}
-
       <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
         {promptTabs.map((promptTab) => (
           <div
@@ -1610,7 +1581,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               onStopBranch={(_messageId, branchId) => handleStopBranch(promptTab.id, branchId)}
               onDeleteBranch={(messageId, branchId) => handleDeleteBranch(promptTab.id, messageId, branchId)}
               onOpenBranchPreview={(messageId, branchId) => setBranchPreviewTarget({ promptTabId: promptTab.id, messageId, branchId })}
-              onNotice={(notice) => setPromptTabNotice(promptTab.id, notice)}
+              onToast={pushWorkspaceToast}
             />
           </div>
         ))}
@@ -1622,7 +1593,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         t={t}
         assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
         onClose={() => setBranchPreviewTarget(null)}
-        onNotice={setBranchPreviewNotice}
+        onToast={pushWorkspaceToast}
       />
 
       <ChatInput

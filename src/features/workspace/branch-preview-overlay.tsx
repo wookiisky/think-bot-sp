@@ -11,6 +11,7 @@ import { FloatingActionBar } from './floating-action-bar';
 import { normalizeMessageCopyContent, type MessageCopyMode } from './message-copy';
 import type { BranchPreviewDetail } from './workspace-state';
 import type { WorkspaceTranslator } from './workspace-copy';
+import type { WorkspaceToastPayload } from './workspace-toast';
 
 type BranchPreviewOverlayProps = {
   /** 当前是否打开。 */
@@ -23,8 +24,8 @@ type BranchPreviewOverlayProps = {
   assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
   /** 关闭预览层。 */
   onClose: () => void;
-  /** 更新当前工作台提示。 */
-  onNotice: (...input: [notice: string]) => void;
+  /** 推送当前工作台 toast。 */
+  onToast: (...input: [toast: WorkspaceToastPayload]) => void;
 };
 
 type PreviewSize = {
@@ -132,7 +133,7 @@ export const BranchPreviewOverlay = ({
   t,
   assistantMarkdownDisplayConfig,
   onClose,
-  onNotice,
+  onToast,
 }: BranchPreviewOverlayProps) => {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -195,9 +196,15 @@ export const BranchPreviewOverlay = ({
 
     try {
       await navigator.clipboard.writeText(nextContent);
-      onNotice(mode === 'plain' ? t('workspace.notice.copyPlainSuccess') : t('workspace.notice.copyMarkdownSuccess'));
+      onToast({
+        tone: 'success',
+        message: mode === 'plain' ? t('workspace.notice.copyPlainSuccess') : t('workspace.notice.copyMarkdownSuccess'),
+      });
     } catch {
-      onNotice(mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'));
+      onToast({
+        tone: 'error',
+        message: mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'),
+      });
     }
   };
 
