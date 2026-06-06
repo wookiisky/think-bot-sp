@@ -115,7 +115,7 @@ describe('LanguageModelsPanel', () => {
     await user.click(screen.getByRole('button', { name: '新增模型' }));
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        models: expect.arrayContaining([expect.objectContaining({ name: '新模型' })]),
+        models: expect.arrayContaining([expect.objectContaining({ name: '新模型', enabled: true })]),
       }),
     );
     expect(onSelectModel).toHaveBeenLastCalledWith(expect.stringMatching(/^model-/));
@@ -123,7 +123,7 @@ describe('LanguageModelsPanel', () => {
     await user.click(within(primaryItem).getByRole('button', { name: '复制模型' }));
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        models: expect.arrayContaining([expect.objectContaining({ name: '主模型 副本' })]),
+        models: expect.arrayContaining([expect.objectContaining({ name: '主模型 副本', enabled: true })]),
       }),
     );
 

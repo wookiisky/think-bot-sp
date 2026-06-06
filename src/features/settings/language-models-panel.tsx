@@ -227,7 +227,7 @@ export const LanguageModelsPanel = ({
     id: nextModelId(),
     name: '新模型',
     provider: 'openai-compatible',
-    enabled: false,
+    enabled: true,
     model: '',
     baseUrl: getDefaultModelBaseUrl('openai-compatible'),
     apiKey: '',
@@ -285,7 +285,7 @@ export const LanguageModelsPanel = ({
       ...sourceModel,
       id: nextModelId(),
       name: `${sourceModel.name} 副本`,
-      enabled: false,
+      enabled: true,
       order: config.models.length,
       deletedAt: null,
     };
