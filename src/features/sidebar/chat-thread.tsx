@@ -293,7 +293,7 @@ export const ChatThread = ({
                   <ChatMarkdown content={visibleContent} />
                 )}
 
-                {!hasAssistantBranches && message.status === 'error' ? (
+                {!hasAssistantBranches && message.status === 'error' && shouldShowErrorDetail(message.content, message.errorMessage) ? (
                   <p className="mt-1 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p>
                 ) : null}
                 {!hasAssistantBranches && message.status === 'cancelled' ? (
@@ -686,7 +686,7 @@ const AssistantBranchRail = ({
 
                 <div
                   data-testid={`branch-header-${branch.id}`}
-                  className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"
+                  className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"
                 >
                   <span className="min-w-0 truncate">{branch.modelLabel}</span>
                   <Tooltip content={t('workspace.openBranchPreview')}>
@@ -710,7 +710,9 @@ const AssistantBranchRail = ({
                   <ChatMarkdown content={branch.content} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
                 </div>
               </div>
-              {branch.status === 'error' ? <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p> : null}
+              {branch.status === 'error' && shouldShowErrorDetail(branch.content, branch.errorMessage) ? (
+                <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p>
+              ) : null}
               {branch.status === 'cancelled' ? (
                 <p className="mt-1 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
               ) : null}
@@ -732,6 +734,18 @@ const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status
     status === 'error' && 'text-destructive',
     status === 'cancelled' && 'text-muted-foreground',
   );
+
+/** 错误详情未作为正文展示时，才补充底部错误说明。 */
+const shouldShowErrorDetail = (content: string, errorMessage: string | null): boolean => {
+  const trimmedContent = content.trim();
+  if (!trimmedContent) {
+    return true;
+  }
+  if (!errorMessage) {
+    return false;
+  }
+  return trimmedContent !== errorMessage.trim();
+};
 
 /** 统一助手消息展示分支，兼容旧消息只保留主回答的情况。 */
 const resolveDisplayBranches = (message: ChatThreadMessage, primaryBranchLabel: string): ChatThreadBranch[] => {

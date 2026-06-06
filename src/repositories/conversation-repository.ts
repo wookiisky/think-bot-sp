@@ -741,7 +741,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       /** 助手消息 id。 */
       messageId: string;
       /** 失败原因。 */
-      errorMessage: string;
+      errorMessage: string | null;
       /** 最终失败状态。 */
       status: 'error' | 'cancelled';
       /** 当前时间。 */
@@ -978,7 +978,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       /** 分支稳定 id。 */
       branchId: string;
       /** 错误消息。 */
-      errorMessage: string;
+      errorMessage: string | null;
       /** 最终状态。 */
       status: 'error' | 'cancelled';
       /** 当前时间。 */

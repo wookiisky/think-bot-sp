@@ -403,7 +403,7 @@ describe('chat-dispatch-service session lifecycle', () => {
           id: 'assistant-2',
           content: '第一段',
           status: 'cancelled',
-          errorMessage: 'stream cancelled',
+          errorMessage: null,
         }),
       ],
       lastAssistantState: {
@@ -535,7 +535,7 @@ describe('chat-dispatch-service session lifecycle', () => {
           id: 'assistant-3',
           content: '第一段',
           status: 'error',
-          errorMessage: 'provider timeout',
+          errorMessage: null,
         }),
       ],
       lastAssistantState: {
@@ -659,7 +659,7 @@ describe('chat-dispatch-service session lifecycle', () => {
           expect.objectContaining({
             id: 'assistant-raw-error',
             status: 'error',
-            errorMessage: '{"error":{"message":"raw provider response"}}',
+            errorMessage: null,
           }),
         ]),
       }),
@@ -1030,7 +1030,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         expect.objectContaining({
           id: 'assistant-5',
           status: 'error',
-          errorMessage: 'save loading failed',
+          errorMessage: null,
         }),
       ],
       lastAssistantState: {
@@ -1497,7 +1497,7 @@ describe('chat-dispatch-service session lifecycle', () => {
                 modelLabel: '分支模型B',
                 content: '分支B前缀',
                 status: 'error',
-                errorMessage: 'branch provider timeout',
+                errorMessage: null,
               }),
             ]),
           }),

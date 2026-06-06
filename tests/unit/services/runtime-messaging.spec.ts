@@ -1475,4 +1475,85 @@ describe('runtime-messaging', () => {
     firstDisconnectListeners[0]?.();
     secondDisconnectListeners[0]?.();
   });
+
+  it('port bus 会在订阅晚到时补发最近失败事件，并在新会话开始后清理旧失败', () => {
+    const bus = createPortBus();
+    const scope = {
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+    };
+
+    bus.publishToPromptTab(scope, {
+      type: 'CHAT_STREAM_FAILED',
+      normalizedUrl: scope.normalizedUrl,
+      promptTabId: scope.promptTabId,
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+    });
+
+    const firstPort = {
+      name: 'sidepanel',
+      sender: {
+        documentId: 'doc-failure-1',
+      },
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onDisconnect: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+      onMessage: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+    };
+    const firstPortId = bus.register(firstPort as never);
+
+    bus.bindPromptTab(firstPortId, scope);
+
+    expect(firstPort.postMessage).toHaveBeenCalledWith({
+      type: 'CHAT_STREAM_FAILED',
+      normalizedUrl: scope.normalizedUrl,
+      promptTabId: scope.promptTabId,
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+    });
+
+    bus.publishToPromptTab(scope, {
+      type: 'CHAT_STREAM_STARTED',
+      normalizedUrl: scope.normalizedUrl,
+      promptTabId: scope.promptTabId,
+      sessionId: 'session-2',
+      messageId: 'assistant-2',
+      branchId: 'branch-2',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+    });
+
+    const secondPort = {
+      name: 'sidepanel',
+      sender: {
+        documentId: 'doc-failure-2',
+      },
+      postMessage: vi.fn(),
+      disconnect: vi.fn(),
+      onDisconnect: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+      onMessage: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+    };
+    const secondPortId = bus.register(secondPort as never);
+
+    bus.bindPromptTab(secondPortId, scope);
+
+    expect(secondPort.postMessage).not.toHaveBeenCalled();
+  });
 });

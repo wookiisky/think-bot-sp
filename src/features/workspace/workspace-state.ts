@@ -205,6 +205,50 @@ export const appendAssistantBranches = (
     });
   });
 
+/** 创建或更新本地助手错误回复。 */
+export const upsertAssistantFailure = (
+  messages: ChatMessageState[],
+  input: {
+    /** 助手消息 id。 */
+    messageId: string;
+    /** 失败分支 id。 */
+    branchId: string;
+    /** 错误展示正文。 */
+    errorMessage: string;
+    /** 分支模型 id。 */
+    modelId: string;
+    /** 分支模型展示名。 */
+    modelLabel: string;
+    /** 是否主分支。 */
+    isPrimary: boolean;
+  },
+) =>
+  upsertAssistantMessage(messages, input.messageId, (message) => {
+    const currentBranch = message?.branches.find((branch) => branch.id === input.branchId) ?? null;
+    const nextBranch: BranchMessageState = {
+      id: input.branchId,
+      modelId: currentBranch?.modelId ?? input.modelId,
+      modelLabel: currentBranch?.modelLabel ?? input.modelLabel,
+      isPrimary: currentBranch?.isPrimary ?? input.isPrimary,
+      content: currentBranch?.content.trim() ? currentBranch.content : input.errorMessage,
+      status: 'error',
+      errorMessage: input.errorMessage,
+    };
+    const nextBranches = currentBranch
+      ? (message?.branches ?? []).map((branch) => (branch.id === input.branchId ? nextBranch : branch))
+      : [...(message?.branches ?? []), nextBranch];
+
+    return {
+      id: input.messageId,
+      role: 'assistant',
+      content: message?.content.trim() ? message.content : input.errorMessage,
+      status: 'error',
+      errorMessage: input.errorMessage,
+      branches: nextBranches,
+      selectedBranchId: message?.selectedBranchId ?? input.branchId,
+    };
+  });
+
 /** 生成本地乐观用户消息内容。 */
 export const toOptimisticUserContent = (text: string, images: string[]) => (text.trim().length > 0 ? text : images.length > 0 ? '[图片]' : '');
 

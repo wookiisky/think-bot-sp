@@ -398,7 +398,7 @@ type ChatDispatchServiceDeps = {
       /** 助手消息 id。 */
       messageId: string;
       /** 错误消息。 */
-      errorMessage: string;
+      errorMessage: string | null;
       /** 最终状态。 */
       status: 'error' | 'cancelled';
       /** 当前时间。 */
@@ -517,7 +517,7 @@ type ChatDispatchServiceDeps = {
       promptTabId: string;
       messageId: string;
       branchId: string;
-      errorMessage: string;
+      errorMessage: string | null;
       status: 'error' | 'cancelled';
       now: number;
     }) => Promise<unknown>;
@@ -1044,7 +1044,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           promptTabId: input.promptTabId,
           messageId: input.messageId,
           branchId: input.branchId,
-          errorMessage,
+          errorMessage: null,
           status,
           now: now(),
         });
@@ -1163,12 +1163,11 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         messageId: assistantMessageId,
       });
       /** setup 失败后，尽力把 assistant 从 loading 收敛到 error。 */
-      const compensateSetupFailure = async (error: unknown) => {
-        const errorMessage = getErrorMessage(error, 'chat dispatch failed');
+      const compensateSetupFailure = async (_error: unknown) => {
         try {
           await deps.conversationRepository.failAssistantMessage({
             ...getLifecycleScope(),
-            errorMessage,
+            errorMessage: null,
             status: 'error',
             now: now(),
           });
@@ -1360,7 +1359,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            errorMessage,
+            errorMessage: null,
             status,
             now: now(),
           });
@@ -1667,7 +1666,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            errorMessage,
+            errorMessage: null,
             status,
             now: now(),
           });
@@ -1969,7 +1968,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            errorMessage,
+            errorMessage: null,
             status,
             now: now(),
           });

@@ -157,6 +157,8 @@ describe('ChatThread', () => {
     expect(screen.queryByText('分支')).toBeNull();
     expect(screen.queryByText('#1')).toBeNull();
     expect(screen.getByTestId('branch-header-branch-1').className).toContain('justify-center');
+    expect(screen.getByTestId('branch-header-branch-1').className).toContain('text-[11px]');
+    expect(screen.getByTestId('branch-header-branch-1').className).not.toContain('text-xs');
     expect(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '打开分支预览' })).toBeVisible();
   });
 

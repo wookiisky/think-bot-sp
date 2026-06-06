@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -53,6 +53,7 @@ import {
   type EditingState,
   type ModelOption,
   type PromptTabDefinition,
+  upsertAssistantFailure,
   syncAssistantMessageState,
   upsertAssistantBranch,
   upsertAssistantMessage,
@@ -136,6 +137,10 @@ const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.ma
 const clampExtractionPanelHeight = (height: number) =>
   Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
 
+/** 把未知错误收敛为当前回复可展示文案。 */
+const getReplyErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message.trim() ? error.message : fallback;
+
 /** conversations 历史工作台。 */
 export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [localeResources, setLocaleResources] = useState<ReturnType<typeof loadWorkspaceLocaleResources>>(loadWorkspaceLocaleResources());
@@ -173,6 +178,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
   const themeRootAttributes = useDocumentTheme(themePreference);
+  const terminalSessionIdsRef = useRef<Set<string>>(new Set());
   const t = createWorkspaceTranslator(localeResources, localeCode);
 
   const selectedPage = pages.find((page) => page.normalizedUrl === selectedPageUrl) ?? detail.page ?? null;
@@ -198,6 +204,19 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       [promptTabId]: update(current[promptTabId] ?? []),
     }));
   };
+
+  /** 标记会话重新进入活动态。 */
+  const markSessionActive = (sessionId: string) => {
+    terminalSessionIdsRef.current.delete(sessionId);
+  };
+
+  /** 标记会话已进入终态，防止较晚的命令响应覆盖最终 UI。 */
+  const markSessionTerminal = (sessionId: string) => {
+    terminalSessionIdsRef.current.add(sessionId);
+  };
+
+  /** 判断命令响应对应的会话是否已经被流式事件置为终态。 */
+  const hasTerminalSession = (sessionId: string) => terminalSessionIdsRef.current.has(sessionId);
 
   /** 更新单个标签草稿。 */
   const setPromptTabComposer = (promptTabId: string, patch: Partial<ComposerState>) => {
@@ -501,6 +520,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       switch (payload.type) {
         case 'CHAT_STREAM_STARTED':
           if (typeof payload.sessionId === 'string') {
+            markSessionActive(payload.sessionId);
             setActiveSessionIds((current) => ({
               ...current,
               [promptTabId]: payload.sessionId,
@@ -582,6 +602,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           }
           return;
         case 'CHAT_STREAM_FINISHED':
+          if (typeof payload.sessionId === 'string') {
+            markSessionTerminal(payload.sessionId);
+          }
           if (typeof payload.messageId === 'string') {
             setPromptTabMessages(promptTabId, (current) =>
               upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -607,24 +630,61 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             );
           }
           return;
-        case 'CHAT_STREAM_FAILED':
+        case 'CHAT_STREAM_FAILED': {
+          setActiveSessionIds((current) => ({
+            ...current,
+            [promptTabId]: null,
+          }));
+          setRestoreMessageIds((current) => ({
+            ...current,
+            [promptTabId]: null,
+          }));
+          if (typeof payload.sessionId === 'string') {
+            markSessionTerminal(payload.sessionId);
+          }
+          const chatFailureMessage = payload.errorMessage;
+          if (typeof payload.messageId === 'string') {
+            setPromptTabMessages(promptTabId, (current) =>
+              upsertAssistantFailure(current, {
+                messageId: payload.messageId as string,
+                branchId: typeof payload.branchId === 'string' ? (payload.branchId as string) : `${payload.messageId as string}:primary`,
+                errorMessage: chatFailureMessage,
+                modelId: '',
+                modelLabel: t('workspace.status.primaryBranch'),
+                isPrimary: true,
+              }),
+            );
+          }
+          return;
+        }
         case 'CHAT_STREAM_CANCELLED':
+          if (typeof payload.sessionId === 'string') {
+            markSessionTerminal(payload.sessionId);
+          }
+          setActiveSessionIds((current) => ({
+            ...current,
+            [promptTabId]: null,
+          }));
+          setRestoreMessageIds((current) => ({
+            ...current,
+            [promptTabId]: null,
+          }));
           if (typeof payload.messageId === 'string') {
             setPromptTabMessages(promptTabId, (current) =>
               upsertAssistantMessage(current, payload.messageId as string, (message) => ({
                 id: payload.messageId as string,
                 role: 'assistant',
                 content: message?.content ?? '',
-                status: payload.type === 'CHAT_STREAM_FAILED' ? 'error' : 'cancelled',
-                errorMessage: payload.type === 'CHAT_STREAM_FAILED' ? payload.errorMessage : t('workspace.status.cancelled'),
+                status: 'cancelled',
+                errorMessage: t('workspace.status.cancelled'),
                 branches:
                   typeof payload.branchId === 'string'
                     ? (message?.branches ?? []).map((branch) =>
                         branch.id === payload.branchId
                           ? {
                               ...branch,
-                              status: payload.type === 'CHAT_STREAM_FAILED' ? 'error' : 'cancelled',
-                              errorMessage: payload.type === 'CHAT_STREAM_FAILED' ? payload.errorMessage : t('workspace.status.cancelled'),
+                              status: 'cancelled',
+                              errorMessage: t('workspace.status.cancelled'),
                             }
                           : branch,
                       )
@@ -673,26 +733,27 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         case 'BRANCH_STREAM_FAILED':
         case 'BRANCH_STREAM_CANCELLED':
           if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string') {
+            const branchFailureMessage =
+              payload.type === 'BRANCH_STREAM_FAILED' ? payload.errorMessage : t('workspace.status.cancelled');
             setPromptTabMessages(promptTabId, (current) =>
-              upsertAssistantBranch(current, payload.messageId, payload.branchId, (branch) => ({
-                id: payload.branchId,
-                modelId: branch?.modelId ?? '',
-                modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
-                isPrimary: branch?.isPrimary ?? false,
-                content: branch?.content ?? '',
-                status:
-                  payload.type === 'BRANCH_STREAM_FINISHED'
-                    ? 'done'
-                    : payload.type === 'BRANCH_STREAM_FAILED'
-                      ? 'error'
-                      : 'cancelled',
-                errorMessage:
-                  payload.type === 'BRANCH_STREAM_FAILED'
-                    ? payload.errorMessage
-                    : payload.type === 'BRANCH_STREAM_CANCELLED'
-                        ? t('workspace.status.cancelled')
-                        : null,
-              })),
+              payload.type === 'BRANCH_STREAM_FAILED'
+                ? upsertAssistantFailure(current, {
+                    messageId: payload.messageId,
+                    branchId: payload.branchId,
+                    errorMessage: branchFailureMessage,
+                    modelId: '',
+                    modelLabel: t('workspace.status.branch'),
+                    isPrimary: false,
+                  })
+                : upsertAssistantBranch(current, payload.messageId, payload.branchId, (branch) => ({
+                    id: payload.branchId,
+                    modelId: branch?.modelId ?? '',
+                    modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
+                    isPrimary: branch?.isPrimary ?? false,
+                    content: branch?.content ?? '',
+                    status: payload.type === 'BRANCH_STREAM_FINISHED' ? 'done' : 'cancelled',
+                    errorMessage: payload.type === 'BRANCH_STREAM_CANCELLED' ? t('workspace.status.cancelled') : null,
+                  })),
             );
           }
           return;
@@ -723,6 +784,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           return;
         case 'LOADING_STATE_UPDATE':
           if (typeof payload.status === 'string' && payload.status !== 'loading') {
+            if (typeof payload.sessionId === 'string') {
+              markSessionTerminal(payload.sessionId);
+            }
             setActiveSessionIds((current) => ({
               ...current,
               [promptTabId]: null,
@@ -850,14 +914,17 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         request.displayText = input.displayText;
       }
       const response = await api.sendChat(request);
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.sessionId,
-      }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.messageId,
-      }));
+      const sessionAlreadyTerminal = hasTerminalSession(response.payload.sessionId);
+      if (!sessionAlreadyTerminal) {
+        setActiveSessionIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.sessionId,
+        }));
+        setRestoreMessageIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.messageId,
+        }));
+      }
       setIncludePageContent(input.includePageContent);
       setPromptTabMessages(promptTabId, (current) => {
         const persistedUserMessageId = response.payload.userMessageId;
@@ -865,6 +932,9 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           persistedUserMessageId === null
             ? current
             : current.map((message) => (message.id === optimisticUserMessageId ? { ...message, id: persistedUserMessageId } : message));
+        if (sessionAlreadyTerminal) {
+          return messagesWithPersistedUserId;
+        }
         return appendAssistantBranches(
           upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
             id: response.payload.messageId,
@@ -890,9 +960,40 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           })),
         );
       });
-    } catch {
-      setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
-      pushToast('error', t('workspace.notice.sendFailed'));
+    } catch (error) {
+      const errorMessage = getReplyErrorMessage(error, t('workspace.notice.sendFailed'));
+      const assistantMessageId = `local-assistant:${promptTabId}:${Date.now()}`;
+      const branchId = `${assistantMessageId}:primary`;
+      setActiveSessionIds((current) => ({
+        ...current,
+        [promptTabId]: null,
+      }));
+      setRestoreMessageIds((current) => ({
+        ...current,
+        [promptTabId]: null,
+      }));
+      setPromptTabMessages(promptTabId, (current) => [
+        ...current,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: errorMessage,
+          status: 'error',
+          errorMessage,
+          branches: [
+            {
+              id: branchId,
+              modelId: input.modelId,
+              modelLabel: models.find((model) => model.id === input.modelId)?.name ?? t('workspace.status.primaryBranch'),
+              isPrimary: true,
+              content: errorMessage,
+              status: 'error',
+              errorMessage,
+            },
+          ],
+          selectedBranchId: branchId,
+        },
+      ]);
     }
   };
 

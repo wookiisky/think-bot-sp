@@ -70,7 +70,7 @@
 - 分支挂在所属助手消息下，不能独立脱离消息主链。
 - 助手消息存在分支时，`selectedBranchId` 必须指向当前消息内的某个分支。
 - 助手消息顶层 `content/status/errorMessage/modelId` 只是当前选中主分支的镜像，不再单独代表另一份主回答。
-- 错误分支允许持久化错误结果，但不保留无意义空 loading 记录。
+- 错误分支允许持久化 `error` 状态和已生成内容，但 Provider 原始错误文本只作为实时 UI 展示态，不写入历史 `errorMessage`。
 - 阶段 4 的主回答消息状态机固定为 `loading -> done | error | cancelled`，进入终态后不能继续追加 chunk 或覆盖终态结果。
 - 同一 `promptTab` 下若存在多分支并发写入，仓储层必须串行化写操作，避免分支互相覆盖。
 

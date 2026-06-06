@@ -269,8 +269,8 @@ export const sidebarBootstrapResponseSchema = z.object({
 export const sidebarPortClientMessageSchema = z.object({
   /** 客户端消息类型。 */
   type: z.literal('SUBSCRIBE_SIDEBAR_STREAM'),
-  /** 浏览器标签页 id。 */
-  tabId: z.number().int().positive(),
+  /** 浏览器标签页 id；conversations 历史工作台没有真实 tab，使用 0 占位。 */
+  tabId: z.number().int().nonnegative(),
   /** 页面原始 URL。 */
   pageUrl: z.string().url(),
   /** 当前 promptTab 稳定 id。 */

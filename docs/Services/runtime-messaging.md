@@ -144,6 +144,7 @@ long-lived port 事件：
 - side panel sender 校验固定检查 `runtime.id` 和 URL `pathname` 为 `sidebar.html`，允许 query 参数存在。
 - 流式任务创建后，UI 建立 port 订阅。
 - background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。
+- `CHAT_STREAM_FAILED / BRANCH_STREAM_FAILED` 会在 `port-bus` 内按 `normalizedUrl + promptTabId` 短暂缓存；若 UI 订阅晚于失败事件，绑定后会补发最近失败事件，用于本地展示错误正文。
 - side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
 - 自动触发不暴露新的 one-shot command；由“侧边栏打开流程”的 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
@@ -167,6 +168,9 @@ long-lived port 事件：
   - 返回 schema 错误。
 - port 断开：
   - 不视为任务终止，loading state 继续保留，side panel 重连后通过持久化恢复。
+- 流式失败事件：
+  - 失败文本只在内存中短暂补发给 UI，不写入 `ConversationRecord`。
+  - 新的 `CHAT_STREAM_STARTED` 会清理同一 `promptTab` 的旧失败补发，避免过期错误污染新会话。
 - service worker 重启：
   - 新建端口后按持久化状态恢复。
 - 黑名单确认超时或页面上下文失效：
@@ -186,6 +190,7 @@ long-lived port 事件：
 
 - 短生命周期内存：
   - 当前已连接端口映射。
+  - 最近一次流式失败事件补发缓存。
 - 持久化依赖：
   - `LoadingStateRecord`
 

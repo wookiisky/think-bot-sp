@@ -18,6 +18,7 @@ import { createJinaClient } from '../src/services/extraction/jina-client';
 import { createConversationExporter } from '../src/services/export/conversation-exporter';
 import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dispatch-service';
 import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
+import { bridgeStreamError, type StreamErrorBox } from '../src/services/llm-dispatch/stream-error-bridge';
 import { createLogger } from '../src/services/logger/logger';
 import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
 import { createConversationsCommandHandler, isConversationsCommandMessage } from '../src/services/runtime-messaging/conversations-commands';
@@ -103,7 +104,16 @@ export default defineBackground(() => {
         __THINK_BOT_TEST_STREAM__?: Array<string>;
       }).__THINK_BOT_TEST_STREAM__;
       if (!testStream) {
-        return streamText(input);
+        // AI SDK v5 的 textStream 默认吞掉流式错误（仅经 onError 回调暴露），
+        // 借助 bridgeStreamError 在迭代结束时重新抛出，确保 dispatch 能把错误收敛为失败态。
+        const errorBox: StreamErrorBox = { error: null };
+        const result = streamText({
+          ...input,
+          onError({ error }: { error: unknown }) {
+            errorBox.error = error;
+          },
+        });
+        return bridgeStreamError({ result, errorBox });
       }
 
       return {

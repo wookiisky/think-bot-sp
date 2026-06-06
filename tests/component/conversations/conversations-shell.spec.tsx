@@ -644,6 +644,119 @@ describe('ConversationsShell', () => {
     expect(api.sendChat).not.toHaveBeenCalled();
   });
 
+  it('流式失败事件会停止 loading，并在历史工作台回复中展示错误', async () => {
+    const user = userEvent.setup();
+    let portMessageListener: ((event: unknown) => void) | null = null;
+    const api = createConversationsApi({
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn((listener: (event: unknown) => void) => {
+            portMessageListener = listener;
+          }),
+          removeListener: vi.fn(),
+        },
+      })),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await screen.findByText('正文 A');
+    await user.type(await screen.findByLabelText('聊天输入'), '历史页发送失败');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('prompt-tab-loading-chat')).toBeVisible();
+
+    portMessageListener?.({
+      type: 'CHAT_STREAM_FAILED',
+      normalizedUrl: 'https://example.com/article-a',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+    });
+
+    const chatPanel = screen.getByRole('tabpanel');
+    await waitFor(() => expect(within(chatPanel).getByText('provider timeout')).toBeVisible());
+    expect(within(chatPanel).getByText('历史页发送失败')).toBeVisible();
+    expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+  });
+
+  it('发送命令失败时保留用户消息，并在历史工作台本地回复中展示错误', async () => {
+    const user = userEvent.setup();
+    const apiError = 'models/gemini-3.1-flash-lite1 is not found for API version v1beta.';
+    const api = createConversationsApi({
+      sendChat: vi.fn().mockRejectedValue(new Error(apiError)),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await screen.findByText('正文 A');
+    await user.type(await screen.findByLabelText('聊天输入'), '历史页命令失败');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+    const chatPanel = screen.getByRole('tabpanel');
+    expect(within(chatPanel).getByText('历史页命令失败')).toBeVisible();
+    expect(within(chatPanel).getByText(apiError)).toBeVisible();
+    expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+  });
+
+  it('历史工作台流式失败早于发送响应时不会被响应重新覆盖成 loading', async () => {
+    const user = userEvent.setup();
+    let portMessageListener: ((event: unknown) => void) | null = null;
+    let resolveSendChat: (value: unknown) => void = () => undefined;
+    const sendChatPromise = new Promise((resolve) => {
+      resolveSendChat = resolve;
+    });
+    const api = createConversationsApi({
+      sendChat: vi.fn().mockReturnValue(sendChatPromise),
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn((listener: (event: unknown) => void) => {
+            portMessageListener = listener;
+          }),
+          removeListener: vi.fn(),
+        },
+      })),
+    });
+
+    render(<ConversationsShell api={api} />);
+
+    await screen.findByText('正文 A');
+    await user.type(await screen.findByLabelText('聊天输入'), '历史页先失败');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+
+    portMessageListener?.({
+      type: 'CHAT_STREAM_FAILED',
+      normalizedUrl: 'https://example.com/article-a',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+    });
+    resolveSendChat({
+      type: 'SEND_CHAT_SUCCESS',
+      payload: {
+        sessionId: 'session-1',
+        userMessageId: 'user-1',
+        messageId: 'assistant-1',
+        branchId: 'branch-1',
+        modelId: 'model-1',
+        modelLabel: '模型一',
+      },
+    });
+
+    const chatPanel = screen.getByRole('tabpanel');
+    await waitFor(() => expect(within(chatPanel).getByText('provider timeout')).toBeVisible());
+    await waitFor(() => expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull());
+    expect(within(chatPanel).getByText('历史页先失败')).toBeVisible();
+  });
+
   it('手动点击 quick input 标签时仍会触发发送', async () => {
     const user = userEvent.setup();
     const api = createConversationsApi({

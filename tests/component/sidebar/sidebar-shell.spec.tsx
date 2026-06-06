@@ -894,7 +894,7 @@ describe('SidebarShell', () => {
     expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
   });
 
-  it('首轮快捷输入失败且已回滚时，只展示错误提示，不保留消息', async () => {
+  it('首轮快捷输入失败且已回滚时，当前 UI 保留用户消息并展示助手错误', async () => {
     const user = userEvent.setup();
     let portMessageListener: ((event: unknown) => void) | undefined;
     const api = createSidebarApi({
@@ -1000,8 +1000,185 @@ describe('SidebarShell', () => {
       userMessageId: 'user-rollback',
     });
 
-    await waitFor(() => expect(within(screen.getByRole('tabpanel', { name: /总结/ })).queryByText('总结')).toBeNull());
-    expect(within(screen.getByRole('alert')).getByText('发送失败，请重试')).toBeVisible();
+    await waitFor(() => expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('provider timeout')).toBeVisible());
+    expect(screen.getByTestId('branch-branch-rollback')).toHaveTextContent('provider timeout');
+    expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
+    expect(screen.queryByTestId('prompt-tab-loading-quick-summary')).toBeNull();
+  });
+
+  it('发送命令失败时保留用户消息，并在本地助手回复中展示错误', async () => {
+    const user = userEvent.setup();
+    const apiError =
+      'models/gemini-3.1-flash-lite1 is not found for API version v1beta, or is not supported for generateContent.';
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: 'Gemini 测试模型',
+              provider: 'gemini',
+              enabled: true,
+              model: 'gemini-3.1-flash-lite1',
+              baseUrl: '',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      sendChat: vi.fn().mockRejectedValue(new Error(apiError)),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.type(await screen.findByLabelText('聊天输入'), '这条消息要保留');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+    const chatPanel = screen.getByRole('tabpanel', { name: /聊天/ });
+    expect(within(chatPanel).getByText('这条消息要保留')).toBeVisible();
+    expect(within(chatPanel).getByText(apiError)).toBeVisible();
+    expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+  });
+
+  it('流式失败早于发送响应时不会被响应重新覆盖成 loading', async () => {
+    const user = userEvent.setup();
+    let portMessageListener: ((event: unknown) => void) | null = null;
+    let resolveSendChat: (value: unknown) => void = () => undefined;
+    const sendChatPromise = new Promise((resolve) => {
+      resolveSendChat = resolve;
+    });
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      sendChat: vi.fn().mockReturnValue(sendChatPromise),
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn((listener: (event: unknown) => void) => {
+            portMessageListener = listener;
+          }),
+          removeListener: vi.fn(),
+        },
+      })),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.type(await screen.findByLabelText('聊天输入'), '先失败');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
+
+    portMessageListener?.({
+      type: 'CHAT_STREAM_FAILED',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+    });
+    resolveSendChat({
+      type: 'SEND_CHAT_SUCCESS',
+      payload: {
+        sessionId: 'session-1',
+        userMessageId: 'user-1',
+        messageId: 'assistant-1',
+        branchId: 'branch-1',
+        modelId: 'model-1',
+        modelLabel: '主模型',
+      },
+    });
+
+    const chatPanel = screen.getByRole('tabpanel', { name: /聊天/ });
+    await waitFor(() => expect(within(chatPanel).getByText('provider timeout')).toBeVisible());
+    await waitFor(() => expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull());
+    expect(within(chatPanel).getByText('先失败')).toBeVisible();
   });
 
   it('清空当前标签只影响当前 promptTab，会保留提取内容和其他标签历史', async () => {

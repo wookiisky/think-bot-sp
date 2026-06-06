@@ -78,3 +78,4 @@ playwright-report/
 test-results/
 .trellis
 AGENTS.md
+.pnpm-store

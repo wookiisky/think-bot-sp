@@ -80,8 +80,10 @@ Provider 适配规则：
    - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
 6. 主分支与并行分支分别建立流式会话；每个 chunk 都先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
 7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
-7.1. Provider 返回 `APICallError.responseBody` 或 `data` 时，错误文本优先使用该原始 API 返回内容，再回退到 SDK 错误消息。
-7.2. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
+7.1. Provider 返回 `APICallError.responseBody` 或 `data` 时，实时失败事件优先携带该原始 API 返回内容，再回退到 SDK 错误消息。
+7.2. 流式失败只把 `error / cancelled` 状态写入会话历史，不把 Provider 原始错误文本持久化；UI 用本次 port 事件把错误详情展示在当前回复中。若当前回复尚无内容，错误文本直接作为本地回复正文展示。
+7.2.1. 若失败事件早于 UI 订阅或早于 `SEND_CHAT` 成功响应，`port-bus` 会短暂补发失败事件，UI 必须把同一 `sessionId` 标记为终态，禁止较晚的命令成功响应把错误回复重新覆盖为 loading。
+7.3. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
 8. 所有首轮分支都收敛后，统一通过 `LOADING_STATE_UPDATE` 结束该轮 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
 9. 继续新增分支时，前端必须先让用户选择 `modelId`，后台只为这一个模型追加单分支请求。
 10. 手动新增分支的候选模型固定来自“所有启用且配置完整的模型”，包含当前主模型。
@@ -137,7 +139,10 @@ Provider 适配规则：
 - 用户取消：
   - 正常结束，不标记系统错误。
 - Provider 明确返回错误文本：
-  - 直接透传到目标助手分支的 `errorMessage`，UI 不再改写成统一文案。
+  - 通过 `CHAT_STREAM_FAILED / BRANCH_STREAM_FAILED` 直接透传给 UI，UI 在当前回复消息中展示。
+  - 若目标回复或分支尚无正文，UI 必须把错误文本作为本地正文渲染，不能只依赖 toast 或底部小字提示。
+  - 若失败事件先于 `SEND_CHAT` 成功响应到达，UI 只允许用后续成功响应补齐本地用户消息 id，不得把已失败的助手消息改回 loading。
+  - 持久化的 `ConversationRecord` 只保留 `status: error` 与已有输出内容，`errorMessage` 保持 `null`，避免把 Provider 原始错误写入历史。
 - setup 在助手占位消息创建后失败：
   - 助手消息补偿收敛到 `error`。
   - `session.done` 不会启动。

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -56,6 +56,7 @@ import {
   type EditingState,
   type ModelOption,
   type PromptTabDefinition,
+  upsertAssistantFailure,
   syncAssistantMessageState,
   upsertAssistantBranch,
   upsertAssistantMessage,
@@ -119,6 +120,10 @@ const clampExtractionPanelHeight = (height: number) =>
 const getDefaultChatTabLabel = (resources: ReturnType<typeof loadWorkspaceLocaleResources> | null, locale: WorkspaceLocaleCode) =>
   resources?.t('workspace.chatTab', locale) ?? 'Chat';
 
+/** 把未知错误收敛为当前回复可展示文案。 */
+const getReplyErrorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error && error.message.trim() ? error.message : fallback;
+
 /** 渲染阶段 5 的多 promptTab 侧边栏工作台。 */
 export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [localeResources, setLocaleResources] = useState<ReturnType<typeof loadWorkspaceLocaleResources>>(loadWorkspaceLocaleResources());
@@ -161,6 +166,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const themeRootAttributes = useDocumentTheme(themePreference);
+  const terminalSessionIdsRef = useRef<Set<string>>(new Set());
   const t = createWorkspaceTranslator(localeResources, localeCode);
 
   const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? promptTabs[0] ?? null;
@@ -230,6 +236,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       [promptTabId]: update(current[promptTabId] ?? []),
     }));
   };
+
+  /** 标记会话重新进入活动态。 */
+  const markSessionActive = (sessionId: string) => {
+    terminalSessionIdsRef.current.delete(sessionId);
+  };
+
+  /** 标记会话已进入终态，防止较晚的命令响应覆盖最终 UI。 */
+  const markSessionTerminal = (sessionId: string) => {
+    terminalSessionIdsRef.current.add(sessionId);
+  };
+
+  /** 判断命令响应对应的会话是否已经被流式事件置为终态。 */
+  const hasTerminalSession = (sessionId: string) => terminalSessionIdsRef.current.has(sessionId);
 
   /** 更新单个标签的草稿。 */
   const setPromptTabComposer = (promptTabId: string, patch: Partial<ComposerState>) => {
@@ -390,6 +409,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         switch (payload.type) {
           case 'CHAT_STREAM_STARTED':
             if (typeof payload.sessionId === 'string') {
+              markSessionActive(payload.sessionId as string);
               setActiveSessionIds((current) => ({
                 ...current,
                 [promptTabId]: payload.sessionId as string,
@@ -470,6 +490,9 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             }
             return;
           case 'CHAT_STREAM_FINISHED':
+            if (typeof payload.sessionId === 'string') {
+              markSessionTerminal(payload.sessionId as string);
+            }
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -495,43 +518,46 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               );
             }
             return;
-          case 'CHAT_STREAM_FAILED':
-            if (
-              payload.rollbackOnFailure === true
-              && typeof payload.userMessageId === 'string'
-            ) {
-              setPromptTabMessages(promptTabId, (current) =>
-                current.filter((message) => message.id !== payload.messageId && message.id !== payload.userMessageId),
-              );
-              pushToast('error', t('workspace.notice.sendFailed'));
-              return;
+          case 'CHAT_STREAM_FAILED': {
+            const chatFailureMessage =
+              typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error');
+            if (typeof payload.sessionId === 'string') {
+              markSessionTerminal(payload.sessionId as string);
             }
+            setActiveSessionIds((current) => ({
+              ...current,
+              [promptTabId]: null,
+            }));
+            setRestoreMessageIds((current) => ({
+              ...current,
+              [promptTabId]: null,
+            }));
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content: message?.content ?? '',
-                  status: 'error',
-                  errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
-                  branches:
-                    typeof payload.branchId === 'string'
-                      ? (message?.branches ?? []).map((branch) =>
-                          branch.id === payload.branchId
-                            ? {
-                                ...branch,
-                                status: 'error',
-                                errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
-                              }
-                            : branch,
-                        )
-                      : message?.branches ?? [],
-                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
-                })),
+                upsertAssistantFailure(current, {
+                  messageId: payload.messageId as string,
+                  branchId: typeof payload.branchId === 'string' ? (payload.branchId as string) : `${payload.messageId as string}:primary`,
+                  errorMessage: chatFailureMessage,
+                  modelId: '',
+                  modelLabel: t('workspace.status.primaryBranch'),
+                  isPrimary: true,
+                }),
               );
             }
             return;
+          }
           case 'CHAT_STREAM_CANCELLED':
+            if (typeof payload.sessionId === 'string') {
+              markSessionTerminal(payload.sessionId as string);
+            }
+            setActiveSessionIds((current) => ({
+              ...current,
+              [promptTabId]: null,
+            }));
+            setRestoreMessageIds((current) => ({
+              ...current,
+              [promptTabId]: null,
+            }));
             if (typeof payload.messageId === 'string') {
               setPromptTabMessages(promptTabId, (current) =>
                 upsertAssistantMessage(current, payload.messageId as string, (message) => ({
@@ -609,16 +635,17 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             return;
           case 'BRANCH_STREAM_FAILED':
             if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string') {
+              const branchFailureMessage =
+                typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error');
               setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantBranch(current, payload.messageId as string, payload.branchId as string, (branch) => ({
-                  id: payload.branchId as string,
-                  modelId: branch?.modelId ?? '',
-                  modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
-                  isPrimary: branch?.isPrimary ?? false,
-                  content: branch?.content ?? '',
-                  status: 'error',
-                  errorMessage: typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error'),
-                })),
+                upsertAssistantFailure(current, {
+                  messageId: payload.messageId as string,
+                  branchId: payload.branchId as string,
+                  errorMessage: branchFailureMessage,
+                  modelId: '',
+                  modelLabel: t('workspace.status.branch'),
+                  isPrimary: false,
+                }),
               );
             }
             return;
@@ -664,6 +691,9 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             return;
           case 'LOADING_STATE_UPDATE':
             if (typeof payload.status === 'string' && payload.status !== 'loading') {
+              if (typeof payload.sessionId === 'string') {
+                markSessionTerminal(payload.sessionId as string);
+              }
               setActiveSessionIds((current) => ({
                 ...current,
                 [promptTabId]: null,
@@ -896,14 +926,17 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         request.rollbackOnFailure = input.rollbackOnFailure;
       }
       const response = await api.sendChat(request);
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.sessionId,
-      }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.messageId,
-      }));
+      const sessionAlreadyTerminal = hasTerminalSession(response.payload.sessionId);
+      if (!sessionAlreadyTerminal) {
+        setActiveSessionIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.sessionId,
+        }));
+        setRestoreMessageIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.messageId,
+        }));
+      }
       setIncludePageContent(input.includePageContent);
       setPromptTabMessages(promptTabId, (current) => {
         const persistedUserMessageId = response.payload.userMessageId;
@@ -916,8 +949,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                       ...message,
                       id: persistedUserMessageId,
                     }
-                  : message,
+                      : message,
               );
+        if (sessionAlreadyTerminal) {
+          return messagesWithPersistedUserId;
+        }
         return appendAssistantBranches(
           upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
             id: response.payload.messageId,
@@ -943,9 +979,40 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           })),
         );
       });
-    } catch {
-      setPromptTabMessages(promptTabId, (current) => current.filter((message) => message.id !== optimisticUserMessageId));
-      pushToast('error', t('workspace.notice.sendFailed'));
+    } catch (error) {
+      const errorMessage = getReplyErrorMessage(error, t('workspace.notice.sendFailed'));
+      const assistantMessageId = `local-assistant:${promptTabId}:${Date.now()}`;
+      const branchId = `${assistantMessageId}:primary`;
+      setActiveSessionIds((current) => ({
+        ...current,
+        [promptTabId]: null,
+      }));
+      setRestoreMessageIds((current) => ({
+        ...current,
+        [promptTabId]: null,
+      }));
+      setPromptTabMessages(promptTabId, (current) => [
+        ...current,
+        {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: errorMessage,
+          status: 'error',
+          errorMessage,
+          branches: [
+            {
+              id: branchId,
+              modelId: input.modelId,
+              modelLabel: models.find((model) => model.id === input.modelId)?.name ?? t('workspace.status.primaryBranch'),
+              isPrimary: true,
+              content: errorMessage,
+              status: 'error',
+              errorMessage,
+            },
+          ],
+          selectedBranchId: branchId,
+        },
+      ]);
     }
   };
 

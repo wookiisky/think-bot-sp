@@ -34,6 +34,7 @@
 - 启动流式时会话创建与 loading 创建必须成对出现。
 - 流式完成、取消、错误后必须清理 loading。
 - setup 若在助手占位消息创建后失败，仓储需要支持把该助手消息补偿为 `error`，避免残留 `loading`。
+- `failAssistantMessage` / `failAssistantBranch` 只负责收敛终态；Provider 原始错误文本应由实时事件展示，仓储可写入 `errorMessage: null` 避免持久化错误详情。
 - `appendAssistantChunk` 只允许作用于 `loading` 且当前选中分支仍为 `loading` 的助手消息。
 - `finishAssistantMessage` 与 `failAssistantMessage` 不允许覆盖已终态助手消息。
 - 分支写入不得覆盖其他分支或主消息。
