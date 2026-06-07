@@ -394,11 +394,57 @@ describe('ChatInput', () => {
     expect(screen.getByTestId('chat-input-control-row')).toHaveClass('items-center');
     expect(screen.getByTestId('chat-input-control-row')).toHaveClass('gap-1');
     expect(screen.getByLabelText('聊天输入')).toHaveClass('rounded-none');
-    expect(screen.getByTestId('chat-input-add-image-control')).toHaveClass('size-7', 'rounded-none');
-    expect(screen.getByLabelText('选择模型')).toHaveClass('h-8', 'rounded-none');
-    expect(screen.getByLabelText('包含页面内容')).toHaveClass('size-7', 'rounded-none');
-    expect(screen.getByRole('button', { name: '清空当前标签' })).toHaveClass('size-7', 'rounded-none');
-    expect(screen.getByRole('button', { name: '导出' })).toHaveClass('size-7', 'rounded-none');
-    expect(screen.getByRole('button', { name: '发送' })).toHaveClass('size-7', 'rounded-none');
+
+    expect(screen.getByTestId('chat-input-add-image-control')).toHaveClass('size-7', 'rounded-none', 'bg-muted/45');
+    expect(screen.getByLabelText('选择模型')).toHaveClass('h-8', 'w-28', 'rounded-none', 'text-[11px]');
+    expect(screen.getByLabelText('包含页面内容')).toHaveClass('size-7', 'rounded-none', 'bg-primary/12', 'text-primary');
+    expect(screen.getByRole('button', { name: '发送' })).toHaveClass(
+      'size-7',
+      'rounded-none',
+      'bg-primary',
+      'text-primary-foreground',
+    );
+    expect(screen.getByRole('button', { name: '清空当前标签' })).toHaveClass('size-7', 'rounded-none', 'border-border/80');
+    expect(screen.getByRole('button', { name: '导出' })).toHaveClass('size-7', 'rounded-none', 'border-border/80');
+
+    const sendButton = screen.getByRole('button', { name: '发送' });
+    const separator = screen.getByTestId('chat-input-action-separator');
+    const clearButton = screen.getByRole('button', { name: '清空当前标签' });
+    const exportButton = screen.getByRole('button', { name: '导出' });
+    expect(separator).toHaveClass('h-5', 'w-px', 'bg-border/80');
+    expect(sendButton.compareDocumentPosition(separator)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(separator.compareDocumentPosition(clearButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(clearButton.compareDocumentPosition(exportButton)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('页面内容 toggle 关闭态使用低强调样式', () => {
+    render(
+      <ChatInput
+        disabled={false}
+        sending={false}
+        text="布局检查"
+        images={[]}
+        includePageContent={false}
+        selectedModelId="model-1"
+        models={[
+          {
+            id: 'model-1',
+            name: '主模型',
+            supportsImages: true,
+          },
+        ]}
+        t={t}
+        onSelectModel={vi.fn()}
+        onTextChange={vi.fn()}
+        onImagesChange={vi.fn()}
+        onIncludePageContentChange={vi.fn()}
+        onSend={vi.fn()}
+        onClear={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByLabelText('包含页面内容')).toHaveClass('border-button-ink', 'bg-transparent', 'text-button-ink');
+    expect(screen.getByLabelText('包含页面内容')).not.toHaveClass('bg-primary/12', 'text-primary');
   });
 });

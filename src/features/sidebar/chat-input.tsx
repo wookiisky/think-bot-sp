@@ -6,7 +6,15 @@ import { Textarea } from '../../components/ui/textarea';
 import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Tooltip } from '../../components/ui/tooltip';
 import { cn } from '../../lib/utils';
-import { COMPACT_COMPOSER_CONTROL_CLASS, COMPACT_COMPOSER_SELECT_CLASS } from '../../ui/compact-layout';
+import {
+  COMPACT_COMPOSER_CONTROL_CLASS,
+  COMPACT_COMPOSER_MEDIA_ACTION_CLASS,
+  COMPACT_COMPOSER_SECONDARY_ACTION_CLASS,
+  COMPACT_COMPOSER_SELECT_CLASS,
+  COMPACT_COMPOSER_SEND_ACTION_CLASS,
+  COMPACT_COMPOSER_TOGGLE_ACTIVE_CLASS,
+  COMPACT_COMPOSER_TOGGLE_IDLE_CLASS,
+} from '../../ui/compact-layout';
 import type { WorkspaceTranslator } from '../workspace/workspace-copy';
 
 /** Textarea 单行高度。 */
@@ -204,6 +212,7 @@ export const ChatInput = ({
                   buttonVariants({ variant: 'outline', size: 'icon-sm' }),
                   'relative cursor-pointer',
                   COMPACT_COMPOSER_CONTROL_CLASS,
+                  COMPACT_COMPOSER_MEDIA_ACTION_CLASS,
                   (disabled || !supportsImages) && 'pointer-events-none opacity-50',
                 )}
               >
@@ -257,15 +266,32 @@ export const ChatInput = ({
                 aria-pressed={includePageContent}
                 className={cn(
                   COMPACT_COMPOSER_CONTROL_CLASS,
-                  includePageContent
-                    ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/15'
-                    : 'border-button-ink text-button-ink hover:border-primary hover:bg-transparent hover:text-primary',
+                  includePageContent ? COMPACT_COMPOSER_TOGGLE_ACTIVE_CLASS : COMPACT_COMPOSER_TOGGLE_IDLE_CLASS,
                 )}
                 onClick={() => onIncludePageContentChange(!includePageContent)}
               >
                 <FileTextIcon />
               </Button>
             </Tooltip>
+
+            <Tooltip content={t('workspace.send')}>
+              <Button
+                type="button"
+                size="icon-sm"
+                aria-label={t('workspace.send')}
+                className={cn(COMPACT_COMPOSER_CONTROL_CLASS, COMPACT_COMPOSER_SEND_ACTION_CLASS)}
+                disabled={isSendDisabled}
+                onClick={submitCurrentInput}
+              >
+                {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
+              </Button>
+            </Tooltip>
+
+            <span
+              aria-hidden="true"
+              data-testid="chat-input-action-separator"
+              className="mx-0.5 h-5 w-px shrink-0 bg-border/80"
+            />
 
             <MiniConfirm
               message={t('workspace.notice.clearTabConfirm')}
@@ -280,7 +306,7 @@ export const ChatInput = ({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={t('workspace.clearCurrentTab')}
-                  className={COMPACT_COMPOSER_CONTROL_CLASS}
+                  className={cn(COMPACT_COMPOSER_CONTROL_CLASS, COMPACT_COMPOSER_SECONDARY_ACTION_CLASS)}
                 >
                   <EraserIcon />
                 </Button>
@@ -293,23 +319,10 @@ export const ChatInput = ({
                 variant="ghost"
                 size="icon-sm"
                 aria-label={t('workspace.exportConversation')}
-                className={COMPACT_COMPOSER_CONTROL_CLASS}
+                className={cn(COMPACT_COMPOSER_CONTROL_CLASS, COMPACT_COMPOSER_SECONDARY_ACTION_CLASS)}
                 onClick={() => void onExport()}
               >
                 <DownloadIcon />
-              </Button>
-            </Tooltip>
-
-            <Tooltip content={t('workspace.send')}>
-              <Button
-                type="button"
-                size="icon-sm"
-                aria-label={t('workspace.send')}
-                className={COMPACT_COMPOSER_CONTROL_CLASS}
-                disabled={isSendDisabled}
-                onClick={submitCurrentInput}
-              >
-                {sending ? <LoaderCircleIcon className="animate-spin" /> : <ArrowUpIcon />}
               </Button>
             </Tooltip>
           </div>

@@ -47,9 +47,29 @@ export const COMPACT_ROW_BUTTON_CLASS = 'min-w-0 text-left transition-colors';
 /** 聊天输入区图标控件：小于 textarea，给浮起态保留上边框空间。 */
 export const COMPACT_COMPOSER_CONTROL_CLASS = 'size-7 shrink-0 rounded-none';
 
+/** 聊天输入区辅助按钮：用于清空、导出这类次级命令。 */
+export const COMPACT_COMPOSER_SECONDARY_ACTION_CLASS =
+  'border-border/80 bg-transparent text-button-ink hover:border-primary hover:bg-transparent hover:text-primary';
+
+/** 聊天输入区媒体按钮：用于添加图片，和普通命令按钮保持视觉区分。 */
+export const COMPACT_COMPOSER_MEDIA_ACTION_CLASS =
+  'border-input/80 bg-muted/45 text-button-ink hover:border-primary/70 hover:bg-muted/70 hover:text-primary';
+
+/** 聊天输入区 toggle 关闭态：低强调描边，避免和主操作抢层级。 */
+export const COMPACT_COMPOSER_TOGGLE_IDLE_CLASS =
+  'border-button-ink bg-transparent text-button-ink hover:border-primary hover:bg-transparent hover:text-primary';
+
+/** 聊天输入区 toggle 开启态：轻量主色状态，区别于发送按钮的实心主操作。 */
+export const COMPACT_COMPOSER_TOGGLE_ACTIVE_CLASS =
+  'border-primary/50 bg-primary/12 text-primary hover:border-primary/60 hover:bg-primary/18';
+
+/** 聊天输入区发送按钮：输入区唯一实心主操作。 */
+export const COMPACT_COMPOSER_SEND_ACTION_CLASS =
+  'border-primary bg-primary text-primary-foreground hover:border-primary hover:bg-primary/90 hover:text-primary-foreground';
+
 /** 聊天输入区模型选择框，与 composer 控件同高。 */
 export const COMPACT_COMPOSER_SELECT_CLASS =
-  'h-8 w-40 shrink-0 rounded-none border border-input/80 bg-transparent px-2 text-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25';
+  'h-8 w-28 shrink-0 rounded-none border border-input/80 bg-transparent px-1.5 text-[11px] outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25';
 
 /** 浮动消息工具按钮：空间极窄，使用 icon-xs，不参与普通工具栏尺寸。 */
 export const COMPACT_FLOATING_ACTION_CLASS = 'border border-border/80 p-0.5 transition-opacity';
