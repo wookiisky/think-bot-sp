@@ -208,6 +208,7 @@ sidebar.action.clearPage: Clear Current Page Data
 sidebar.action.openHistory: Open History
 sidebar.action.openSettings: Open Settings
 sidebar.action.openGithub: Open GitHub
+sidebar.method.group: Extraction Method
 sidebar.action.continueExtraction: Continue Extraction
 sidebar.method.readability: Readability
 sidebar.method.jina: Jina

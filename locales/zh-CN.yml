@@ -208,6 +208,7 @@ sidebar.action.clearPage: 清空当前页面数据
 sidebar.action.openHistory: 打开历史页
 sidebar.action.openSettings: 打开设置页
 sidebar.action.openGithub: 打开 GitHub
+sidebar.method.group: 提取方式
 sidebar.action.continueExtraction: 继续提取
 sidebar.method.readability: Readability
 sidebar.method.jina: Jina

@@ -116,6 +116,17 @@ type SidebarShellProps = {
 const clampExtractionPanelHeight = (height: number) =>
   Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
 
+/** 提取方式二选一切换容器，和普通动作按钮保持视觉区分。 */
+const EXTRACTION_METHOD_GROUP_CLASS =
+  'inline-flex h-6 shrink-0 items-center overflow-hidden border border-border bg-muted/25 shadow-inner';
+
+/** 提取方式切换按钮基础样式。 */
+const EXTRACTION_METHOD_OPTION_CLASS =
+  'size-6 rounded-none border-0 text-muted-foreground hover:bg-primary/8 hover:text-primary focus-visible:z-10 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:-translate-y-0';
+
+/** 提取方式选中态，作为 segmented control 的滑块状态。 */
+const EXTRACTION_METHOD_OPTION_ACTIVE_CLASS = 'bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground';
+
 /** 首屏聊天标签默认文案。 */
 const getDefaultChatTabLabel = (resources: ReturnType<typeof loadWorkspaceLocaleResources> | null, locale: WorkspaceLocaleCode) =>
   resources?.t('workspace.chatTab', locale) ?? 'Chat';
@@ -180,6 +191,9 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const normalizedExtractionContent = normalizeExtractionText(content);
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
+  const isExtracting = state === 'extracting';
+  const canTriggerExtractionAction = state !== 'bootstrapping' && state !== 'blocked' && !isExtracting;
+  const showExtractionStatusBar = isExtracting && !isExtractionPanelCollapsed && Boolean(normalizedExtractionContent);
   const branchPreview =
     branchPreviewTarget
       ? findBranchPreviewDetail(
@@ -319,6 +333,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 按当前方法重新提取。 */
   const handleReExtract = async () => {
+    if (!canTriggerExtractionAction) {
+      return;
+    }
+
     try {
       await runExtraction(method, 'manual_reextract');
       pushToast(
@@ -854,10 +872,13 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 切换提取方式并立即重新提取。 */
   const handleSwitchMethod = async (nextMethod: ExtractionMethod) => {
-    if (nextMethod === method || state === 'bootstrapping' || state === 'blocked') {
+    if (nextMethod === method || state === 'bootstrapping' || state === 'blocked' || isExtracting) {
       return;
     }
 
+    const previousMethod = method;
+    setMethod(nextMethod);
+    setState('extracting');
     try {
       await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
       await runExtraction(nextMethod, 'manual_reextract');
@@ -866,6 +887,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         nextMethod === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
       );
     } catch {
+      setMethod(previousMethod);
       setState('error');
       pushToast('error', t('sidebar.notice.switchMethodFailed'));
     }
@@ -1401,42 +1423,54 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       <header className={COMPACT_HEADER_CLASS}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap items-center gap-1">
-            <Tooltip content={t('sidebar.method.readability')}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t('sidebar.method.readability')}
-                aria-pressed={method === 'readability'}
-                className={cn(
-                  'border border-transparent',
-                  method === 'readability' && 'border-primary/30 bg-primary/10 text-primary',
-                )}
-                onClick={() => void handleSwitchMethod('readability')}
-              >
-                <FileTextIcon />
-              </Button>
-            </Tooltip>
-            <Tooltip content={t('sidebar.method.jina')}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t('sidebar.method.jina')}
-                aria-pressed={method === 'jina'}
-                className={cn('border border-transparent', method === 'jina' && 'border-primary/30 bg-primary/10 text-primary')}
-                onClick={() => void handleSwitchMethod('jina')}
-              >
-                <span className="text-[11px] font-semibold leading-none">J</span>
-              </Button>
-            </Tooltip>
+            <div role="group" aria-label={t('sidebar.method.group')} className={EXTRACTION_METHOD_GROUP_CLASS}>
+              <Tooltip content={t('sidebar.method.readability')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('sidebar.method.readability')}
+                  aria-pressed={method === 'readability'}
+                  className={cn(
+                    EXTRACTION_METHOD_OPTION_CLASS,
+                    'border-r border-border/80',
+                    method === 'readability' && EXTRACTION_METHOD_OPTION_ACTIVE_CLASS,
+                  )}
+                  disabled={isExtracting}
+                  onClick={() => void handleSwitchMethod('readability')}
+                >
+                  <FileTextIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('sidebar.method.jina')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('sidebar.method.jina')}
+                  aria-pressed={method === 'jina'}
+                  className={cn(EXTRACTION_METHOD_OPTION_CLASS, method === 'jina' && EXTRACTION_METHOD_OPTION_ACTIVE_CLASS)}
+                  disabled={isExtracting}
+                  onClick={() => void handleSwitchMethod('jina')}
+                >
+                  <span className="text-[11px] font-semibold leading-none">J</span>
+                </Button>
+              </Tooltip>
+            </div>
             <Tooltip content={t('sidebar.action.copyExtraction')}>
               <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.copyExtraction')} onClick={() => void handleCopyExtraction()}>
                 <CopyIcon />
               </Button>
             </Tooltip>
             <Tooltip content={t('sidebar.action.reExtract')}>
-              <Button type="button" variant="outline" size="icon-sm" aria-label={t('sidebar.action.reExtract')} onClick={() => void handleReExtract()}>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                aria-label={t('sidebar.action.reExtract')}
+                disabled={!canTriggerExtractionAction}
+                onClick={() => void handleReExtract()}
+              >
                 <RefreshCcwIcon />
               </Button>
             </Tooltip>
@@ -1478,11 +1512,21 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       <section
         data-testid="sidebar-extraction-panel"
         className={cn(
-          'box-border shrink-0 border-b border-border',
+          'relative box-border shrink-0 border-b border-border',
           isExtractionPanelCollapsed ? 'overflow-hidden px-0 py-0' : 'overflow-y-auto px-3 py-1.5',
         )}
         style={{ height: `${extractionPanelHeight}px` }}
       >
+        {showExtractionStatusBar ? (
+          <div
+            aria-live="polite"
+            data-testid="sidebar-extraction-loading-bar"
+            className="sticky top-0 z-10 mb-1 flex h-6 items-center gap-2 border border-primary/30 bg-background/95 px-2 text-xs text-primary shadow-sm"
+          >
+            <WorkspaceStatusGlyph label={t('sidebar.state.extracting')} status="loading" className="size-3.5" />
+            <span>{t('sidebar.state.extracting')}</span>
+          </div>
+        ) : null}
         {normalizedExtractionContent ? (
           <pre
             data-testid="sidebar-extraction-content"

@@ -28,6 +28,41 @@ afterEach(() => {
 });
 
 describe('ChatInput', () => {
+  it('页面正文开关用明确样式区分开启和关闭态', () => {
+    const baseProps = {
+      disabled: false,
+      sending: false,
+      text: '',
+      images: [],
+      selectedModelId: 'model-1',
+      models: [
+        {
+          id: 'model-1',
+          name: '主模型',
+          supportsImages: true,
+        },
+      ],
+      t,
+      onSelectModel: vi.fn(),
+      onTextChange: vi.fn(),
+      onImagesChange: vi.fn(),
+      onIncludePageContentChange: vi.fn(),
+      onSend: vi.fn(),
+      onClear: vi.fn(),
+      onExport: vi.fn(),
+    };
+
+    const { rerender } = render(<ChatInput {...baseProps} includePageContent={false} />);
+
+    expect(screen.getByRole('button', { name: '包含页面内容' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: '包含页面内容' })).toHaveClass('border-dashed', 'bg-muted/25');
+
+    rerender(<ChatInput {...baseProps} includePageContent={true} />);
+
+    expect(screen.getByRole('button', { name: '包含页面内容' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '包含页面内容' })).toHaveClass('border-primary', 'bg-primary/16');
+  });
+
   it('没有文本也没有图片时不会发送', async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
@@ -397,7 +432,7 @@ describe('ChatInput', () => {
 
     expect(screen.getByTestId('chat-input-add-image-control')).toHaveClass('size-7', 'rounded-none', 'bg-muted/45');
     expect(screen.getByLabelText('选择模型')).toHaveClass('h-8', 'w-28', 'rounded-none', 'text-[11px]');
-    expect(screen.getByLabelText('包含页面内容')).toHaveClass('size-7', 'rounded-none', 'bg-primary/12', 'text-primary');
+    expect(screen.getByLabelText('包含页面内容')).toHaveClass('size-7', 'rounded-none', 'bg-primary/16', 'text-primary');
     expect(screen.getByRole('button', { name: '发送' })).toHaveClass(
       'size-7',
       'rounded-none',
@@ -444,7 +479,7 @@ describe('ChatInput', () => {
       />,
     );
 
-    expect(screen.getByLabelText('包含页面内容')).toHaveClass('border-button-ink', 'bg-transparent', 'text-button-ink');
-    expect(screen.getByLabelText('包含页面内容')).not.toHaveClass('bg-primary/12', 'text-primary');
+    expect(screen.getByLabelText('包含页面内容')).toHaveClass('border-dashed', 'bg-muted/25', 'text-muted-foreground');
+    expect(screen.getByLabelText('包含页面内容')).not.toHaveClass('bg-primary/16', 'text-primary');
   });
 });

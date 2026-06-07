@@ -57,11 +57,11 @@ export const COMPACT_COMPOSER_MEDIA_ACTION_CLASS =
 
 /** 聊天输入区 toggle 关闭态：低强调描边，避免和主操作抢层级。 */
 export const COMPACT_COMPOSER_TOGGLE_IDLE_CLASS =
-  'border-button-ink bg-transparent text-button-ink hover:border-primary hover:bg-transparent hover:text-primary';
+  'border-dashed border-border bg-muted/25 text-muted-foreground shadow-inner hover:border-primary/60 hover:bg-primary/6 hover:text-primary';
 
 /** 聊天输入区 toggle 开启态：轻量主色状态，区别于发送按钮的实心主操作。 */
 export const COMPACT_COMPOSER_TOGGLE_ACTIVE_CLASS =
-  'border-primary/50 bg-primary/12 text-primary hover:border-primary/60 hover:bg-primary/18';
+  'border-primary bg-primary/16 text-primary shadow-[inset_0_0_0_1px_var(--primary)] hover:border-primary hover:bg-primary/22 hover:text-primary';
 
 /** 聊天输入区发送按钮：输入区唯一实心主操作。 */
 export const COMPACT_COMPOSER_SEND_ACTION_CLASS =
