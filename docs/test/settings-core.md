@@ -31,6 +31,7 @@
 - 支持顶部“保存并同步”。
 - 支持黑名单规则新增、编辑、软删除、恢复默认和匹配测试。
 - 支持顶部 toast 错误提示。
+- 存在未保存草稿时，未保存提示位于 sticky 浮动标题栏中部。
 - 支持行内 icon button 的即时 tooltip 与删除类 mini confirm。
 - 阶段2流程回归覆盖设置页本地闭环和配置级手动同步，不把页面/会话远端合并当作已完成能力。
 - 阶段2流程回归必须经过 `options -> chrome.runtime.sendMessage -> background -> repository` 的真实命令链路，不允许用页面内 mock 替代 background 处理。
@@ -39,6 +40,8 @@
 
 - 正常流：
   - 左侧导航固定为 6 个栏目，顶部动作区固定为“保存 / 保存并同步 / 恢复默认 / 导入配置 / 导出配置”。
+  - 设置页顶部标题栏滚动后保持 sticky 吸顶，未保存提示保持在标题栏中部。
+  - 桌面和窄屏下未保存提示不遮挡标题区和顶部动作区。
   - 在“基础设置”里编辑 `System Prompt` 后切换到其他栏目，再切回时草稿仍保留。
   - 在“展示配置”里编辑助手消息 Markdown 样式后切换到其他栏目，再切回时草稿仍保留。
   - 首次加载或旧配置迁移后，会补齐默认快捷输入和默认黑名单规则。
@@ -135,6 +138,6 @@
 - 模型级动作至少覆盖“新增 / 复制 / 软删除 / 拖拽排序 / 顺序调整 / 标题栏启用切换”，软删除项不再进入默认模型候选。
 - 默认模型候选、侧边栏模型选择器、手动新增分支模型选择器对“启用且配置完整”的判定一致。
 - 当前“云同步”已交付最小配置级闭环；“黑名单设置”已交付基础规则管理；设置页错误反馈走顶部 toast，但仍不包含远端对象级同步合并。
-- 阶段 2.5 额外要求设置页根节点保留 `data-testid="settings-shell"`、`data-theme` 与主题 class，顶部动作区保留 `settings-shell-actions`，导航区保留 `settings-shell-nav`。
+- 阶段 2.5 额外要求设置页根节点保留 `data-testid="settings-shell"`、`data-theme` 与主题 class，顶部标题栏保留 `settings-shell-header`，顶部标题区保留 `settings-shell-title`，顶部动作区保留 `settings-shell-actions`，未保存提示保留 `settings-unsaved-banner`，导航区保留 `settings-shell-nav`。
 - 阶段 2.5 组件回归以 `tests/component/options/settings-shell.spec.tsx`、`tests/component/options/model-form.spec.tsx`、`tests/component/options/quick-inputs.spec.tsx` 为主，不允许用页面内 mock 绕过真实设置页壳层。
 - 主题回归要求暗色背景、卡片层级和输入控件对比度可读；视觉调整不应改动设置页命令链路和测试标识。

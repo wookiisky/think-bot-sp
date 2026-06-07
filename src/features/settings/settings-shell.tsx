@@ -410,28 +410,48 @@ export const SettingsShell = () => {
       <ToastStack toasts={toast ? [toast] : []} />
 
       <section className="relative mx-auto flex w-full max-w-7xl flex-col gap-2">
-        <header className="grid gap-2 border border-border/70 px-3 py-2 ring-1 ring-foreground/8">
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2">
+        <header
+          data-testid="settings-shell-header"
+          className="sticky top-2 z-40 grid gap-2 border border-border/70 bg-background/95 px-3 py-2 ring-1 ring-foreground/8"
+        >
+          <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-center">
+            <div
+              data-testid="settings-shell-title"
+              className="flex min-w-0 items-center justify-self-center gap-2 lg:col-start-1 lg:justify-self-start"
+            >
               <span className="inline-flex size-7 items-center justify-center border border-border/70 text-primary">
                 <Icon name="settings" size={16} />
               </span>
-              <div>
+              <div className="min-w-0">
                 <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Think Bot SP</p>
-                <h1 className="mt-0.5 text-lg font-semibold">{t('settings.title')}</h1>
+                <h1 className="mt-0.5 truncate text-lg font-semibold">{t('settings.title')}</h1>
               </div>
             </div>
 
-            <SettingsActions
-              hasUnsavedChanges={dirty}
-              disabled={saving || syncing}
-              onSave={handleSave}
-              onSaveAndSync={handleSaveAndSync}
-              onReset={handleReset}
-              onImport={handleImport}
-              onExport={handleExport}
-              t={t}
-            />
+            {dirty ? (
+              <div className="flex items-center justify-center justify-self-center lg:col-start-2">
+                <p
+                  data-testid="settings-unsaved-banner"
+                  role="status"
+                  aria-live="polite"
+                  className="m-0 whitespace-nowrap border border-amber-500/25 bg-amber-500/8 px-2 py-0.5 text-center text-xs/relaxed text-amber-700 dark:text-amber-300"
+                >
+                  {t('settings.unsavedChanges')}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="min-w-0 justify-self-stretch lg:col-start-3 lg:justify-self-end">
+              <SettingsActions
+                disabled={saving || syncing}
+                onSave={handleSave}
+                onSaveAndSync={handleSaveAndSync}
+                onReset={handleReset}
+                onImport={handleImport}
+                onExport={handleExport}
+                t={t}
+              />
+            </div>
           </div>
         </header>
 

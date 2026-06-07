@@ -60,6 +60,7 @@ describe('SettingsLayout', () => {
 
     expect(await screen.findByRole('tab', { name: '基础设置' })).toBeInTheDocument();
     expect(screen.getByTestId('settings-shell').className).not.toContain('linear-gradient');
+    expect(screen.getByTestId('settings-shell-header')).toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(6);
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: '基础设置' })).toHaveAttribute('data-section-icon', 'settings');
@@ -109,11 +110,13 @@ describe('SettingsLayout', () => {
     await user.clear(screen.getByLabelText('System Prompt'));
     await user.type(screen.getByLabelText('System Prompt'), '始终使用中文回答');
 
-    expect(screen.getByText('有未保存更改')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('有未保存更改');
+    expect(screen.getByTestId('settings-unsaved-banner')).toHaveTextContent('有未保存更改');
 
     await user.click(screen.getByRole('tab', { name: '语言模型' }));
     await user.click(screen.getByRole('tab', { name: '基础设置' }));
 
     expect(screen.getByLabelText('System Prompt')).toHaveValue('始终使用中文回答');
+    expect(screen.getByTestId('settings-unsaved-banner')).toHaveTextContent('有未保存更改');
   });
 });
