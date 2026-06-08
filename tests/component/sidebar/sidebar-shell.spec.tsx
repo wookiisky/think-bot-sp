@@ -1934,6 +1934,10 @@ describe('SidebarShell', () => {
     expect(screen.queryByText('预览层会复用消息区的 Markdown 渲染规则，关闭后不会影响当前会话与输入草稿。')).toBeNull();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览标题')).toBeVisible();
     expect(within(screen.getByTestId('branch-preview-content')).getByText('预览内容')).toBeVisible();
+    const previewMarkdown = screen.getByTestId('branch-preview-content').querySelector(':scope > div');
+    expect(previewMarkdown).toBeInstanceOf(HTMLElement);
+    expect(previewMarkdown?.className).toContain('leading-[18px]');
+    expect(previewMarkdown?.className).not.toContain('leading-6');
     expect(screen.getByTestId('branch-preview-resize-handle').querySelector('svg')).not.toBeNull();
 
     fireEvent.mouseEnter(dialog);

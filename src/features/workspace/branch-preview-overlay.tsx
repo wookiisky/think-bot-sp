@@ -435,11 +435,7 @@ export const BranchPreviewOverlay = ({
         </FloatingActionBar>
 
         <div ref={contentRef} data-testid="branch-preview-content" className="min-h-0 flex-1 overflow-y-auto px-3 py-2 pr-10">
-          <ChatMarkdown
-            content={preview.content}
-            className="text-sm leading-6"
-            assistantDisplayConfig={assistantMarkdownDisplayConfig}
-          />
+          <ChatMarkdown content={preview.content} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
           {preview.status === 'error' ? (
             <p className="mt-4 text-xs text-destructive">{preview.errorMessage ?? t('workspace.status.error')}</p>
           ) : null}
