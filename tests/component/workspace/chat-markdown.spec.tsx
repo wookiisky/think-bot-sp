@@ -53,6 +53,8 @@ describe('ChatMarkdown', () => {
     expect(blockquote).not.toBeNull();
     expect(markdownContainer?.className).toContain('[&_blockquote]:border-orange-500');
     expect(markdownContainer?.className).toContain('[&_blockquote]:italic');
+    expect(markdownContainer?.className).toContain('[&_blockquote]:px-2.5');
+    expect(markdownContainer?.className).toContain('[&_blockquote]:py-1');
   });
 
   it('助手标题保留配置样式并使用更紧凑的标题间距', () => {

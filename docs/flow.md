@@ -326,7 +326,10 @@
 关键验证点：
 
 - 导出范围必须只属于当前 `promptTab`。
-- Markdown 必须包含页面标题、页面 URL、`promptTab`、`system prompt`、主回答和分支结构。
+- 文件名格式必须为 `{页面标题}--{Prompt Tab名称}--{yyyy_mm_dd_HH_mm_ss}.md`。
+- Markdown 必须包含页面标题、页面 URL、`promptTab` 展示名、`System Prompt` 段落、主回答和分支结构。
+- `System Prompt` 有真实值时输出内容；空值或全空白时不输出 `（空）` 这类占位文案。
+- Markdown 中模型必须使用展示名；非 `done` 状态必须使用独立状态行，不能挂在用户或助手消息标题后。
 - 空会话必须明确失败，不能生成空文件。
 
 ## 13. 主流程：同步与删除

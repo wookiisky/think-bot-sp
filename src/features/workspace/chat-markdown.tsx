@@ -231,7 +231,7 @@ export const ChatMarkdown = ({ content, className, assistantDisplayConfig }: Cha
   return (
     <div
       className={cn(
-        'text-sm leading-[18px] break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-orange-500 [&_blockquote]:pl-2.5 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_li]:mt-0.5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-4.5 [&_p+_p]:mt-1 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:bg-muted/60 [&_pre]:p-2.5 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-4.5',
+        'text-sm leading-[18px] break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-orange-500 [&_blockquote]:px-2.5 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_blockquote]:italic [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_li]:mt-0.5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-4.5 [&_p+_p]:mt-1 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:bg-muted/60 [&_pre]:p-2.5 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-4.5',
         className,
       )}
     >
