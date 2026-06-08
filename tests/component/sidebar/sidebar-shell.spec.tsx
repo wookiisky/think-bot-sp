@@ -142,18 +142,6 @@ const createSidebarApi = (overrides?: Record<string, unknown>) => ({
   ...overrides,
 });
 
-/** 创建可手动完成的 Promise，用于验证异步中间态。 */
-const createDeferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-
-  return { promise, resolve, reject };
-};
-
 afterEach(() => {
   cleanup();
 });
@@ -409,14 +397,8 @@ describe('SidebarShell', () => {
     expect(within(screen.getByRole('alert')).getByText('已清空当前页面数据')).toBeVisible();
   });
 
-  it('切换提取方式会立即更新选中态，并在提取中锁定提取动作', async () => {
+  it('切换提取方式命中缓存时直接展示缓存且不重新提取', async () => {
     const user = userEvent.setup();
-    const extraction = createDeferred<{
-      payload: {
-        content: string;
-        extractionMethod: 'jina';
-      };
-    }>();
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -445,10 +427,13 @@ describe('SidebarShell', () => {
       switchExtractionMethod: vi.fn().mockResolvedValue({
         type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
         payload: {
+          hasCachedContent: true,
           method: 'jina',
+          content: 'Jina 缓存内容',
+          extractionMethod: 'jina',
         },
       }),
-      reExtractContent: vi.fn().mockReturnValue(extraction.promise),
+      reExtractContent: vi.fn(),
     });
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
@@ -460,45 +445,70 @@ describe('SidebarShell', () => {
 
     expect(screen.getByRole('button', { name: 'Jina' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Readability' })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByTestId('sidebar-extraction-loading-bar')).toHaveTextContent('正在提取页面正文');
-    expect(screen.getByRole('button', { name: 'Jina' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: '重新提取' })).toBeDisabled();
-
-    await user.click(screen.getByRole('button', { name: 'Readability' }));
-    await user.click(screen.getByRole('button', { name: '重新提取' }));
-    expect(api.reExtractContent).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Jina 缓存内容')).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.reExtractContent).not.toHaveBeenCalled();
     expect(api.switchExtractionMethod).toHaveBeenCalledWith({
       tabId: 7,
       pageUrl: 'https://example.com/article',
       method: 'jina',
     });
-    expect(api.reExtractContent).toHaveBeenCalledWith({
-      tabId: 7,
-      pageUrl: 'https://example.com/article',
-      method: 'jina',
-      source: 'manual_reextract',
-    });
-
-    extraction.resolve({
-      payload: {
-        content: 'Jina 提取内容',
-        extractionMethod: 'jina',
-      },
-    });
-
-    expect(await screen.findByText('Jina 提取内容')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Jina' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByTestId('sidebar-extraction-loading-bar')).toBeNull();
   });
 
-  it('切换提取方式失败后会回滚选中态并保留旧正文', async () => {
+  it('点击重新提取会刷新当前提取方法', async () => {
     const user = userEvent.setup();
-    const extraction = createDeferred<{
-      payload: {
-        content: string;
-        extractionMethod: 'jina';
-      };
-    }>();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '已有提取内容',
+          extractionMethod: 'jina',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      reExtractContent: vi.fn().mockResolvedValue({
+        payload: {
+          content: '刷新后的 Jina 内容',
+          extractionMethod: 'jina',
+        },
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    expect(await screen.findByText('已有提取内容')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: '重新提取' }));
+
+    await waitFor(() =>
+      expect(api.reExtractContent).toHaveBeenCalledWith({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'jina',
+        source: 'manual_reextract',
+      }),
+    );
+    expect(await screen.findByText('刷新后的 Jina 内容')).toBeVisible();
+  });
+
+  it('切换提取方式未命中缓存时显示空态且不重新提取', async () => {
+    const user = userEvent.setup();
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -527,10 +537,90 @@ describe('SidebarShell', () => {
       switchExtractionMethod: vi.fn().mockResolvedValue({
         type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
         payload: {
+          hasCachedContent: false,
           method: 'jina',
         },
       }),
-      reExtractContent: vi.fn().mockReturnValue(extraction.promise),
+      reExtractContent: vi.fn(),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    expect(await screen.findByText('旧提取内容')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Jina' }));
+
+    await waitFor(() => expect(screen.queryByText('旧提取内容')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Jina' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('当前提取方式暂无缓存，请点击重新提取')).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.reExtractContent).not.toHaveBeenCalled();
+  });
+
+  it('已有页面但当前方法无缓存时重开侧边栏不自动提取', async () => {
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '',
+          extractionMethod: 'jina',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      reExtractContent: vi.fn(),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Jina' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(api.reExtractContent).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('sidebar-extraction-loading-bar')).toBeNull();
+  });
+
+  it('切换提取方式失败后会回滚选中态并保留旧正文', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '旧提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      switchExtractionMethod: vi.fn().mockRejectedValue(new Error('切换失败')),
+      reExtractContent: vi.fn(),
     });
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
@@ -538,9 +628,6 @@ describe('SidebarShell', () => {
     expect(await screen.findByText('旧提取内容')).toBeVisible();
 
     await user.click(screen.getByRole('button', { name: 'Jina' }));
-    expect(screen.getByRole('button', { name: 'Jina' })).toHaveAttribute('aria-pressed', 'true');
-
-    extraction.reject(new Error('提取失败'));
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Readability' })).toHaveAttribute('aria-pressed', 'true'));
     expect(screen.getByText('旧提取内容')).toBeVisible();
@@ -588,7 +675,7 @@ describe('SidebarShell', () => {
     expect(await screen.findByLabelText('包含页面内容')).not.toBeChecked();
   });
 
-  it('清空当前页面数据后点击快捷标签，只补一次提取并只发送当前标签', async () => {
+  it('清空当前页面数据后点击快捷标签时提示先刷新且不发送', async () => {
     const user = userEvent.setup();
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
@@ -727,26 +814,9 @@ describe('SidebarShell', () => {
     await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
     await user.click(screen.getByRole('tab', { name: /总结/ }));
 
-    await waitFor(() =>
-      expect(api.reExtractContent).toHaveBeenCalledWith({
-        tabId: 7,
-        pageUrl: 'https://example.com/article',
-        method: 'readability',
-        source: 'prompt_tab_click',
-      }),
-    );
-    await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
-    expect(api.sendChat).toHaveBeenCalledWith({
-      tabId: 7,
-      pageUrl: 'https://example.com/article',
-      promptTabId: 'quick-summary',
-      modelId: 'model-1',
-      text: '请总结当前页面',
-      displayText: '总结',
-      images: [],
-      includePageContent: true,
-      rollbackOnFailure: true,
-    });
+    expect(api.reExtractContent).not.toHaveBeenCalled();
+    expect(api.sendChat).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('alert')).getByText('当前没有可复制的提取内容')).toBeVisible();
   });
 
   it('根据 quickInputs 渲染多 promptTab，并在切换标签时按需直接触发快捷输入', async () => {

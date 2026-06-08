@@ -86,7 +86,7 @@ type ExtractionDependencies = {
   };
 };
 
-/** 创建提取服务，统一收口 Readability 优先和 Jina 回退。 */
+/** 创建提取服务，按指定方法提取并写回对应方法缓存。 */
 export const createExtractionService = (dependencies: ExtractionDependencies) => {
   const { logger, contentSource, readabilityExtractor, jinaClient, pageRepository } = dependencies;
 
@@ -106,37 +106,38 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
         method: input.method,
       });
 
-      if (input.method === 'readability') {
-        if (pageSource.readabilityContent?.trim()) {
-          return pageRepository.saveExtractionResult({
-            normalizedUrl,
-            url: pageSource.url,
-            title: pageSource.readabilityTitle?.trim() || pageSource.title,
-            faviconUrl: pageSource.faviconUrl,
-            content: pageSource.readabilityContent,
-            extractionMethod: 'readability',
-          });
-        }
-
-        const parsed = readabilityExtractor.extract(pageSource.html, pageSource.url);
-        if (parsed?.content.trim()) {
-          return pageRepository.saveExtractionResult({
-            normalizedUrl,
-            url: pageSource.url,
-            title: parsed.title || pageSource.title,
-            faviconUrl: pageSource.faviconUrl,
-            content: parsed.content,
-            extractionMethod: 'readability',
-          });
-        }
-
-        logger.warn('extraction.readability_failed', {
-          tabId: input.tabId,
+      if (input.method === 'readability' && pageSource.readabilityContent?.trim()) {
+        return pageRepository.saveExtractionResult({
           normalizedUrl,
+          url: pageSource.url,
+          title: pageSource.readabilityTitle?.trim() || pageSource.title,
+          faviconUrl: pageSource.faviconUrl,
+          content: pageSource.readabilityContent,
+          extractionMethod: 'readability',
         });
       }
 
-      logger.info('extraction.jina_fallback_started', {
+      if (input.method === 'readability') {
+        const parsed = readabilityExtractor.extract(pageSource.html, pageSource.url);
+        if (!parsed?.content.trim()) {
+          logger.warn('extraction.readability_failed', {
+            tabId: input.tabId,
+            normalizedUrl,
+          });
+          throw new Error('readability extraction failed');
+        }
+
+        return pageRepository.saveExtractionResult({
+          normalizedUrl,
+          url: pageSource.url,
+          title: parsed.title || pageSource.title,
+          faviconUrl: pageSource.faviconUrl,
+          content: parsed.content,
+          extractionMethod: 'readability',
+        });
+      }
+
+      logger.info('extraction.jina_started', {
         tabId: input.tabId,
         normalizedUrl,
       });

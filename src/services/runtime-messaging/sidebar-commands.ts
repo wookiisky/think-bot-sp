@@ -325,7 +325,7 @@ export const createSidebarCommandHandler = ({
           loadingStates,
           blockedByBlacklist,
           matchedRuleId,
-          shouldExtract: !page?.content,
+          shouldExtract: page === null,
         };
         commandLogger.info('page.info.loaded', {
           browserTabId: command.tabId,

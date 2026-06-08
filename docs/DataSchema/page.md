@@ -35,11 +35,17 @@
 - `content`
   - 类型：`string`
   - 必填：否
-  - 含义：当前有效提取正文。
+  - 含义：当前提取方法的正文镜像，聊天、搜索、导出和历史页读取该字段。
 - `extractionMethod`
   - 类型：`'readability' | 'jina'`
   - 必填：是
   - 默认值：`readability`
+- `extractionCaches`
+  - 类型：`{ readability?: { content: string; updatedAt: number }, jina?: { content: string; updatedAt: number } }`
+  - 必填：是
+  - 默认值：空对象
+  - 含义：按提取方法保存正文缓存；`updatedAt` 表示该方法最近一次实际提取时间。
+  - 兼容：旧数据缺少该字段且 `content` 非空时，会按 `extractionMethod` 回填到对应缓存。
 - `includePageContent`
   - 类型：`boolean`
   - 必填：是
@@ -101,7 +107,7 @@
   - 按最近更新时间获取页面列表。
   - 按标题、URL 或提取正文搜索。
 - 典型更新：
-  - 提取成功后更新内容与方法。
+  - 提取成功后更新对应方法缓存、当前正文镜像与方法。
   - 用户发送消息时回写页面级 `includePageContent`。
   - 编辑标题。
   - 恢复页面级 `includePageContent`。
@@ -112,6 +118,7 @@
 
 - 打开侧边栏首次提取时创建。
 - 提取成功、标题编辑、继续对话时更新 `updatedAt`。
+- 切换提取方法只读取 `extractionCaches` 并更新当前镜像，不刷新 `updatedAt / expiresAt`。
 - 90 天未更新则可被清理。
 - `promptTab` 首次手动发送或自动触发开始时写入对应 `promptTabStates.initializedAt`。
 - 清空当前 `promptTab` 时重置该 `promptTab` 的 `initializedAt / lastAutoTriggerAt / autoTriggerStatus`，并记录 `lastClearedAt`。
@@ -119,6 +126,7 @@
 - 风险：
   - URL 归一化不一致会导致重复页面。
   - 提取失败覆盖旧内容会导致历史丢失。
+  - 当前正文镜像必须与 `extractionCaches[extractionMethod]` 保持一致。
   - `promptTab` 初始化状态未持久化会导致 side panel 重开后重复自动触发。
   - 自动触发若直接改写 `includePageContent`，会污染用户手动切换过的页面级上下文状态。
 
@@ -129,5 +137,6 @@
 - 自动触发初始化状态恢复测试。
 - 清空 `promptTab` 后自动触发可再次执行测试。
 - 列表排序与搜索测试。
+- 按提取方法缓存和旧数据迁移测试。
 - 过期清理测试。
 - 删除页面级联清理测试。

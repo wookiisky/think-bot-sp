@@ -11,6 +11,7 @@ import {
   sidebarPortClientMessageSchema,
   sidebarCommandTypeSchema,
   sidebarCommandTypeValues,
+  sidebarSwitchExtractionMethodResponseSchema,
 } from '../../../src/services/runtime-messaging/sidebar-contract';
 import { createPortBus } from '../../../src/services/runtime-messaging/port-bus';
 import { createSidebarCommandHandler, isSidebarCommandMessage, sidebarCommandTypes } from '../../../src/services/runtime-messaging/sidebar-commands';
@@ -73,6 +74,40 @@ describe('runtime-messaging', () => {
       blockedByBlacklist: false,
       matchedRuleId: null,
       shouldExtract: true,
+    });
+    expect(
+      sidebarSwitchExtractionMethodResponseSchema.parse({
+        type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+        payload: {
+          hasCachedContent: true,
+          method: 'jina',
+          content: 'Jina 正文',
+          extractionMethod: 'jina',
+        },
+      }),
+    ).toEqual({
+      type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+      payload: {
+        hasCachedContent: true,
+        method: 'jina',
+        content: 'Jina 正文',
+        extractionMethod: 'jina',
+      },
+    });
+    expect(
+      sidebarSwitchExtractionMethodResponseSchema.parse({
+        type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+        payload: {
+          hasCachedContent: false,
+          method: 'jina',
+        },
+      }),
+    ).toEqual({
+      type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+      payload: {
+        hasCachedContent: false,
+        method: 'jina',
+      },
     });
     expect(
       sidebarCommandSchema.parse({
@@ -366,7 +401,7 @@ describe('runtime-messaging', () => {
       ],
       blockedByBlacklist: false,
       matchedRuleId: null,
-      shouldExtract: true,
+      shouldExtract: false,
     });
     expect(pageRepository.getPage).toHaveBeenCalledWith('https://example.com/article');
     expect(blacklistRepository.isBlocked).toHaveBeenCalledWith({

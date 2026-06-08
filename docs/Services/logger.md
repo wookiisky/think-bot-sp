@@ -49,7 +49,7 @@
 - `page.info.loaded`
 - `extraction.started`
 - `extraction.readability_failed`
-- `extraction.jina_fallback_started`
+- `extraction.jina_started`
 - `extraction.completed`
 - `chat.send.accepted`
 - `chat.edit.accepted`
@@ -89,7 +89,7 @@
 ## 5. 关键流程
 
 - side panel 打开和初始化时记录入口、当前 `browserTab` 和初始化结果。
-- `GET_SIDEBAR_BOOTSTRAP`、提取、重提取和方法切换时记录开始、回退和完成。
+- `GET_SIDEBAR_BOOTSTRAP`、提取、重提取和方法切换时记录开始、缓存命中、失败和完成。
 - `SEND_CHAT / EDIT_USER_MESSAGE / RETRY_MESSAGE`、流式开始、首包、完成、取消、错误时记录请求链路。
 - 分支继续新增、分支开始、分支首包、分支完成、分支取消、分支失败时记录请求链路。
 - 页面级清空、标签级清空、导出时记录完成链路。
@@ -101,8 +101,8 @@
 
 - 用户取消：
   - 记录为 `info` 或 `warn`，不记为系统 `error`。
-- 预期内回退：
-  - 例如 Readability 失败后进入 Jina，先记录 `warn`，再记录回退开始。
+- 预期内失败：
+  - 例如 Readability 提取失败时记录 `warn`，不再自动回退到 Jina。
 - 依赖失败：
   - 例如 Provider、同步后端或 content script 连接失败，记录 `error`。
 - service worker 重启恢复：

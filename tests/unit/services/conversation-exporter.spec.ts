@@ -14,6 +14,12 @@ describe('conversation-exporter', () => {
           faviconUrl: '',
           content: '页面内容',
           extractionMethod: 'readability',
+          extractionCaches: {
+            readability: {
+              content: '页面内容',
+              updatedAt: 1,
+            },
+          },
           includePageContent: true,
           promptTabStates: [],
           createdAt: 1,

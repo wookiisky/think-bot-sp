@@ -35,11 +35,11 @@ describe('bridgeStreamError', () => {
     const apiError = new Error('models/gemini-3.1-flash-lite1 is not found for API version v1beta.');
     const bridged = bridgeStreamError({
       result: {
-        textStream: (async function* () {
+        textStream: (async function* (): AsyncGenerator<string> {
           // AI SDK 吞错：先正常产出零个增量，错误经回调旁路写入。
           errorBox.error = apiError;
-          if (false) {
-            yield '';
+          for (const chunk of [] as string[]) {
+            yield chunk;
           }
         })(),
       },

@@ -14,21 +14,76 @@ const promptTabStateSchema = z.object({
   lastClearedAt: z.number().int().nonnegative().nullable(),
 });
 
-export const pageRecordSchema = z
+const extractionMethodSchema = z.enum(['readability', 'jina']);
+
+const extractionCacheItemSchema = z.object({
+  content: z.string(),
+  updatedAt: z.number().int().nonnegative(),
+});
+
+const extractionCachesSchema = z
   .object({
-    id: z.string().min(1),
-    url: z.string().min(1),
-    normalizedUrl: z.string().min(1),
-    title: z.string(),
-    faviconUrl: z.string(),
-    content: z.string(),
-    extractionMethod: z.enum(['readability', 'jina']),
-    includePageContent: z.boolean(),
-    promptTabStates: z.array(promptTabStateSchema),
-    createdAt: z.number().int().nonnegative(),
-    updatedAt: z.number().int().nonnegative(),
-    expiresAt: z.number().int().nonnegative(),
+    readability: extractionCacheItemSchema.optional(),
+    jina: extractionCacheItemSchema.optional(),
   })
+  .default({});
+
+const pageRecordBaseSchema = z.object({
+  id: z.string().min(1),
+  url: z.string().min(1),
+  normalizedUrl: z.string().min(1),
+  title: z.string(),
+  faviconUrl: z.string(),
+  content: z.string(),
+  extractionMethod: extractionMethodSchema,
+  extractionCaches: extractionCachesSchema,
+  includePageContent: z.boolean(),
+  promptTabStates: z.array(promptTabStateSchema),
+  createdAt: z.number().int().nonnegative(),
+  updatedAt: z.number().int().nonnegative(),
+  expiresAt: z.number().int().nonnegative(),
+});
+
+export type ExtractionMethod = z.infer<typeof extractionMethodSchema>;
+export type PageRecord = z.infer<typeof pageRecordBaseSchema>;
+export type ExtractionCaches = PageRecord['extractionCaches'];
+
+/** 判断某个提取方法缓存是否有可用正文。 */
+export const hasUsableExtractionCache = (cache: ExtractionCaches[ExtractionMethod] | undefined): cache is NonNullable<ExtractionCaches[ExtractionMethod]> =>
+  Boolean(cache?.content.trim());
+
+/** 根据当前提取方法重建页面正文镜像。 */
+export const rebuildPageContentFromExtractionCache = <T extends { content: string; extractionMethod: ExtractionMethod; extractionCaches: ExtractionCaches }>(
+  page: T,
+): T => {
+  const cache = page.extractionCaches[page.extractionMethod];
+  return {
+    ...page,
+    content: hasUsableExtractionCache(cache) ? cache.content : '',
+  };
+};
+
+const withLegacyExtractionCache = (value: unknown) => {
+  const parsed = pageRecordBaseSchema.parse(value);
+  if (Object.keys(parsed.extractionCaches).length > 0 || !parsed.content.trim()) {
+    return parsed;
+  }
+
+  return {
+    ...parsed,
+    extractionCaches: {
+      ...parsed.extractionCaches,
+      [parsed.extractionMethod]: {
+        content: parsed.content,
+        updatedAt: parsed.updatedAt,
+      },
+    },
+  };
+};
+
+export const pageRecordSchema = z
+  .preprocess(withLegacyExtractionCache, pageRecordBaseSchema)
+  .transform((value) => rebuildPageContentFromExtractionCache(value))
   .superRefine((value, ctx) => {
     if (value.id !== value.normalizedUrl) {
       ctx.addIssue({

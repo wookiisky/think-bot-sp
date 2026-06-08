@@ -554,17 +554,47 @@ export default defineBackground(() => {
 
       if (message.type === 'SWITCH_EXTRACTION_METHOD') {
         const command = sidebarSwitchExtractionMethodCommandSchema.parse(message);
-        logger.info('extraction.method_switched', {
-          browserTabId: command.tabId,
-          normalizedUrl: normalizePageUrl(command.pageUrl),
-          method: command.method,
-        });
-        sendResponse({
-          type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
-          payload: {
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        if (!isSidebarPageSender(senderInfo, chrome.runtime.id)) {
+          sendResponse({ error: 'invalid sidebar sender' });
+          return true;
+        }
+        void pageRepository
+          .selectExtractionCache({
+            normalizedUrl,
             method: command.method,
-          },
-        });
+          })
+          .then((result) => {
+            logger.info('extraction.method_switched', {
+              browserTabId: command.tabId,
+              normalizedUrl,
+              method: command.method,
+              hasCachedContent: result.hasCachedContent,
+            });
+            sendResponse({
+              type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+              payload: result.hasCachedContent
+                ? {
+                    hasCachedContent: true,
+                    method: command.method,
+                    content: result.content,
+                    extractionMethod: result.extractionMethod,
+                  }
+                : {
+                    hasCachedContent: false,
+                    method: command.method,
+                  },
+            });
+          })
+          .catch((error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error);
+            logger.error('extraction.method_switch_failed', {
+              browserTabId: command.tabId,
+              normalizedUrl,
+              reason,
+            });
+            sendResponse({ error: reason });
+          });
         return true;
       }
 

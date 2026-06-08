@@ -122,6 +122,13 @@ describe('sync-service', () => {
     await pageRepository.savePage({
       ...buildPageRecord({ url: 'https://example.com/article-a', now: 1 }),
       title: '本地旧页',
+      content: '本地 Readability 缓存',
+      extractionCaches: {
+        readability: {
+          content: '本地 Readability 缓存',
+          updatedAt: 300,
+        },
+      },
       updatedAt: 120,
       expiresAt: 121,
     });
@@ -182,12 +189,31 @@ describe('sync-service', () => {
         {
           ...buildPageRecord({ url: 'https://example.com/article-a', now: 1 }),
           title: '远端新页',
+          content: '远端旧 Readability 缓存',
+          extractionCaches: {
+            readability: {
+              content: '远端旧 Readability 缓存',
+              updatedAt: 200,
+            },
+            jina: {
+              content: '远端 Jina 缓存',
+              updatedAt: 310,
+            },
+          },
           updatedAt: 260,
           expiresAt: 261,
         },
         {
           ...buildPageRecord({ url: 'https://example.com/article-b', now: 1 }),
           title: '远端被删除页',
+          content: '不应复活的 Jina 缓存',
+          extractionMethod: 'jina',
+          extractionCaches: {
+            jina: {
+              content: '不应复活的 Jina 缓存',
+              updatedAt: 500,
+            },
+          },
           updatedAt: 250,
           expiresAt: 251,
         },
@@ -277,7 +303,18 @@ describe('sync-service', () => {
     });
     await expect(pageRepository.getPage('https://example.com/article-a')).resolves.toMatchObject({
       title: '远端新页',
+      content: '本地 Readability 缓存',
       updatedAt: 260,
+      extractionCaches: {
+        readability: {
+          content: '本地 Readability 缓存',
+          updatedAt: 300,
+        },
+        jina: {
+          content: '远端 Jina 缓存',
+          updatedAt: 310,
+        },
+      },
     });
     await expect(pageRepository.getPage('https://example.com/article-b')).resolves.toBeNull();
     await expect(pageRepository.getPage('https://example.com/article-c')).resolves.toMatchObject({
@@ -312,7 +349,13 @@ describe('sync-service', () => {
     }
     const pushedSnapshot = JSON.parse(pushedSnapshotFile.content) as {
       config: { basic: { language: string }; sync: { lastSyncAt: number } };
-      pages: Array<{ normalizedUrl: string; title: string; updatedAt: number }>;
+      pages: Array<{
+        normalizedUrl: string;
+        title: string;
+        content: string;
+        updatedAt: number;
+        extractionCaches?: Record<string, { content: string; updatedAt: number }>;
+      }>;
       conversations: Array<{ normalizedUrl: string; updatedAt: number }>;
       tombstones: Array<{ normalizedUrl: string; deletedAt: number }>;
       lastSyncAt: number;
@@ -327,7 +370,18 @@ describe('sync-service', () => {
       {
         normalizedUrl: 'https://example.com/article-a',
         title: '远端新页',
+        content: '本地 Readability 缓存',
         updatedAt: 260,
+        extractionCaches: {
+          readability: {
+            content: '本地 Readability 缓存',
+            updatedAt: 300,
+          },
+          jina: {
+            content: '远端 Jina 缓存',
+            updatedAt: 310,
+          },
+        },
       },
       {
         normalizedUrl: 'https://example.com/article-c',

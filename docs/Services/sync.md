@@ -17,7 +17,8 @@
 - 测试连接。
 - 读取远端快照。
 - 导出本地完整快照。
-- 按 `updatedAt` 合并配置、页面和会话。
+- 按 `updatedAt` 合并配置、页面主字段和会话。
+- 按方法缓存自身 `updatedAt` 合并 `PageRecord.extractionCaches`。
 - 先应用页面级 tombstone，再过滤页面与会话。
 - 把合并结果回写本地稳定存储。
 - 推送合并后的远端快照。
@@ -46,7 +47,8 @@ Provider：
 - 用户手动点击“立即同步”。
 - 先构建本地 `SyncSnapshot`。
 - 再读取远端 `SyncSnapshot`。
-- 按对象时间合并配置 / 页面 / 会话，并以 tombstone 为优先删除语义。
+- 按对象时间合并配置 / 页面主字段 / 会话，并以 tombstone 为优先删除语义。
+- 页面合并后再按 `readability / jina` 分别合并正文缓存，并重建当前正文镜像。
 - 把合并结果回写本地 `config / pages / conversations / syncState`。
 - 重新基于本地稳定视图生成新快照并推送远端。
 - 成功后更新 `lastSyncAt`。
@@ -93,12 +95,13 @@ Provider：
 - `testConnection` 不能隐式保存配置。
 - `syncNow` 必须先由配置仓储持久化，再执行远端写入。
 - 墓碑判断必须先于页面和会话可见性判断，防止已删页面被旧快照复活。
+- 页面墓碑只比较 `PageRecord.updatedAt`，不能因为某个方法缓存的 `updatedAt` 较新而复活已删除页面。
 - 同步链路只改稳定数据，不同步 `LoadingStateRecord`、页面运行态以外的短时状态。
 
 ## 10. 测试要求
 
 - 职责测试：连接测试、同步成功、更新时间展示。
-- 职责测试：配置 / 页面 / 会话按 `updatedAt` 合并。
+- 职责测试：配置 / 页面主字段 / 会话按 `updatedAt` 合并，页面方法缓存按各自 `updatedAt` 合并。
 - 边界测试：未启用同步、未选择 provider、缺少 provider 必填凭据。
 - 错误流测试：鉴权失败、网络失败、远端不可读、远端格式非法。
 - 竞争态测试：本地删远端改、本地改远端删。

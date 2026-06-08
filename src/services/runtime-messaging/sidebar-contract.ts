@@ -265,6 +265,32 @@ export const sidebarBootstrapResponseSchema = z.object({
   shouldExtract: z.boolean(),
 });
 
+/** 切换提取方法的响应。 */
+export const sidebarSwitchExtractionMethodResponseSchema = z.object({
+  /** 响应类型。 */
+  type: z.literal('SWITCH_EXTRACTION_METHOD_SUCCESS'),
+  /** 切换结果。 */
+  payload: z.discriminatedUnion('hasCachedContent', [
+    z.object({
+      /** 是否命中目标方法缓存。 */
+      hasCachedContent: z.literal(true),
+      /** 已切换的提取方式。 */
+      method: z.enum(['readability', 'jina']),
+      /** 命中的缓存正文。 */
+      content: z.string(),
+      /** 命中的缓存提取方式。 */
+      extractionMethod: z.enum(['readability', 'jina']),
+    }),
+    z.object({
+      /** 是否命中目标方法缓存。 */
+      hasCachedContent: z.literal(false),
+      /** 已切换的提取方式。 */
+      method: z.enum(['readability', 'jina']),
+    }),
+  ]),
+});
+export type SidebarSwitchExtractionMethodResponse = z.infer<typeof sidebarSwitchExtractionMethodResponseSchema>;
+
 /** 订阅流式输出的 port 客户端消息。 */
 export const sidebarPortClientMessageSchema = z.object({
   /** 客户端消息类型。 */

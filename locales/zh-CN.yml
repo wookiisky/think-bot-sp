@@ -232,6 +232,7 @@ sidebar.state.bootstrapping: 正在恢复页面上下文
 sidebar.state.blockedTitle: 当前页面命中黑名单
 sidebar.state.blockedDescription: 等待放行
 sidebar.state.extracting: 正在提取页面正文
+sidebar.state.emptyExtractionCache: 当前提取方式暂无缓存，请点击重新提取
 sidebar.state.error: 提取失败，请重试
 conversations.searchLabel: 搜索历史页面
 conversations.searchPlaceholder: 搜索

@@ -232,6 +232,7 @@ sidebar.state.bootstrapping: Restoring page context
 sidebar.state.blockedTitle: This page is blocked by the blacklist
 sidebar.state.blockedDescription: Waiting for confirmation
 sidebar.state.extracting: Extracting page content
+sidebar.state.emptyExtractionCache: No cache for this extraction method. Click re-extract.
 sidebar.state.error: Extraction failed. Please retry.
 conversations.searchLabel: Search History Pages
 conversations.searchPlaceholder: Search

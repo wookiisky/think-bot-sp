@@ -1,4 +1,10 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import {
+  hasUsableExtractionCache,
+  pageRecordSchema,
+  rebuildPageContentFromExtractionCache,
+} from '../../domain/page/page-schema';
+import type { ExtractionCaches, PageRecord } from '../../domain/page/page-schema';
 import { SYNC_SNAPSHOT_SCHEMA_VERSION } from '../../shared/schema-version';
 import type { SyncSnapshot, SyncTombstone } from '../../domain/sync/sync-snapshot-schema';
 import { createGistSyncProvider } from './gist-sync-provider';
@@ -85,6 +91,55 @@ const mergeTombstones = (localTombstones: SyncTombstone[], remoteTombstones: Syn
   return Array.from(tombstones.values()).sort((left, right) => left.normalizedUrl.localeCompare(right.normalizedUrl));
 };
 
+const extractionMethods = ['readability', 'jina'] as const;
+
+const pickNewerExtractionCache = (
+  localCache: ExtractionCaches[(typeof extractionMethods)[number]] | undefined,
+  remoteCache: ExtractionCaches[(typeof extractionMethods)[number]] | undefined,
+) => {
+  if (!hasUsableExtractionCache(localCache)) {
+    return hasUsableExtractionCache(remoteCache) ? remoteCache : undefined;
+  }
+  if (!hasUsableExtractionCache(remoteCache)) {
+    return localCache;
+  }
+  return localCache.updatedAt >= remoteCache.updatedAt ? localCache : remoteCache;
+};
+
+const mergeExtractionCaches = (localPage: PageRecord | null, remotePage: PageRecord | null): ExtractionCaches => {
+  const nextCaches: ExtractionCaches = {};
+
+  for (const method of extractionMethods) {
+    const cache = pickNewerExtractionCache(localPage?.extractionCaches[method], remotePage?.extractionCaches[method]);
+    if (cache) {
+      nextCaches[method] = cache;
+    }
+  }
+
+  return nextCaches;
+};
+
+/** 合并页面主记录后，按方法时间合并缓存并重建当前正文镜像。 */
+const mergePageRecords = (localPages: PageRecord[], remotePages: PageRecord[]) => {
+  const keys = new Set([...localPages.map((page) => page.normalizedUrl), ...remotePages.map((page) => page.normalizedUrl)]);
+
+  return Array.from(keys).map((normalizedUrl) => {
+    const localPage = localPages.find((page) => page.normalizedUrl === normalizedUrl) ?? null;
+    const remotePage = remotePages.find((page) => page.normalizedUrl === normalizedUrl) ?? null;
+    const basePage = localPage && remotePage ? (localPage.updatedAt >= remotePage.updatedAt ? localPage : remotePage) : (localPage ?? remotePage);
+    if (!basePage) {
+      throw new Error(`page not found during sync merge: ${normalizedUrl}`);
+    }
+
+    return pageRecordSchema.parse(
+      rebuildPageContentFromExtractionCache({
+        ...basePage,
+        extractionCaches: mergeExtractionCaches(localPage, remotePage),
+      }),
+    );
+  });
+};
+
 /** 先按对象时间合并，再统一应用墓碑删除语义。 */
 const mergeSyncSnapshots = ({
   localSnapshot,
@@ -108,7 +163,7 @@ const mergeSyncSnapshots = ({
 
   const mergedTombstones = mergeTombstones(localSnapshot.tombstones, remoteSnapshot.tombstones);
   const tombstoneMap = new Map(mergedTombstones.map((item) => [item.normalizedUrl, item.deletedAt]));
-  const mergedPages = mergeRecordsByUpdatedAt(localSnapshot.pages, remoteSnapshot.pages, (page) => page.normalizedUrl)
+  const mergedPages = mergePageRecords(localSnapshot.pages, remoteSnapshot.pages)
     .filter((page) => {
       const deletedAt = tombstoneMap.get(page.normalizedUrl);
       return deletedAt == null || page.updatedAt > deletedAt;

@@ -811,7 +811,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 if (!shouldTriggerPromptTab(promptTab, nextMessageMap[promptTab.id] ?? [], nextActiveSessionIds[promptTab.id] ?? null)) {
                   continue;
                 }
-                await handleTriggerPromptTab(promptTab);
+                await handleTriggerPromptTab(promptTab, bootstrap.page?.content ?? '');
               }
             })();
           }
@@ -870,24 +870,24 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }
   };
 
-  /** 切换提取方式并立即重新提取。 */
+  /** 切换提取方式，只读取对应方法的已有缓存。 */
   const handleSwitchMethod = async (nextMethod: ExtractionMethod) => {
     if (nextMethod === method || state === 'bootstrapping' || state === 'blocked' || isExtracting) {
       return;
     }
 
     const previousMethod = method;
+    const previousContent = content;
     setMethod(nextMethod);
     setState('extracting');
     try {
-      await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
-      await runExtraction(nextMethod, 'manual_reextract');
-      pushToast(
-        'success',
-        nextMethod === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
-      );
+      const response = await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
+      setContent(response.payload.hasCachedContent ? response.payload.content : '');
+      setMethod(response.payload.hasCachedContent ? response.payload.extractionMethod : response.payload.method);
+      setState('ready');
     } catch {
       setMethod(previousMethod);
+      setContent(previousContent);
       setState('error');
       pushToast('error', t('sidebar.notice.switchMethodFailed'));
     }
@@ -1043,19 +1043,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     promptTab.id !== CHAT_PROMPT_TAB_ID && Boolean(promptTab.triggerPrompt) && messages.length === 0 && !sessionId;
 
   /** 直接发送快捷输入提示词，并把消息展示为快捷输入名称。 */
-  const handleTriggerPromptTab = async (promptTab: PromptTabDefinition) => {
+  const handleTriggerPromptTab = async (promptTab: PromptTabDefinition, pageContent = content) => {
     if (!promptTab.triggerPrompt) {
       return;
     }
 
-    if (!normalizeExtractionText(content)) {
-      try {
-        await runExtraction(method, 'prompt_tab_click');
-      } catch {
-        setState('error');
-        pushToast('error', t('sidebar.notice.reExtractFailed'));
-        return;
-      }
+    if (!normalizeExtractionText(pageContent)) {
+      pushToast('error', t('sidebar.notice.emptyExtraction'));
+      return;
     }
 
     await handleSend(promptTab.id, {
@@ -1565,6 +1560,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             <div className="flex items-center gap-2 text-sm text-primary">
               <WorkspaceStatusGlyph label={t('sidebar.state.extracting')} status="loading" className="size-4" />
               <span>{t('sidebar.state.extracting')}</span>
+            </div>
+          </div>
+        ) : null}
+        {!normalizedExtractionContent && state === 'ready' ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FileTextIcon className="size-4" />
+              <span>{t('sidebar.state.emptyExtractionCache')}</span>
             </div>
           </div>
         ) : null}

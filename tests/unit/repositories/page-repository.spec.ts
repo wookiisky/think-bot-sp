@@ -94,10 +94,118 @@ describe('page-repository', () => {
     expect(saved.faviconUrl).toBe('https://example.com/new.ico');
     expect(saved.content).toBe('新内容');
     expect(saved.extractionMethod).toBe('jina');
+    expect(saved.extractionCaches.jina).toMatchObject({
+      content: '新内容',
+    });
     expect(saved.includePageContent).toBe(false);
     expect(saved.promptTabStates).toEqual(existingPage.promptTabStates);
     expect(saved.updatedAt).toBeGreaterThanOrEqual(existingPage.updatedAt);
     expect(saved.expiresAt).toBeGreaterThan(saved.updatedAt);
+  });
+
+  it('提取结果为空时不写入页面缓存', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await expect(
+      repo.saveExtractionResult({
+        normalizedUrl: 'https://example.com/article',
+        url: 'https://example.com/article',
+        title: '标题',
+        faviconUrl: '',
+        content: '   ',
+        extractionMethod: 'readability',
+      }),
+    ).rejects.toThrow(/empty extraction content/i);
+    await expect(repo.getPage('https://example.com/article')).resolves.toBeNull();
+  });
+
+  it('切换提取方法命中缓存时只更新正文镜像并保留页面元数据', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+    await repo.saveExtractionResult({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      title: '原始标题',
+      faviconUrl: 'https://example.com/favicon.ico',
+      content: 'Readability 正文',
+      extractionMethod: 'readability',
+    });
+    await repo.saveExtractionResult({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      title: 'Jina 标题不应覆盖切换',
+      faviconUrl: 'https://example.com/jina.ico',
+      content: 'Jina 正文',
+      extractionMethod: 'jina',
+    });
+    await repo.updatePageTitle({
+      normalizedUrl: 'https://example.com/article',
+      title: '用户标题',
+    });
+    const beforeSelect = await repo.getPage('https://example.com/article');
+
+    const selected = await repo.selectExtractionCache({
+      normalizedUrl: 'https://example.com/article',
+      method: 'readability',
+    });
+
+    expect(selected).toMatchObject({
+      hasCachedContent: true,
+      content: 'Readability 正文',
+      extractionMethod: 'readability',
+    });
+    expect(selected.page).toMatchObject({
+      title: '用户标题',
+      faviconUrl: 'https://example.com/jina.ico',
+      content: 'Readability 正文',
+      extractionMethod: 'readability',
+    });
+    expect(selected.page?.updatedAt).toBe(beforeSelect?.updatedAt);
+  });
+
+  it('切换到缺失缓存的方法时保留页面记录但清空正文镜像', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveExtractionResult({
+      normalizedUrl: 'https://example.com/article',
+      url: 'https://example.com/article',
+      title: '标题',
+      faviconUrl: '',
+      content: 'Readability 正文',
+      extractionMethod: 'readability',
+    });
+    const before = await repo.getPage('https://example.com/article');
+
+    const selected = await repo.selectExtractionCache({
+      normalizedUrl: 'https://example.com/article',
+      method: 'jina',
+    });
+
+    expect(selected.hasCachedContent).toBe(false);
+    expect(selected.page).toMatchObject({
+      content: '',
+      extractionMethod: 'jina',
+      title: '标题',
+    });
+    expect(selected.page?.updatedAt).toBe(before?.updatedAt);
+  });
+
+  it('页面不存在时切换提取方法不创建空页面记录', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createPageRepository(createChromeLocalAdapter(storage));
+
+    await expect(
+      repo.selectExtractionCache({
+        normalizedUrl: 'https://example.com/missing',
+        method: 'jina',
+      }),
+    ).resolves.toEqual({
+      hasCachedContent: false,
+      page: null,
+    });
+    await expect(repo.getPage('https://example.com/missing')).resolves.toBeNull();
   });
 
   it('更新页面级 includePageContent 时保留正文和 promptTab 状态', async () => {

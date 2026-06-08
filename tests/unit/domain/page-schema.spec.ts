@@ -40,8 +40,51 @@ describe('page schema', () => {
     expect(pageRecordSchema.parse(page)).toEqual(page);
     expect(page.id).toBe('https://example.com/a?q=1');
     expect(page.includePageContent).toBe(true);
+    expect(page.extractionCaches).toEqual({});
     expect(page.promptTabStates).toEqual([]);
     expect(page.expiresAt - page.updatedAt).toBe(90 * 24 * 60 * 60 * 1000);
+  });
+
+  it('旧页面记录有正文时迁移到当前提取方法缓存', () => {
+    const parsed = pageRecordSchema.parse({
+      id: 'https://example.com/article',
+      url: 'https://example.com/article',
+      normalizedUrl: 'https://example.com/article',
+      title: '旧页面',
+      faviconUrl: '',
+      content: '旧正文',
+      extractionMethod: 'readability',
+      includePageContent: true,
+      promptTabStates: [],
+      createdAt: 1,
+      updatedAt: 10,
+      expiresAt: 11,
+    });
+
+    expect(parsed.extractionCaches).toEqual({
+      readability: {
+        content: '旧正文',
+        updatedAt: 10,
+      },
+    });
+    expect(parsed.content).toBe('旧正文');
+  });
+
+  it('当前方法缓存为空时会把正文镜像重建为空', () => {
+    const parsed = pageRecordSchema.parse({
+      ...buildPageRecord({ url: 'https://example.com/article', now: 1 }),
+      content: '过期镜像',
+      extractionMethod: 'jina',
+      extractionCaches: {
+        readability: {
+          content: 'Readability 正文',
+          updatedAt: 2,
+        },
+      },
+    });
+
+    expect(parsed.content).toBe('');
+    expect(parsed.extractionCaches.readability?.content).toBe('Readability 正文');
   });
 
   it('重置 promptTab 时只清空目标状态', () => {

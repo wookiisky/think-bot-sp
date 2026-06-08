@@ -75,7 +75,9 @@
   - 时间更新的一侧整份配置生效
 - 页面：
   - 按 `normalizedUrl` 合并
-  - 时间更新的一侧覆盖旧页记录
+  - 页面主字段按 `PageRecord.updatedAt` 选择，时间相同优先本地记录
+  - `PageRecord.extractionCaches.readability / jina` 分别按缓存自身 `updatedAt` 选择更新的一份
+  - 合并缓存后重建 `PageRecord.content`：当前 `extractionMethod` 有可用缓存时镜像该缓存，否则为空字符串
 - 会话：
   - 按 `ConversationRecord.id` 合并
   - 时间更新的一侧覆盖旧会话记录
@@ -83,6 +85,7 @@
   - 先比较页面墓碑 `deletedAt`
   - 若 `deletedAt >= page.updatedAt`，页面与其全部会话都视为已删除
   - 只有当新的页面记录 `updatedAt > deletedAt` 时，才允许同 URL 页面重新出现
+  - `extractionCaches` 的 `updatedAt` 不能让已删除页面复活
 - 最近同步时间：
   - 取本地与远端非空值中的较大者
   - 只在最终推送成功后更新为本次同步时间
@@ -103,6 +106,7 @@
 - Gist/WebDAV 推拉测试。
 - 软删除墓碑测试。
 - 配置、页面、会话按 `updatedAt` 合并测试。
+- 页面双方法缓存按各自 `updatedAt` 合并和正文镜像重建测试。
 - 墓碑先于页面和会话应用测试。
 - 本地回写后清理孤儿 conversation / loading 测试。
 - 同步失败保留本地数据测试。

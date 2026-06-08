@@ -93,9 +93,12 @@ describe('extraction service', () => {
     expect(pageRepository.saveExtractionResult).toHaveBeenCalledTimes(1);
   });
 
-  it('Readability 失败后回退到 Jina', async () => {
+  it('Readability 失败后不回退到 Jina', async () => {
     const jinaClient = {
       extract: vi.fn().mockResolvedValue('Jina body'),
+    };
+    const pageRepository = {
+      saveExtractionResult: vi.fn(async (value) => value),
     };
     const service = createExtractionService({
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -112,9 +115,7 @@ describe('extraction service', () => {
         extract: vi.fn().mockReturnValue(null),
       },
       jinaClient,
-      pageRepository: {
-        saveExtractionResult: vi.fn(async (value) => value),
-      },
+      pageRepository,
     });
 
     await expect(
@@ -122,6 +123,44 @@ describe('extraction service', () => {
         tabId: 7,
         pageUrl: 'https://example.com/article',
         method: 'readability',
+        jinaApiKey: '',
+        jinaResponseTemplate: '{{content}}',
+      }),
+    ).rejects.toThrow(/readability extraction failed/i);
+    expect(jinaClient.extract).not.toHaveBeenCalled();
+    expect(pageRepository.saveExtractionResult).not.toHaveBeenCalled();
+  });
+
+  it('Jina 方法只请求 Jina 并写入 Jina 结果', async () => {
+    const jinaClient = {
+      extract: vi.fn().mockResolvedValue('Jina body'),
+    };
+    const pageRepository = {
+      saveExtractionResult: vi.fn(async (value) => value),
+    };
+    const service = createExtractionService({
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      contentSource: {
+        collect: vi.fn().mockResolvedValue({
+          url: 'https://example.com/article',
+          title: 'Example',
+          html: '<html><body><div>jina</div></body></html>',
+          text: 'jina',
+          faviconUrl: '',
+        }),
+      },
+      readabilityExtractor: {
+        extract: vi.fn(),
+      },
+      jinaClient,
+      pageRepository,
+    });
+
+    await expect(
+      service.extractPage({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'jina',
         jinaApiKey: '',
         jinaResponseTemplate: '{{content}}',
       }),

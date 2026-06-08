@@ -1,4 +1,10 @@
-import { buildPageRecord, pageRecordSchema, updatePromptTabState } from '../domain/page/page-schema';
+import {
+  buildPageRecord,
+  hasUsableExtractionCache,
+  pageRecordSchema,
+  updatePromptTabState,
+} from '../domain/page/page-schema';
+import type { ExtractionMethod } from '../domain/page/page-schema';
 import { CONVERSATION_STORAGE_PREFIX, LOADING_STORAGE_PREFIX, PAGE_STORAGE_PREFIX } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
@@ -74,8 +80,12 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       /** 提取出的正文。 */
       content: string;
       /** 实际使用的提取方法。 */
-      extractionMethod: 'readability' | 'jina';
+      extractionMethod: ExtractionMethod;
     }) {
+      if (!input.content.trim()) {
+        throw new Error('empty extraction content');
+      }
+
       const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
       const currentValue = result[getPageKey(input.normalizedUrl)];
       const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : null;
@@ -86,12 +96,59 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
         faviconUrl: input.faviconUrl,
         content: input.content,
         extractionMethod: input.extractionMethod,
+        extractionCaches: {
+          ...(currentPage?.extractionCaches ?? {}),
+          [input.extractionMethod]: {
+            content: input.content,
+            updatedAt: now,
+          },
+        },
         updatedAt: now,
         expiresAt: now + NINETY_DAYS,
       });
 
       await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
       return nextPage;
+    },
+
+    /** 切换当前提取方法，只读取已有方法缓存，不触发新提取。 */
+    async selectExtractionCache(input: {
+      /** 归一化后的页面 URL。 */
+      normalizedUrl: string;
+      /** 目标提取方法。 */
+      method: ExtractionMethod;
+    }) {
+      const result = await storage.get<Record<string, unknown>>([getPageKey(input.normalizedUrl)]);
+      const currentValue = result[getPageKey(input.normalizedUrl)];
+      const currentPage = currentValue ? pageRecordSchema.parse(currentValue) : null;
+      if (!currentPage) {
+        return {
+          hasCachedContent: false as const,
+          page: null,
+        };
+      }
+
+      const cached = currentPage.extractionCaches[input.method];
+      const nextPage = pageRecordSchema.parse({
+        ...currentPage,
+        extractionMethod: input.method,
+        content: hasUsableExtractionCache(cached) ? cached.content : '',
+      });
+      await storage.set({ [getPageKey(nextPage.normalizedUrl)]: nextPage });
+
+      if (!hasUsableExtractionCache(cached)) {
+        return {
+          hasCachedContent: false as const,
+          page: nextPage,
+        };
+      }
+
+      return {
+        hasCachedContent: true as const,
+        page: nextPage,
+        content: cached.content,
+        extractionMethod: input.method,
+      };
     },
 
     /** 更新页面级 includePageContent 开关，同时保留正文与页面状态。 */

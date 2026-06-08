@@ -5,6 +5,7 @@ import type {
   SidebarConversationRecord,
   SidebarLoadingStateRecord,
   SidebarPageRecord,
+  SidebarSwitchExtractionMethodResponse,
 } from '../../services/runtime-messaging/sidebar-contract';
 
 type ExtractionMethod = 'readability' | 'jina';
@@ -51,15 +52,7 @@ type ReExtractContentResponse = {
   };
 };
 
-type SwitchExtractionMethodResponse = {
-  /** 响应类型。 */
-  type: 'SWITCH_EXTRACTION_METHOD_SUCCESS';
-  /** 当前选择的提取方式。 */
-  payload: {
-    /** 已切换的提取方式。 */
-    method: ExtractionMethod;
-  };
-};
+type SwitchExtractionMethodResponse = SidebarSwitchExtractionMethodResponse;
 
 type BranchDescriptor = {
   /** 分支 id。 */

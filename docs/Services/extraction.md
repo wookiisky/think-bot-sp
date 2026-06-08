@@ -17,9 +17,9 @@
 
 - 通过 content script 获取 HTML 和页面元数据。
 - 使用 Readability 提取正文。
-- 按需回退到 Jina。
+- 使用 Jina 提取正文。
 - 消费基础设置中的 Jina API Key、Jina 响应模板和默认提取方法。
-- 更新页面记录中的内容、方法和时间戳。
+- 更新页面记录中对应方法的正文缓存、当前正文镜像、方法和时间戳。
 
 不负责：
 
@@ -43,9 +43,10 @@
 
 ## 5. 关键流程
 
-- 初始化时优先读取缓存。
-- 需要新提取时先尝试 Readability。
-- Readability 失败且允许回退时再调用 Jina。
+- 初始化时优先读取当前方法缓存。
+- 切换提取方法只读取对应方法缓存，不触发新提取。
+- 手动重新提取时只刷新当前方法缓存。
+- Readability 失败时直接失败并保留旧 Readability 缓存，不回退 Jina。
 - 调用 Jina 时会带上用户配置的可选 API Key。
 - Jina 返回正文后会按 `jinaResponseTemplate` 生成最终文本：
   - 模板包含 `{{content}}` 时做占位替换。
@@ -61,6 +62,8 @@
   - 自动刷新后仍失败时返回连接错误并允许上层手动重试。
 - HTML 为空：
   - 直接失败，不发送空内容到 Jina。
+- Readability 失败：
+  - 保留旧 Readability 缓存并上报错误。
 - Jina 失败：
   - 保留旧缓存并上报错误。
 - Jina 模板为空：
@@ -76,6 +79,7 @@
 - 写：
   - `PageRecord.content`
   - `PageRecord.extractionMethod`
+  - `PageRecord.extractionCaches`
   - `PageRecord.updatedAt`
 
 ## 8. 依赖与协作模块
@@ -94,7 +98,7 @@
 
 ## 10. 测试要求
 
-- 职责测试：Readability 提取、Jina 回退、方法切换、Jina API Key 与响应模板生效。
+- 职责测试：Readability 提取、Readability 失败不回退、Jina 提取、方法切换读缓存、Jina API Key 与响应模板生效。
 - 边界测试：空正文、极短正文、复杂 DOM。
 - 错误流测试：content script 未连接、Jina 失败。
 - 异常流测试：自动刷新重试、手动重试提取、切换方法后刷新。

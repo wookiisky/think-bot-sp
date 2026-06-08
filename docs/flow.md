@@ -143,7 +143,7 @@
 5. 若 content script 未连上，background 先尝试按需注入 content script，再进入一次自动刷新重连。
 6. 提取服务优先使用 Readability。
 7. Readability 成功则保存页面内容、提取方式、更新时间。
-8. Readability 失败且允许回退时，调用 Jina 提取。
+8. Readability 失败时直接提示失败；Jina 只在当前方法为 Jina 时调用。
 9. Jina 成功则保存新内容和方法。
 10. side panel 将提取结果显示在常驻独立的提取内容区。
 11. 全部失败则返回错误态，并保留当前页面上下文。
@@ -170,7 +170,7 @@
 - 页面级 `includePageContent` 不受提取失败影响。
 - 提取内容区与聊天区必须并存，不能把提取内容降级为某个 `promptTab` 的临时内容。
 - 黑名单未放行前不能触发提取。
-- 提取链路应记录 Readability 失败、Jina 回退和最终完成状态。
+- 提取链路应记录 Readability 失败、Jina 提取开始和最终完成状态。
 
 ## 7. 主流程：发送消息与流式输出
 

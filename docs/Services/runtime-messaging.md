@@ -141,6 +141,10 @@ long-lived port 事件：
 - extension page 发 one-shot command 到 background。
 - one-shot command 路由只先识别命令 `type` 信封，具体 payload 在对应 command handler 分支内用 schema 校验后再进入业务逻辑。
 - side panel 首屏初始化统一走 `GET_SIDEBAR_BOOTSTRAP`，只拉取恢复和判定数据，不在该命令内隐式触发提取。
+- `GET_SIDEBAR_BOOTSTRAP.shouldExtract` 只在没有 `PageRecord` 时为 `true`；已有页面记录但当前方法无缓存时恢复空态，不自动提取。
+- `SWITCH_EXTRACTION_METHOD` 只切换方法并读取已有缓存，命中返回缓存正文，未命中返回空态标记，不调用提取服务。
+- `SWITCH_EXTRACTION_METHOD` 会写入页面当前方法镜像，只接受 side panel sender，不能由其他扩展页绕过 sender 校验调用。
+- `RE_EXTRACT_CONTENT` 是刷新当前方法缓存的唯一 one-shot 提取入口。
 - side panel sender 校验固定检查 `runtime.id` 和 URL `pathname` 为 `sidebar.html`，允许 query 参数存在。
 - 流式任务创建后，UI 建立 port 订阅。
 - background 按 `normalizedUrl + promptTabId` 路由事件，保持同一 `promptTab` 的实时流与恢复流统一入口。

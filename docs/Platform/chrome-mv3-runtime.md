@@ -72,7 +72,7 @@
 
 阶段 3 额外约束：
 
-- `host_permissions` 需要覆盖 `http://*/*`、`https://*/*` 和 `https://r.jina.ai/*`，否则网页采集和 Jina 回退都不稳定。
+- `host_permissions` 需要覆盖 `http://*/*`、`https://*/*` 和 `https://r.jina.ai/*`，否则网页采集和 Jina 提取都不稳定。
 - 当 `tabs.sendMessage` 未连上 content script 时，background 可以先按需注入 content script，再走一次自动刷新重连。
 
 权限约束：
