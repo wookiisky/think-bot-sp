@@ -24,8 +24,10 @@ export default [
   {
     files: [
       '*.js',
+      '*.mjs',
       '*.ts',
       '*.tsx',
+      'scripts/**/*.{js,mjs}',
       'src/**/*.{js,ts,tsx}',
       'tests/**/*.{js,ts,tsx}',
       'entrypoints/**/*.{js,ts,tsx}'

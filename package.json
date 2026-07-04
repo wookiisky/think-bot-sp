@@ -1,11 +1,12 @@
 {
   "name": "think-bot-sp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "packageManager": "pnpm@11.5.1",
   "scripts": {
     "dev": "wxt --host 127.0.0.1 --port 3000",
     "build": "wxt build --browser chrome",
+    "package:chrome": "node scripts/package-chrome-store.mjs",
     "test:unit": "vitest run tests/unit --passWithNoTests",
     "test:component": "vitest run tests/component --passWithNoTests",
     "test:e2e": "playwright test --config=./playwright.config.ts --pass-with-no-tests",

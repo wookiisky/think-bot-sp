@@ -27,6 +27,14 @@
 - 若出现 `WebSocket connection to 'ws://localhost:3000/' failed: net::ERR_CONNECTION_REFUSED`，优先确认 `pnpm dev` 未退出、`127.0.0.1:3000` 有监听，并确认 Chrome 加载的是 `.output/chrome-mv3-dev`，不是生产目录 `.output/chrome-mv3`。
 - 代码变更后由 WXT 持续 watch 并重建产物，不依赖自动打开临时浏览器 profile。
 
+发布约束：
+
+- 发布到 Chrome Web Store 前执行 `pnpm package:chrome`。
+- 该命令会先把 `package.json.version` 按 minor +1、patch 归零递增，例如 `0.1.0 -> 0.2.0`、`1.9.3 -> 1.10.0`。
+- 版本必须保持三段纯数字 semver，含 prerelease 或 build metadata 的版本会被拒绝。
+- 命令通过本地 `node_modules/.bin/wxt zip -b chrome` 生成 Chrome 发布 zip，产物位于 WXT 默认 `.output` 发布位置。
+- 如果 WXT 打包失败，命令会恢复原始 `package.json`，避免失败打包消费发布版本。
+
 ## 2. UI 与交互库
 
 - `shadcn/ui`
