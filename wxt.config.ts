@@ -10,6 +10,12 @@ export const extensionIconPaths = {
   128: 'icons/icon128.png',
 } as const;
 
+/** Chrome 扩展在安装页、扩展管理页和商店包中的展示名称。 */
+export const extensionDisplayName = 'Think Bot';
+
+/** Chrome 扩展在安装页、扩展管理页和商店包中的能力描述。 */
+export const extensionDescription = 'AI reading hepler providing different perspectives.';
+
 /** 开发态扩展页既要连本地 HMR，也不能拦住真实远端请求。 */
 export const appendDevExtensionConnectSrc = (extensionPagesCsp: string): string => {
   const directives = extensionPagesCsp
@@ -108,6 +114,8 @@ export default defineConfig({
     },
   }),
   manifest: {
+    name: extensionDisplayName,
+    description: extensionDescription,
     icons: extensionIconPaths,
     permissions: [
       'storage',
@@ -125,7 +133,7 @@ export default defineConfig({
     ],
     action: {
       default_icon: extensionIconPaths,
-      default_title: 'think-bot-sp',
+      default_title: extensionDisplayName,
     },
   },
 });

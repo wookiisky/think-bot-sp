@@ -4,6 +4,8 @@
 
 Think Bot 是一个面向深度阅读与网页认知处理的 Chrome MV3 扩展。重开发目标不是做能力裁剪，而是在保持现有产品闭环不变的前提下，重建为可维护、可测试、可扩展的新架构。
 
+Chrome manifest 展示名称固定为 `Think Bot`，描述固定为 `面向深度阅读与网页认知处理的 Chrome 扩展。`；浏览器 action tooltip 使用同一展示名称。
+
 当前必须保留的核心能力：
 
 - 根据浏览器入口正确打开 side panel、conversations 和快速上手文档。
