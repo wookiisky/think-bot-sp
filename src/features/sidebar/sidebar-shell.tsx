@@ -30,10 +30,9 @@ import {
 import { cn } from '../../lib/utils';
 import {
   COMPACT_HEADER_CLASS,
-  COMPACT_PROMPT_TAB_ACTIVE_CLASS,
   COMPACT_PROMPT_TAB_CLASS,
-  COMPACT_PROMPT_TAB_IDLE_CLASS,
   COMPACT_WORKBENCH_CLASS,
+  getCompactPromptTabStateClass,
 } from '../../ui/compact-layout';
 import { type ThemePreference, useDocumentTheme } from '../../ui/theme-mode';
 import {
@@ -1616,14 +1615,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 title={statusKey ? `${promptTab.name} · ${statusLabel}` : promptTab.name}
                 className={cn(
                   COMPACT_PROMPT_TAB_CLASS,
-                  showLoadingRing && 'tab-loading-border border-transparent',
-                  isActive
-                    ? showLoadingRing
-                      ? 'bg-background text-foreground'
-                      : COMPACT_PROMPT_TAB_ACTIVE_CLASS
-                    : showLoadingRing
-                      ? 'bg-background text-foreground hover:bg-muted/35'
-                      : COMPACT_PROMPT_TAB_IDLE_CLASS,
+                  getCompactPromptTabStateClass({ isActive, showLoadingRing }),
                 )}
                 onClick={() => {
                   setActivePromptTabId(promptTab.id);

@@ -1023,6 +1023,11 @@ describe('SidebarShell', () => {
     expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByLabelText('选择模型')).toHaveValue('model-1');
     expect(screen.getByTestId('prompt-tab-loading-quick-translate')).toBeVisible();
+    const loadingQuickTab = screen.getByRole('tab', { name: /翻译/ });
+    expect(loadingQuickTab.className).toContain('bg-primary/8');
+    expect(loadingQuickTab.className).toContain('tab-loading-border');
+    expect(loadingQuickTab.className).toContain('border-transparent');
+    expect(loadingQuickTab.className).not.toContain('bg-background');
 
     await user.click(screen.getByRole('tab', { name: /聊天/ }));
     expect(screen.getByLabelText('聊天输入')).toHaveValue('保留的 chat 草稿');

@@ -37,6 +37,28 @@ export const COMPACT_PROMPT_TAB_IDLE_CLASS = 'border-border text-foreground hove
 /** 选中 prompt tab 的统一样式。 */
 export const COMPACT_PROMPT_TAB_ACTIVE_CLASS = 'border-primary/40 bg-primary/8 text-foreground';
 
+export type CompactPromptTabStateClassInput = {
+  /** 当前 prompt tab 是否选中。 */
+  isActive: boolean;
+  /** 当前 prompt tab 是否展示 loading 动画边框。 */
+  showLoadingRing: boolean;
+};
+
+/** 返回 prompt tab 状态样式，loading 边框类放最后以保留透明边框。 */
+export const getCompactPromptTabStateClass = (input: CompactPromptTabStateClassInput): string => {
+  const stateClass = input.isActive
+    ? COMPACT_PROMPT_TAB_ACTIVE_CLASS
+    : input.showLoadingRing
+      ? 'bg-background text-foreground hover:bg-muted/35'
+      : COMPACT_PROMPT_TAB_IDLE_CLASS;
+
+  if (!input.showLoadingRing) {
+    return stateClass;
+  }
+
+  return `${stateClass} tab-loading-border border-transparent`;
+};
+
 /** 拖拽柄按钮：只用于 dnd-kit sortable handle，不等同普通图标按钮。 */
 export const COMPACT_DRAG_HANDLE_BUTTON_CLASS =
   'inline-flex h-7 w-7 shrink-0 items-center justify-center border border-border/70 text-sm text-muted-foreground hover:bg-muted/35 disabled:cursor-not-allowed disabled:opacity-50';

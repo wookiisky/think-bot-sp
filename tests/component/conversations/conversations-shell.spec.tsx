@@ -822,5 +822,11 @@ describe('ConversationsShell', () => {
         includePageContent: true,
       }),
     );
+    expect(screen.getByTestId('prompt-tab-loading-quick-review')).toBeVisible();
+    const loadingQuickTab = screen.getByRole('tab', { name: /快速审阅/ });
+    expect(loadingQuickTab.className).toContain('bg-primary/8');
+    expect(loadingQuickTab.className).toContain('tab-loading-border');
+    expect(loadingQuickTab.className).toContain('border-transparent');
+    expect(loadingQuickTab.className).not.toContain('bg-background');
   });
 });
