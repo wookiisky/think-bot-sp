@@ -504,103 +504,93 @@ const AssistantBranchRail = ({
           className="grid min-w-full w-full divide-x divide-border/70"
           style={buildBranchRailStyle(branches.length)}
         >
-          {branches.map((branch) => (
-            <section
-              key={branch.id}
-              ref={(element) => {
-                if (branchRefs.current) {
-                  branchRefs.current[branch.id] = element;
-                }
-              }}
-              data-testid={`branch-${branch.id}`}
-              className={cn(
-                'group/branch relative w-full shrink-0 px-2 py-1.5 pr-10',
-                selectedBranchId === branch.id && 'border-t-2 border-t-primary',
-              )}
-              onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
-              onMouseLeave={(event) => {
-                const relatedTarget = event.relatedTarget;
-                if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
-                  return;
-                }
-                onHoverBranch(null);
-              }}
-              onFocus={() => onHoverBranch({ messageId, branchId: branch.id })}
-              onBlur={(event) => {
-                const relatedTarget = event.relatedTarget;
-                if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
-                  return;
-                }
-                onHoverBranch(null);
-              }}
-            >
-              <div className="min-w-0">
-                <FloatingActionBar
-                  testId={`branch-actions-${branch.id}`}
-                  visible={activeBranchId === branch.id}
-                  actionCount={ASSISTANT_BRANCH_ACTION_COUNT}
-                  buttonSizePx={ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX}
-                  verticalWrapperClassName="inset-y-0 right-px"
-                  horizontalWrapperClassName="top-1 right-px"
-                  verticalPositionMode="visible-center"
-                  scrollViewportRef={scrollViewportRef}
-                >
-                    <PopoverPrimitive.Root
-                      open={expandBranchPopoverTarget?.messageId === messageId && expandBranchPopoverTarget?.branchId === branch.id}
-                      onOpenChange={(open) => onExpandBranchPopoverTarget(open ? { messageId, branchId: branch.id } : null)}
+          {branches.map((branch) => {
+            const isBranchLoading = branch.status === 'loading';
+            const canShowBranchResultActions = !isBranchLoading;
+            return (
+              <section
+                key={branch.id}
+                ref={(element) => {
+                  if (branchRefs.current) {
+                    branchRefs.current[branch.id] = element;
+                  }
+                }}
+                data-testid={`branch-${branch.id}`}
+                className={cn(
+                  'group/branch relative w-full shrink-0 px-2 py-1.5 pr-10',
+                  selectedBranchId === branch.id && 'border-t-2 border-t-primary',
+                )}
+                onMouseEnter={() => onHoverBranch({ messageId, branchId: branch.id })}
+                onMouseLeave={(event) => {
+                  const relatedTarget = event.relatedTarget;
+                  if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+                    return;
+                  }
+                  onHoverBranch(null);
+                }}
+                onFocus={() => onHoverBranch({ messageId, branchId: branch.id })}
+                onBlur={(event) => {
+                  const relatedTarget = event.relatedTarget;
+                  if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+                    return;
+                  }
+                  onHoverBranch(null);
+                }}
+              >
+                <div className="min-w-0">
+                  {canShowBranchResultActions ? (
+                    <FloatingActionBar
+                      testId={`branch-actions-${branch.id}`}
+                      visible={activeBranchId === branch.id}
+                      actionCount={ASSISTANT_BRANCH_ACTION_COUNT}
+                      buttonSizePx={ASSISTANT_BRANCH_ACTION_BUTTON_SIZE_PX}
+                      verticalWrapperClassName="inset-y-0 right-px"
+                      horizontalWrapperClassName="top-1 right-px"
+                      verticalPositionMode="visible-center"
+                      scrollViewportRef={scrollViewportRef}
                     >
-                      <Tooltip content={t('workspace.expandBranches')}>
-                        <PopoverPrimitive.Trigger asChild>
-                          <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.expandBranches')}>
-                            <GitBranchPlusIcon />
-                          </Button>
-                        </PopoverPrimitive.Trigger>
-                      </Tooltip>
-                      <PopoverPrimitive.Portal>
-                        <PopoverPrimitive.Content
-                          side="left"
-                          sideOffset={8}
-                          align="center"
-                          className="z-50 w-56 border border-border/80 bg-popover p-2 ring-1 ring-foreground/8"
-                        >
-                          <div className="mb-2 text-xs font-medium text-muted-foreground">{t('workspace.selectBranchModel')}</div>
-                          {availableBranchModels.length === 0 ? (
-                            <p className="text-xs text-muted-foreground">{t('workspace.noAvailableBranchModels')}</p>
-                          ) : (
-                            <div className="grid gap-1">
-                              {availableBranchModels.map((model) => (
-                                <Button
-                                  key={model.id}
-                                  type="button"
-                                  variant="ghost"
-                                  className="justify-start"
-                                  onClick={() => {
-                                    onExpandBranchPopoverTarget(null);
-                                    void onExpandBranches(messageId, model.id);
-                                  }}
-                                >
-                                  {model.name}
-                                </Button>
-                              ))}
-                            </div>
-                          )}
-                        </PopoverPrimitive.Content>
-                      </PopoverPrimitive.Portal>
-                    </PopoverPrimitive.Root>
-                    {branch.status === 'loading' ? (
-                      <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}
-                          onClick={() => void (branch.isPrimary ? onStop() : onStopBranch(messageId, branch.id))}
-                        >
-                          <XIcon />
-                        </Button>
-                      </Tooltip>
-                    ) : null}
-                    {branch.status !== 'loading' ? (
+                      <PopoverPrimitive.Root
+                        open={expandBranchPopoverTarget?.messageId === messageId && expandBranchPopoverTarget?.branchId === branch.id}
+                        onOpenChange={(open) => onExpandBranchPopoverTarget(open ? { messageId, branchId: branch.id } : null)}
+                      >
+                        <Tooltip content={t('workspace.expandBranches')}>
+                          <PopoverPrimitive.Trigger asChild>
+                            <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.expandBranches')}>
+                              <GitBranchPlusIcon />
+                            </Button>
+                          </PopoverPrimitive.Trigger>
+                        </Tooltip>
+                        <PopoverPrimitive.Portal>
+                          <PopoverPrimitive.Content
+                            side="left"
+                            sideOffset={8}
+                            align="center"
+                            className="z-50 w-56 border border-border/80 bg-popover p-2 ring-1 ring-foreground/8"
+                          >
+                            <div className="mb-2 text-xs font-medium text-muted-foreground">{t('workspace.selectBranchModel')}</div>
+                            {availableBranchModels.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">{t('workspace.noAvailableBranchModels')}</p>
+                            ) : (
+                              <div className="grid gap-1">
+                                {availableBranchModels.map((model) => (
+                                  <Button
+                                    key={model.id}
+                                    type="button"
+                                    variant="ghost"
+                                    className="justify-start"
+                                    onClick={() => {
+                                      onExpandBranchPopoverTarget(null);
+                                      void onExpandBranches(messageId, model.id);
+                                    }}
+                                  >
+                                    {model.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            )}
+                          </PopoverPrimitive.Content>
+                        </PopoverPrimitive.Portal>
+                      </PopoverPrimitive.Root>
                       <Tooltip content={t('workspace.retryAssistantMessage')}>
                         <Button
                           type="button"
@@ -612,112 +602,126 @@ const AssistantBranchRail = ({
                           <RotateCcwIcon />
                         </Button>
                       </Tooltip>
-                    ) : null}
-                    <Tooltip content={t('workspace.selectPrimaryBranch')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.selectPrimaryBranch')}
-                        disabled={!canSelectAssistantBranch || selectedBranchId === branch.id || branch.status === 'loading'}
-                        onClick={() => void onSelectAssistantBranch(messageId, branch.id)}
-                      >
-                        <CheckIcon />
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content={t('workspace.scrollToMessageTop')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.scrollToMessageTop')}
-                        onClick={() => onScrollToBranch(branch.id, 'start')}
-                      >
-                        <ChevronsUpIcon />
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content={t('workspace.scrollToMessageBottom')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.scrollToMessageBottom')}
-                        onClick={() => onScrollToBranch(branch.id, 'end')}
-                      >
-                        <ChevronsDownIcon />
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content={t('workspace.copyPlainText')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.copyPlainText')}
-                        onClick={() => void onCopyMessage({ content: branch.content, mode: 'plain' })}
-                      >
-                        <CopyIcon />
-                      </Button>
-                    </Tooltip>
-                    <Tooltip content={t('workspace.copyMarkdown')}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={t('workspace.copyMarkdown')}
-                        onClick={() => void onCopyMessage({ content: branch.content, mode: 'markdown' })}
-                      >
-                        <FileCode2Icon />
-                      </Button>
-                    </Tooltip>
-                    <MiniConfirm
-                      message={t('workspace.deleteBranch')}
-                      cancelLabel={t('common.cancel')}
-                      confirmLabel={t('workspace.deleteBranch')}
-                      contentTestId={`delete-branch-confirm-${branch.id}`}
-                      onConfirm={() => onDeleteBranch(messageId, branch.id)}
-                    >
-                      <Tooltip content={t('workspace.deleteBranch')}>
-                        <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.deleteBranch')}>
-                          <Trash2Icon />
+                      <Tooltip content={t('workspace.selectPrimaryBranch')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('workspace.selectPrimaryBranch')}
+                          disabled={!canSelectAssistantBranch || selectedBranchId === branch.id}
+                          onClick={() => void onSelectAssistantBranch(messageId, branch.id)}
+                        >
+                          <CheckIcon />
                         </Button>
                       </Tooltip>
-                    </MiniConfirm>
-                </FloatingActionBar>
+                      <Tooltip content={t('workspace.scrollToMessageTop')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('workspace.scrollToMessageTop')}
+                          onClick={() => onScrollToBranch(branch.id, 'start')}
+                        >
+                          <ChevronsUpIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content={t('workspace.scrollToMessageBottom')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('workspace.scrollToMessageBottom')}
+                          onClick={() => onScrollToBranch(branch.id, 'end')}
+                        >
+                          <ChevronsDownIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content={t('workspace.copyPlainText')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('workspace.copyPlainText')}
+                          onClick={() => void onCopyMessage({ content: branch.content, mode: 'plain' })}
+                        >
+                          <CopyIcon />
+                        </Button>
+                      </Tooltip>
+                      <Tooltip content={t('workspace.copyMarkdown')}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={t('workspace.copyMarkdown')}
+                          onClick={() => void onCopyMessage({ content: branch.content, mode: 'markdown' })}
+                        >
+                          <FileCode2Icon />
+                        </Button>
+                      </Tooltip>
+                      <MiniConfirm
+                        message={t('workspace.deleteBranch')}
+                        cancelLabel={t('common.cancel')}
+                        confirmLabel={t('workspace.deleteBranch')}
+                        contentTestId={`delete-branch-confirm-${branch.id}`}
+                        onConfirm={() => onDeleteBranch(messageId, branch.id)}
+                      >
+                        <Tooltip content={t('workspace.deleteBranch')}>
+                          <Button type="button" variant="ghost" size="icon-xs" aria-label={t('workspace.deleteBranch')}>
+                            <Trash2Icon />
+                          </Button>
+                        </Tooltip>
+                      </MiniConfirm>
+                    </FloatingActionBar>
+                  ) : null}
 
                 <div
                   data-testid={`branch-header-${branch.id}`}
                   className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"
                 >
                   <span className="min-w-0 truncate">{branch.modelLabel}</span>
-                  <Tooltip content={t('workspace.openBranchPreview')}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={t('workspace.openBranchPreview')}
-                      onClick={() => onOpenBranchPreview(messageId, branch.id)}
-                    >
-                      <EyeIcon />
-                    </Button>
-                  </Tooltip>
+                  {canShowBranchResultActions ? (
+                    <Tooltip content={t('workspace.openBranchPreview')}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t('workspace.openBranchPreview')}
+                        onClick={() => onOpenBranchPreview(messageId, branch.id)}
+                      >
+                        <EyeIcon />
+                      </Button>
+                    </Tooltip>
+                  ) : null}
                 </div>
-                {branch.status === 'loading' ? (
-                  <div className="mt-1 flex items-center">
+                {isBranchLoading ? (
+                  <div className="mt-1 flex items-center gap-1">
                     <WorkspaceStatusGlyph label={t('workspace.status.loading')} status="loading" className="size-3.5" />
+                    <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}
+                        onClick={() => void (branch.isPrimary ? onStop() : onStopBranch(messageId, branch.id))}
+                      >
+                        <XIcon />
+                      </Button>
+                    </Tooltip>
                   </div>
                 ) : null}
                 <div className="mt-1">
                   <ChatMarkdown content={branch.content} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
                 </div>
-              </div>
-              {branch.status === 'error' && shouldShowErrorDetail(branch.content, branch.errorMessage) ? (
-                <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p>
-              ) : null}
-              {branch.status === 'cancelled' ? (
-                <p className="mt-1 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
-              ) : null}
-            </section>
-          ))}
+                </div>
+                {branch.status === 'error' && shouldShowErrorDetail(branch.content, branch.errorMessage) ? (
+                  <p className="mt-1 text-xs text-destructive">{branch.errorMessage ?? t('workspace.status.error')}</p>
+                ) : null}
+                {branch.status === 'cancelled' ? (
+                  <p className="mt-1 text-xs text-muted-foreground">{branch.errorMessage ?? t('workspace.status.cancelled')}</p>
+                ) : null}
+              </section>
+            );
+          })}
         </div>
       </div>
     </div>

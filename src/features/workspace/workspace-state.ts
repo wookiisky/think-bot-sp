@@ -309,7 +309,7 @@ export const findBranchPreviewDetail = (
 ): BranchPreviewDetail | null => {
   const message = messages.find((item) => item.id === messageId && item.role === 'assistant');
   const branch = message?.branches.find((item) => item.id === branchId) ?? null;
-  return branch
+  return branch && branch.status !== 'loading'
     ? {
         messageId,
         ...branch,

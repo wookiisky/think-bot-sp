@@ -509,6 +509,8 @@ describe('ChatThread', () => {
 
     expect(screen.queryByText('...')).toBeNull();
     expect(screen.getByTestId('branch-branch-loading')).toHaveTextContent('模型一');
+    expect(within(screen.getByTestId('branch-branch-loading')).queryByRole('button', { name: '打开分支预览' })).toBeNull();
+    expect(screen.queryByTestId('branch-actions-branch-loading')).toBeNull();
   });
 
   it('长分支卡片的按钮按当前可视区域中点更新纵向位置', async () => {
@@ -755,9 +757,48 @@ describe('ChatThread', () => {
     expect(screen.queryByText('#2')).toBeNull();
   });
 
-  it('删除按钮通过 mini confirm 触发分支删除，loading 主分支在卡片内显示停止按钮', async () => {
+  it('删除按钮通过 mini confirm 触发分支删除', async () => {
     const user = userEvent.setup();
     const onDeleteBranch = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-done',
+            role: 'assistant',
+            content: '完成内容',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-done',
+                modelId: 'model-1',
+                modelLabel: '主模型',
+                isPrimary: true,
+                content: '完成内容',
+                status: 'done',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-done',
+          },
+        ]}
+        onDeleteBranch={onDeleteBranch}
+      />,
+    );
+
+    const branchCard = screen.getByTestId('branch-branch-done');
+    await user.hover(branchCard);
+    await user.click(within(branchCard).getByRole('button', { name: '删除分支' }));
+    await user.click(within(screen.getByTestId('delete-branch-confirm-branch-done')).getByRole('button', { name: '删除分支' }));
+
+    await waitFor(() => expect(onDeleteBranch).toHaveBeenCalledWith('assistant-done', 'branch-done'));
+  });
+
+  it('loading 主分支只显示停止入口，不显示预览和结果按钮组', async () => {
+    const user = userEvent.setup();
     const onStop = vi.fn().mockResolvedValue(undefined);
 
     render(
@@ -784,20 +825,68 @@ describe('ChatThread', () => {
             selectedBranchId: 'branch-loading',
           },
         ]}
-        onDeleteBranch={onDeleteBranch}
         onStop={onStop}
       />,
     );
 
     const branchCard = screen.getByTestId('branch-branch-loading');
     await user.hover(branchCard);
+    expect(screen.getByLabelText('生成中')).toBeVisible();
+    expect(within(branchCard).queryByRole('button', { name: '打开分支预览' })).toBeNull();
+    expect(screen.queryByTestId('branch-actions-branch-loading')).toBeNull();
     await user.click(within(branchCard).getByRole('button', { name: '停止' }));
+
     expect(onStop).toHaveBeenCalledTimes(1);
-
-    await user.click(within(branchCard).getByRole('button', { name: '删除分支' }));
-    await user.click(within(screen.getByTestId('delete-branch-confirm-branch-loading')).getByRole('button', { name: '删除分支' }));
-
-    await waitFor(() => expect(onDeleteBranch).toHaveBeenCalledWith('assistant-loading', 'branch-loading'));
     expect(screen.queryByTestId('chat-message-actions-assistant-loading')).toBeNull();
+  });
+
+  it('loading 非主分支只显示停止分支入口', async () => {
+    const user = userEvent.setup();
+    const onStopBranch = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-loading',
+            role: 'assistant',
+            content: '主分支内容',
+            status: 'loading',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-done',
+                modelId: 'model-1',
+                modelLabel: '主模型',
+                isPrimary: true,
+                content: '主分支内容',
+                status: 'done',
+                errorMessage: null,
+              },
+              {
+                id: 'branch-loading',
+                modelId: 'model-2',
+                modelLabel: '分支模型',
+                isPrimary: false,
+                content: '流式内容',
+                status: 'loading',
+                errorMessage: null,
+              },
+            ],
+            selectedBranchId: 'branch-done',
+          },
+        ]}
+        onStopBranch={onStopBranch}
+      />,
+    );
+
+    const branchCard = screen.getByTestId('branch-branch-loading');
+    await user.hover(branchCard);
+    expect(within(branchCard).queryByRole('button', { name: '打开分支预览' })).toBeNull();
+    expect(screen.queryByTestId('branch-actions-branch-loading')).toBeNull();
+    await user.click(within(branchCard).getByRole('button', { name: '停止分支' }));
+
+    expect(onStopBranch).toHaveBeenCalledWith('assistant-loading', 'branch-loading');
   });
 });

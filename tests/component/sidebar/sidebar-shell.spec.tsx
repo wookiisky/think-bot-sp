@@ -1838,6 +1838,15 @@ describe('SidebarShell', () => {
       branchId: 'branch-1',
     });
 
+    portMessageListener?.({
+      type: 'BRANCH_STREAM_CANCELLED',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      sessionId: 'branch-session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+    });
+
     await user.hover(screen.getByTestId('branch-branch-1'));
     await user.click(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '删除分支' }));
     await user.click(within(screen.getByTestId('delete-branch-confirm-branch-1')).getByRole('button', { name: '删除分支' }));
@@ -1983,6 +1992,114 @@ describe('SidebarShell', () => {
     await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());
     expect(screen.getByLabelText('聊天输入')).toHaveValue('未发送草稿');
     expect(screen.getByTestId('branch-branch-preview')).toBeVisible();
+  });
+
+  it('已打开的分支预览在目标分支重新进入 loading 后自动关闭', async () => {
+    const user = userEvent.setup();
+    const portMessageListeners: Record<string, (event: unknown) => void> = {};
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [
+          {
+            id: 'https://example.com/article:chat',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-preview',
+                role: 'assistant',
+                content: '主回答',
+                images: [],
+                status: 'done',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [
+                  {
+                    id: 'branch-preview',
+                    modelId: 'model-1',
+                    modelLabel: '主模型',
+                    isPrimary: true,
+                    content: '预览内容',
+                    status: 'done',
+                    errorMessage: null,
+                    createdAt: 1,
+                    updatedAt: 1,
+                  },
+                ],
+                selectedBranchId: 'branch-preview',
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 1,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-preview',
+              status: 'done',
+              summary: '主回答',
+            },
+            updatedAt: 1,
+          },
+        ],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      connectStream: vi.fn((input: { promptTabId: string }) => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn((listener: (event: unknown) => void) => {
+            portMessageListeners[input.promptTabId] = listener;
+          }),
+          removeListener: vi.fn(),
+        },
+      })),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    const branchCard = await screen.findByTestId('branch-branch-preview');
+    await waitFor(() => expect(portMessageListeners.chat).toBeTypeOf('function'));
+    await user.hover(branchCard);
+    await user.click(within(branchCard).getByRole('button', { name: '打开分支预览' }));
+    expect(await screen.findByTestId('branch-preview-dialog')).toBeVisible();
+
+    const chatPortMessageListener = portMessageListeners.chat;
+    if (!chatPortMessageListener) {
+      throw new Error('chat stream listener was not registered');
+    }
+    chatPortMessageListener({
+      type: 'BRANCH_STREAM_STARTED',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'chat',
+      sessionId: 'branch-session-preview',
+      messageId: 'assistant-preview',
+      branchId: 'branch-preview',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+    });
+
+    await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());
+    expect(screen.queryByRole('button', { name: '打开分支预览' })).toBeNull();
+    expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
   });
 
   it('新增分支失败时展示错误提示，不读取未定义 payload', async () => {
