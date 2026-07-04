@@ -114,6 +114,7 @@ const createLoadingAssistantMessage = ({
       content: '',
       status: 'loading',
       errorMessage: null,
+      durationMs: null,
       createdAt: now,
       updatedAt: now,
     })),
@@ -674,6 +675,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       normalizedUrl,
       promptTabId,
       messageId,
+      durationMs,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -682,6 +684,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) {
@@ -705,6 +709,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                             ...branch,
                             status: 'done',
                             errorMessage: null,
+                            durationMs,
                             updatedAt: now,
                           }
                         : branch,
@@ -732,6 +737,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId,
       errorMessage,
       status,
+      durationMs,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -744,6 +750,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       errorMessage: string | null;
       /** 最终失败状态。 */
       status: 'error' | 'cancelled';
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) {
@@ -767,6 +775,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                             ...branch,
                             status,
                             errorMessage,
+                            durationMs,
                             updatedAt: now,
                           }
                         : branch,
@@ -832,6 +841,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                         content: '',
                         status: 'loading',
                         errorMessage: null,
+                        durationMs: null,
                         createdAt: now,
                         updatedAt: now,
                       },
@@ -910,6 +920,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       promptTabId,
       messageId,
       branchId,
+      durationMs,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -920,6 +931,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       messageId: string;
       /** 分支稳定 id。 */
       branchId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) {
@@ -944,6 +957,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                             ...item,
                             status: 'done',
                             errorMessage: null,
+                            durationMs,
                             updatedAt: now,
                           }
                         : item,
@@ -967,6 +981,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       branchId,
       errorMessage,
       status,
+      durationMs,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -981,6 +996,8 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       errorMessage: string | null;
       /** 最终状态。 */
       status: 'error' | 'cancelled';
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) {
@@ -1005,6 +1022,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                             ...item,
                             status,
                             errorMessage,
+                            durationMs,
                             updatedAt: now,
                           }
                         : item,
@@ -1105,6 +1123,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
                     content: '',
                     status: 'loading',
                     errorMessage: null,
+                    durationMs: null,
                     updatedAt: now,
                   }
                 : branch,

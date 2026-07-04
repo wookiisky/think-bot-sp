@@ -18,6 +18,7 @@ const branchRecordSchema = z.object({
   content: z.string(),
   status: z.enum(['loading', 'done', 'error', 'cancelled']),
   errorMessage: z.string().nullable(),
+  durationMs: z.number().int().nonnegative().nullable().default(null),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
 });

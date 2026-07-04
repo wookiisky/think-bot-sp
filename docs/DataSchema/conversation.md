@@ -60,6 +60,7 @@
 - `content`
 - `status`
 - `errorMessage`
+- `durationMs`
 - `createdAt`
 - `updatedAt`
 
@@ -71,6 +72,7 @@
 - 助手消息存在分支时，`selectedBranchId` 必须指向当前消息内的某个分支。
 - 助手消息顶层 `content/status/errorMessage/modelId` 只是当前选中主分支的镜像，不再单独代表另一份主回答。
 - 错误分支允许持久化 `error` 状态和已生成内容，但 Provider 原始错误文本只作为实时 UI 展示态，不写入历史 `errorMessage`。
+- `durationMs` 记录分支从发起 `streamText` 到本地消费完流并进入终态的墙钟耗时，单位毫秒；未进入模型调用、仍在 `loading`、或旧历史没有记录时为 `null`。
 - 阶段 4 的主回答消息状态机固定为 `loading -> done | error | cancelled`，进入终态后不能继续追加 chunk 或覆盖终态结果。
 - 同一 `promptTab` 下若存在多分支并发写入，仓储层必须串行化写操作，避免分支互相覆盖。
 
@@ -89,6 +91,7 @@
 - 追加用户消息。
 - 先创建带首个主分支的助手占位消息，再按 chunk 增量写入当前选中分支。
 - 将当前选中分支和助手消息镜像一起从 `loading` 收敛到 `done`、`error` 或 `cancelled`。
+- 终态收敛时写入对应分支的 `durationMs`；助手分支重试或新增分支进入 `loading` 时必须重置为 `null`。
 - 编辑用户消息并裁剪其后的依赖回答。
 - 切换助手消息的 `selectedBranchId`。
 - 更新分支状态。

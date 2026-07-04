@@ -68,6 +68,8 @@ type ChatThreadProps = {
       status: 'loading' | 'done' | 'error' | 'cancelled';
       /** 分支错误消息。 */
       errorMessage: string | null;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs?: number | null;
     }>;
     /** 当前选中的主分支。 */
     selectedBranchId: string | null;
@@ -679,6 +681,9 @@ const AssistantBranchRail = ({
                   className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground"
                 >
                   <span className="min-w-0 truncate">{branch.modelLabel}</span>
+                  {branch.durationMs !== null && branch.durationMs !== undefined ? (
+                    <span className="shrink-0 text-[10px] text-muted-foreground/80">({formatBranchDurationSeconds(branch.durationMs)})</span>
+                  ) : null}
                   {canShowBranchResultActions ? (
                     <Tooltip content={t('workspace.openBranchPreview')}>
                       <Button
@@ -751,6 +756,15 @@ const shouldShowErrorDetail = (content: string, errorMessage: string | null): bo
   return trimmedContent !== errorMessage.trim();
 };
 
+/** 把毫秒耗时格式化为分支标题中的秒数展示。 */
+const formatBranchDurationSeconds = (durationMs: number): string => {
+  const seconds = durationMs / 1000;
+  if (seconds < 10) {
+    return `${seconds.toFixed(1)} s`;
+  }
+  return `${Math.round(seconds)} s`;
+};
+
 /** 统一助手消息展示分支，兼容旧消息只保留主回答的情况。 */
 const resolveDisplayBranches = (message: ChatThreadMessage, primaryBranchLabel: string): ChatThreadBranch[] => {
   if (message.role !== 'assistant') {
@@ -768,6 +782,7 @@ const resolveDisplayBranches = (message: ChatThreadMessage, primaryBranchLabel: 
       content: message.content,
       status: message.status,
       errorMessage: message.errorMessage,
+      durationMs: null,
     },
   ];
 };

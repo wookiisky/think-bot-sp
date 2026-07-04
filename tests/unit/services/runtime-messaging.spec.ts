@@ -1526,6 +1526,7 @@ describe('runtime-messaging', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
       errorMessage: 'provider timeout',
+      durationMs: 1234,
     });
 
     const firstPort = {
@@ -1556,6 +1557,7 @@ describe('runtime-messaging', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
       errorMessage: 'provider timeout',
+      durationMs: 1234,
     });
 
     bus.publishToPromptTab(scope, {

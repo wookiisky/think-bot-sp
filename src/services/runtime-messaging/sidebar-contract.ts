@@ -371,6 +371,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     messageId: z.string().min(1),
     /** 分支稳定 id。 */
     branchId: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
   }),
   z.object({
     /** 事件类型。 */
@@ -387,6 +389,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     branchId: z.string().min(1),
     /** 错误消息。 */
     errorMessage: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
     /** 是否已回滚本轮新增消息。 */
     rollbackOnFailure: z.boolean().optional(),
     /** 本轮用户消息 id。 */
@@ -405,6 +409,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     messageId: z.string().min(1),
     /** 分支稳定 id。 */
     branchId: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
   }),
   z.object({
     /** 事件类型。 */
@@ -453,6 +459,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     messageId: z.string().min(1),
     /** 主分支 id。 */
     branchId: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
   }),
   z.object({
     /** 事件类型。 */
@@ -469,6 +477,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     branchId: z.string().min(1),
     /** 错误消息。 */
     errorMessage: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
     /** 是否已回滚本轮新增消息。 */
     rollbackOnFailure: z.boolean().optional(),
     /** 本轮用户消息 id。 */
@@ -487,6 +497,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     messageId: z.string().min(1),
     /** 主分支 id。 */
     branchId: z.string().min(1),
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs: z.number().int().nonnegative().nullable(),
   }),
   z.object({
     /** 事件类型。 */

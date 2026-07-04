@@ -5,6 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { SidebarShell } from '../../../src/features/sidebar/sidebar-shell';
 
+type PortMessageListener = (event: unknown) => void;
+
+/** 触发测试里捕获的 port 消息监听器。 */
+const emitPortMessage = (listener: PortMessageListener | null, event: unknown) => {
+  if (!listener) {
+    throw new Error('port listener not registered');
+  }
+  listener(event);
+};
+
 const createSidebarApi = (overrides?: Record<string, unknown>) => ({
   getSidebarBootstrap: vi.fn().mockResolvedValue({
     type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -1126,7 +1136,7 @@ describe('SidebarShell', () => {
 
   it('首轮快捷输入失败且已回滚时，当前 UI 保留用户消息并展示助手错误', async () => {
     const user = userEvent.setup();
-    let portMessageListener: ((event: unknown) => void) | undefined;
+    let portMessageListener: PortMessageListener | null = null;
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
@@ -1218,7 +1228,7 @@ describe('SidebarShell', () => {
     await user.click(await screen.findByRole('tab', { name: /总结/ }));
     expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FAILED',
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'quick-summary',
@@ -1226,6 +1236,7 @@ describe('SidebarShell', () => {
       messageId: 'assistant-rollback',
       branchId: 'branch-rollback',
       errorMessage: 'provider timeout',
+      durationMs: 1200,
       rollbackOnFailure: true,
       userMessageId: 'user-rollback',
     });
@@ -1384,7 +1395,7 @@ describe('SidebarShell', () => {
     await user.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FAILED',
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
@@ -1392,6 +1403,7 @@ describe('SidebarShell', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
       errorMessage: 'provider timeout',
+      durationMs: 1200,
     });
     resolveSendChat({
       type: 'SEND_CHAT_SUCCESS',
@@ -1814,7 +1826,7 @@ describe('SidebarShell', () => {
     });
 
     await waitFor(() => expect(screen.getByTestId('branch-branch-1')).toBeVisible());
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'BRANCH_STREAM_CHUNK',
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
@@ -1838,13 +1850,14 @@ describe('SidebarShell', () => {
       branchId: 'branch-1',
     });
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'BRANCH_STREAM_CANCELLED',
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       sessionId: 'branch-session-1',
       messageId: 'assistant-1',
       branchId: 'branch-1',
+      durationMs: 1200,
     });
 
     await user.hover(screen.getByTestId('branch-branch-1'));
@@ -2294,13 +2307,14 @@ describe('SidebarShell', () => {
     });
     expect(screen.getByText('新问题')).toBeVisible();
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FINISHED',
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       sessionId: 'session-edit',
       messageId: 'assistant-edit',
       branchId: 'branch-edit-primary',
+      durationMs: 1200,
     });
 
     await user.hover(await screen.findByTestId('chat-message-assistant-edit'));

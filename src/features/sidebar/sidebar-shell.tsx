@@ -456,6 +456,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                             content: message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? '',
                             status: 'loading',
                             errorMessage: null,
+                            durationMs: null,
                           },
                         ]
                       : message?.branches ?? [],
@@ -498,6 +499,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                             content: `${message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? ''}${payload.chunk as string}`,
                             status: 'loading',
                             errorMessage: null,
+                            durationMs: message?.branches.find((branch) => branch.id === payload.branchId)?.durationMs ?? null,
                           },
                         ]
                       : message?.branches ?? [],
@@ -526,6 +528,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                                 ...branch,
                                 status: 'done',
                                 errorMessage: null,
+                                durationMs: payload.durationMs,
                               }
                             : branch,
                         )
@@ -558,6 +561,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   modelId: '',
                   modelLabel: t('workspace.status.primaryBranch'),
                   isPrimary: true,
+                  durationMs: payload.durationMs,
                 }),
               );
             }
@@ -591,6 +595,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                                 ...branch,
                                 status: 'cancelled',
                                 errorMessage: t('workspace.status.cancelled'),
+                                durationMs: payload.durationMs,
                               }
                             : branch,
                         )
@@ -616,6 +621,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: branch?.content ?? '',
                   status: 'loading',
                   errorMessage: null,
+                  durationMs: null,
                 })),
               );
             }
@@ -631,6 +637,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: `${branch?.content ?? ''}${payload.chunk as string}`,
                   status: 'loading',
                   errorMessage: null,
+                  durationMs: branch?.durationMs ?? null,
                 })),
               );
             }
@@ -646,6 +653,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: branch?.content ?? '',
                   status: 'done',
                   errorMessage: null,
+                  durationMs: payload.durationMs,
                 })),
               );
             }
@@ -662,6 +670,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   modelId: '',
                   modelLabel: t('workspace.status.branch'),
                   isPrimary: false,
+                  durationMs: payload.durationMs,
                 }),
               );
             }
@@ -677,6 +686,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   content: branch?.content ?? '',
                   status: 'cancelled',
                   errorMessage: t('workspace.status.cancelled'),
+                  durationMs: payload.durationMs,
                 })),
               );
             }
@@ -1029,6 +1039,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               content: errorMessage,
               status: 'error',
               errorMessage,
+              durationMs: null,
             },
           ],
           selectedBranchId: branchId,
@@ -1217,6 +1228,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                           content: '',
                           status: 'loading',
                           errorMessage: null,
+                          durationMs: null,
                         }
                       : branch,
                   ),

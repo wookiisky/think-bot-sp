@@ -291,6 +291,7 @@ describe('conversation-repository', () => {
       normalizedUrl: 'https://example.com/a',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      durationMs: 1000,
       now: 3,
     });
 
@@ -326,6 +327,7 @@ describe('conversation-repository', () => {
       promptTabId: 'chat',
       messageId: 'assistant-1',
       branchId: 'branch-1',
+      durationMs: 2500,
       now: 7,
     });
 
@@ -342,6 +344,7 @@ describe('conversation-repository', () => {
                 content: '第一段',
                 status: 'done',
                 errorMessage: null,
+                durationMs: 2500,
               }),
             ]),
           }),
@@ -424,6 +427,7 @@ describe('conversation-repository', () => {
       normalizedUrl: 'https://example.com/a',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      durationMs: 1000,
       now: 3,
     });
     await repo.appendAssistantBranch({

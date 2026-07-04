@@ -90,6 +90,47 @@ describe('conversation schema', () => {
     ).toBe(false);
   });
 
+  it('旧分支记录缺少耗时时默认回填 null', () => {
+    const parsed = conversationRecordSchema.parse({
+      id: 'https://example.com:chat',
+      normalizedUrl: 'https://example.com',
+      promptTabId: 'chat',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'hello',
+          images: [],
+          status: 'done',
+          errorMessage: null,
+          modelId: 'model-a',
+          branches: [
+            {
+              id: 'b1',
+              modelId: 'model-b',
+              modelLabel: 'Model B',
+              isPrimary: true,
+              content: 'branch',
+              status: 'done',
+              errorMessage: null,
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          ],
+          selectedBranchId: 'b1',
+          retryFromMessageId: null,
+          editedAt: null,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      lastAssistantState: null,
+      updatedAt: 1,
+    });
+
+    expect(parsed.messages[0]?.branches[0]?.durationMs).toBeNull();
+  });
+
   it('拒绝重复 message.id 和 branch.id', () => {
     expect(
       conversationRecordSchema.safeParse({

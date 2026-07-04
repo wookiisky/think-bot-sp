@@ -5,6 +5,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_EXTRACTION_PANEL_HEIGHT, createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { ConversationsShell } from '../../../src/features/conversations/conversations-shell';
 
+type PortMessageListener = (event: unknown) => void;
+
+/** 触发测试里捕获的 port 消息监听器。 */
+const emitPortMessage = (listener: PortMessageListener | null, event: unknown) => {
+  if (!listener) {
+    throw new Error('port listener not registered');
+  }
+  listener(event);
+};
+
 const quickInputConfig = {
   id: 'quick-review',
   name: '快速审阅',
@@ -197,8 +207,12 @@ describe('ConversationsShell', () => {
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
     const pageItems = screen.getAllByTestId('conversations-page-item');
-    expect(pageItems[0]).toHaveClass('gap-1.5', 'px-2', 'py-1');
-    expect(within(pageItems[0]).getByText('页面 A')).toHaveClass('text-xs', 'leading-4');
+    const firstPageItem = pageItems[0];
+    if (!firstPageItem) {
+      throw new Error('first page item not found');
+    }
+    expect(firstPageItem).toHaveClass('gap-1.5', 'px-2', 'py-1');
+    expect(within(firstPageItem).getByText('页面 A')).toHaveClass('text-xs', 'leading-4');
     expect(within(screen.getByTestId('conversations-page-list')).queryByText('https://example.com/article-a')).toBeNull();
     expect(screen.getByTestId('conversations-shell').className).not.toContain('bg-[linear-gradient');
     expect(screen.getByTestId('conversations-sidebar-resize-handle')).toHaveClass(
@@ -667,7 +681,7 @@ describe('ConversationsShell', () => {
     await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('prompt-tab-loading-chat')).toBeVisible();
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FAILED',
       normalizedUrl: 'https://example.com/article-a',
       promptTabId: 'chat',
@@ -675,6 +689,7 @@ describe('ConversationsShell', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
       errorMessage: 'provider timeout',
+      durationMs: 1200,
     });
 
     const chatPanel = screen.getByRole('tabpanel');
@@ -730,7 +745,7 @@ describe('ConversationsShell', () => {
     await user.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(api.sendChat).toHaveBeenCalledTimes(1));
 
-    portMessageListener?.({
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FAILED',
       normalizedUrl: 'https://example.com/article-a',
       promptTabId: 'chat',
@@ -738,6 +753,7 @@ describe('ConversationsShell', () => {
       messageId: 'assistant-1',
       branchId: 'branch-1',
       errorMessage: 'provider timeout',
+      durationMs: 1200,
     });
     resolveSendChat({
       type: 'SEND_CHAT_SUCCESS',

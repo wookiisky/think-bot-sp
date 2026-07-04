@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { findBranchPreviewDetail, type ChatMessageState } from '../../../src/features/workspace/workspace-state';
+import { findBranchPreviewDetail, upsertAssistantFailure, type ChatMessageState } from '../../../src/features/workspace/workspace-state';
 
 const createAssistantMessage = (status: ChatMessageState['status'], branchStatus: ChatMessageState['branches'][number]['status']): ChatMessageState => ({
   id: 'assistant-1',
@@ -17,6 +17,7 @@ const createAssistantMessage = (status: ChatMessageState['status'], branchStatus
       content: '分支回答',
       status: branchStatus,
       errorMessage: null,
+      durationMs: 1234,
     },
   ],
   selectedBranchId: 'branch-1',
@@ -37,5 +38,19 @@ describe('workspace-state', () => {
     expect(doneDetail?.status).toBe('done');
     expect(errorDetail?.status).toBe('error');
     expect(cancelledDetail?.status).toBe('cancelled');
+  });
+
+  it('失败事件显式传入 null 耗时时会清空旧耗时', () => {
+    const [message] = upsertAssistantFailure([createAssistantMessage('loading', 'loading')], {
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      errorMessage: 'provider timeout',
+      modelId: 'model-1',
+      modelLabel: '模型一',
+      isPrimary: true,
+      durationMs: null,
+    });
+
+    expect(message?.branches[0]?.durationMs).toBeNull();
   });
 });

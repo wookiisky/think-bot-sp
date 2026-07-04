@@ -22,6 +22,8 @@ export type BranchMessageState = {
   status: 'loading' | 'done' | 'error' | 'cancelled';
   /** 分支错误消息。 */
   errorMessage: string | null;
+  /** 本次调用从发起到本地消费完流的耗时。 */
+  durationMs: number | null;
 };
 
 /** 聊天消息运行态。 */
@@ -191,6 +193,7 @@ export const appendAssistantBranches = (
         content: currentIndex >= 0 ? nextBranches[currentIndex]?.content ?? '' : '',
         status: 'loading',
         errorMessage: null,
+        durationMs: null,
       };
       if (currentIndex >= 0) {
         nextBranches[currentIndex] = nextBranch;
@@ -221,6 +224,8 @@ export const upsertAssistantFailure = (
     modelLabel: string;
     /** 是否主分支。 */
     isPrimary: boolean;
+    /** 本次调用从发起到本地消费完流的耗时。 */
+    durationMs?: number | null;
   },
 ) =>
   upsertAssistantMessage(messages, input.messageId, (message) => {
@@ -233,6 +238,7 @@ export const upsertAssistantFailure = (
       content: currentBranch?.content.trim() ? currentBranch.content : input.errorMessage,
       status: 'error',
       errorMessage: input.errorMessage,
+      durationMs: 'durationMs' in input ? input.durationMs ?? null : currentBranch?.durationMs ?? null,
     };
     const nextBranches = currentBranch
       ? (message?.branches ?? []).map((branch) => (branch.id === input.branchId ? nextBranch : branch))
@@ -468,6 +474,7 @@ const normalizeAssistantBranches = (
       content: branch.content,
       status: branch.status,
       errorMessage: branch.errorMessage,
+      durationMs: branch.durationMs,
     }));
   }
 
@@ -480,6 +487,7 @@ const normalizeAssistantBranches = (
       content: message.content,
       status: message.status,
       errorMessage: message.errorMessage,
+      durationMs: null,
     },
   ];
 };

@@ -63,6 +63,7 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-1',
+      durationMs: 1234,
       now: 14,
     });
     await repo.removeLoadingState('https://example.com/article', 'chat');
@@ -105,6 +106,7 @@ describe('conversation-repository editing', () => {
               content: '第一段第二段',
               status: 'done',
               errorMessage: null,
+              durationMs: 1234,
               createdAt: 11,
               updatedAt: 14,
             },
@@ -159,6 +161,7 @@ describe('conversation-repository editing', () => {
       messageId: 'assistant-1',
       errorMessage: 'provider timeout',
       status: 'error',
+      durationMs: 2345,
       now: 23,
     });
 
@@ -184,6 +187,7 @@ describe('conversation-repository editing', () => {
               content: '已有内容',
               status: 'error',
               errorMessage: 'provider timeout',
+              durationMs: 2345,
               createdAt: 21,
               updatedAt: 23,
             },
@@ -265,6 +269,7 @@ describe('conversation-repository editing', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       messageId: 'assistant-2',
+      durationMs: 1000,
       now: 31,
     });
 
@@ -297,6 +302,7 @@ describe('conversation-repository editing', () => {
       messageId: 'assistant-3',
       errorMessage: 'provider timeout',
       status: 'error',
+      durationMs: 1000,
       now: 41,
     });
 
@@ -305,6 +311,7 @@ describe('conversation-repository editing', () => {
         normalizedUrl: 'https://example.com/article',
         promptTabId: 'chat',
         messageId: 'assistant-3',
+        durationMs: 2000,
         now: 42,
       }),
     ).rejects.toThrow('assistant message is already terminal: assistant-3');
@@ -315,6 +322,7 @@ describe('conversation-repository editing', () => {
         messageId: 'assistant-3',
         errorMessage: 'cancel after error',
         status: 'cancelled',
+        durationMs: 3000,
         now: 43,
       }),
     ).rejects.toThrow('assistant message is already terminal: assistant-3');
@@ -442,6 +450,7 @@ describe('conversation-repository editing', () => {
               content: '',
               status: 'loading',
               errorMessage: null,
+              durationMs: null,
               createdAt: 10,
               updatedAt: 10,
             },
@@ -583,6 +592,7 @@ describe('conversation-repository editing', () => {
               content: '',
               status: 'loading',
               errorMessage: null,
+              durationMs: null,
               createdAt: 20,
               updatedAt: 20,
             },

@@ -109,6 +109,8 @@ type ChatStreamEvent =
       messageId: string;
       /** 分支稳定 id。 */
       branchId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
     }
   | {
       /** 事件类型。 */
@@ -125,6 +127,8 @@ type ChatStreamEvent =
       branchId: string;
       /** 错误消息。 */
       errorMessage: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 是否已回滚本轮新增消息。 */
       rollbackOnFailure?: boolean;
       /** 本轮用户消息 id。 */
@@ -143,6 +147,8 @@ type ChatStreamEvent =
       messageId: string;
       /** 分支稳定 id。 */
       branchId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
     }
   | {
       /** 事件类型。 */
@@ -173,6 +179,8 @@ type ChatStreamEvent =
       messageId: string;
       /** 主分支 id。 */
       branchId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
     }
   | {
       /** 事件类型。 */
@@ -189,6 +197,8 @@ type ChatStreamEvent =
       branchId: string;
       /** 错误消息。 */
       errorMessage: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
     }
   | {
       /** 事件类型。 */
@@ -203,6 +213,8 @@ type ChatStreamEvent =
       messageId: string;
       /** 主分支 id。 */
       branchId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
     }
   | {
       /** 事件类型。 */
@@ -386,6 +398,8 @@ type ChatDispatchServiceDeps = {
       promptTabId: string;
       /** 助手消息 id。 */
       messageId: string;
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
@@ -401,6 +415,8 @@ type ChatDispatchServiceDeps = {
       errorMessage: string | null;
       /** 最终状态。 */
       status: 'error' | 'cancelled';
+      /** 本次调用从发起到本地消费完流的耗时。 */
+      durationMs: number | null;
       /** 当前时间。 */
       now: number;
     }) => Promise<unknown>;
@@ -509,6 +525,7 @@ type ChatDispatchServiceDeps = {
       promptTabId: string;
       messageId: string;
       branchId: string;
+      durationMs: number | null;
       now: number;
     }) => Promise<unknown>;
     /** 标记分支失败。 */
@@ -519,6 +536,7 @@ type ChatDispatchServiceDeps = {
       branchId: string;
       errorMessage: string | null;
       status: 'error' | 'cancelled';
+      durationMs: number | null;
       now: number;
     }) => Promise<unknown>;
     /** 写入分支 loading。 */
@@ -597,6 +615,10 @@ const isAbortError = (error: unknown): boolean =>
 /** 判断未知值是否可按普通对象读取。 */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+
+/** 计算本次流式调用耗时；未进入模型调用时不记录。 */
+const resolveInvocationDurationMs = (startedAt: number | null, endedAt: number): number | null =>
+  startedAt === null ? null : Math.max(0, endedAt - startedAt);
 
 /** 把原始 API 错误载荷转成可展示文本。 */
 const stringifyRawErrorPayload = (value: unknown): string | null => {
@@ -942,6 +964,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     const done = (async (): Promise<ChatStreamResult> => {
       let result: ChatStreamResult;
       let hasLoggedFirstChunk = false;
+      let streamStartedAt: number | null = null;
       try {
         await input.prepare?.(sessionId);
         logger.info('branch.stream.started', {
@@ -963,6 +986,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           modelId: input.model.id,
           modelLabel: resolvedModel.modelLabel,
         });
+        streamStartedAt = now();
         const response = await deps.streamText(
           buildModelInvocation({
             resolvedModel,
@@ -1001,12 +1025,15 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           });
         }
 
+        const finishedAt = now();
+        const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
         await deps.conversationRepository.finishAssistantBranch({
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
           messageId: input.messageId,
           branchId: input.branchId,
-          now: now(),
+          durationMs,
+          now: finishedAt,
         });
         publishToPromptTabSafely({
           type: 'BRANCH_STREAM_FINISHED',
@@ -1015,6 +1042,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           sessionId,
           messageId: input.messageId,
           branchId: input.branchId,
+          durationMs,
         });
         logger.info('branch.stream.completed', {
           normalizedUrl: input.normalizedUrl,
@@ -1033,6 +1061,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       } catch (error) {
         const failure = resolveStreamFailure(error, abortScope, input.requestTimeoutSeconds);
         const status = failure.status;
+        const failedAt = now();
+        const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
         const errorMessage =
           status === 'cancelled'
             ? 'branch stream cancelled'
@@ -1046,7 +1076,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           branchId: input.branchId,
           errorMessage: null,
           status,
-          now: now(),
+          durationMs,
+          now: failedAt,
         });
         if (status === 'cancelled') {
           logger.info('branch.stream.cancelled', {
@@ -1055,6 +1086,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             sessionId,
             messageId: input.messageId,
             branchId: input.branchId,
+            durationMs,
           });
           publishToPromptTabSafely({
             type: 'BRANCH_STREAM_CANCELLED',
@@ -1063,6 +1095,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             sessionId,
             messageId: input.messageId,
             branchId: input.branchId,
+            durationMs,
           });
         } else {
           logger.error('branch.stream.failed', {
@@ -1081,6 +1114,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: input.messageId,
             branchId: input.branchId,
             errorMessage,
+            durationMs,
           });
         }
         result = {
@@ -1169,6 +1203,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             ...getLifecycleScope(),
             errorMessage: null,
             status: 'error',
+            durationMs: null,
             now: now(),
           });
         } catch {
@@ -1270,6 +1305,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       const done = (async (): Promise<ChatStreamResult> => {
         let result: ChatStreamResult;
         let hasLoggedFirstChunk = false;
+        let streamStartedAt: number | null = null;
         try {
           logger.info('chat.stream.started', {
             normalizedUrl: input.normalizedUrl,
@@ -1289,6 +1325,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             modelLabel: resolvedModel.modelLabel,
           });
 
+          streamStartedAt = now();
           const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
@@ -1325,11 +1362,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             });
           }
 
+          const finishedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
           await deps.conversationRepository.finishAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            now: now(),
+            durationMs,
+            now: finishedAt,
           });
           publishToPromptTabSafely({
             type: 'CHAT_STREAM_FINISHED',
@@ -1338,6 +1378,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             sessionId,
             messageId: assistantMessageId,
             branchId: primaryBranch.branchId,
+            durationMs,
           });
           logger.info('chat.stream.completed', {
             normalizedUrl: input.normalizedUrl,
@@ -1354,6 +1395,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           };
         } catch (error) {
           const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
+          const failedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
 
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
@@ -1361,7 +1404,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             messageId: assistantMessageId,
             errorMessage: null,
             status,
-            now: now(),
+            durationMs,
+            now: failedAt,
           });
           if (shouldRollbackOnFailure && status === 'error') {
             await rollbackTurnMessagesSafely();
@@ -1381,6 +1425,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               sessionId,
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
+              durationMs,
             });
           } else {
             logger.error('chat.stream.failed', {
@@ -1398,6 +1443,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
               errorMessage,
+              durationMs,
               ...(shouldRollbackOnFailure
                 ? {
                     rollbackOnFailure: true,
@@ -1579,6 +1625,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       const done = (async (): Promise<ChatStreamResult> => {
         let result: ChatStreamResult;
         let hasLoggedFirstChunk = false;
+        let streamStartedAt: number | null = null;
         try {
           logger.info('chat.stream.started', {
             normalizedUrl: input.normalizedUrl,
@@ -1597,6 +1644,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             modelId: model.id,
             modelLabel: resolvedModel.modelLabel,
           });
+          streamStartedAt = now();
           const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
@@ -1633,11 +1681,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             });
           }
 
+          const finishedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
           await deps.conversationRepository.finishAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            now: now(),
+            durationMs,
+            now: finishedAt,
           });
           publishToPromptTabSafely({
             type: 'CHAT_STREAM_FINISHED',
@@ -1646,6 +1697,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             sessionId,
             messageId: assistantMessageId,
             branchId: primaryBranch.branchId,
+            durationMs,
           });
           logger.info('chat.stream.completed', {
             normalizedUrl: input.normalizedUrl,
@@ -1662,13 +1714,16 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           };
         } catch (error) {
           const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
+          const failedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
             errorMessage: null,
             status,
-            now: now(),
+            durationMs,
+            now: failedAt,
           });
           if (status === 'cancelled') {
             publishToPromptTabSafely({
@@ -1678,6 +1733,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               sessionId,
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
+              durationMs,
             });
           } else {
             publishToPromptTabSafely({
@@ -1688,6 +1744,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
               errorMessage,
+              durationMs,
             });
           }
           if (status === 'cancelled') {
@@ -1881,6 +1938,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       const done = (async (): Promise<ChatStreamResult> => {
         let result: ChatStreamResult;
         let hasLoggedFirstChunk = false;
+        let streamStartedAt: number | null = null;
         try {
           logger.info('chat.stream.started', {
             normalizedUrl: input.normalizedUrl,
@@ -1899,6 +1957,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             modelId: model.id,
             modelLabel: resolvedModel.modelLabel,
           });
+          streamStartedAt = now();
           const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
@@ -1935,11 +1994,14 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             });
           }
 
+          const finishedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
           await deps.conversationRepository.finishAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
-            now: now(),
+            durationMs,
+            now: finishedAt,
           });
           publishToPromptTabSafely({
             type: 'CHAT_STREAM_FINISHED',
@@ -1948,6 +2010,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             sessionId,
             messageId: assistantMessageId,
             branchId: primaryBranch.branchId,
+            durationMs,
           });
           logger.info('chat.stream.completed', {
             normalizedUrl: input.normalizedUrl,
@@ -1964,13 +2027,16 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           };
         } catch (error) {
           const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
+          const failedAt = now();
+          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
           await deps.conversationRepository.failAssistantMessage({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             messageId: assistantMessageId,
             errorMessage: null,
             status,
-            now: now(),
+            durationMs,
+            now: failedAt,
           });
           if (status === 'cancelled') {
             publishToPromptTabSafely({
@@ -1980,6 +2046,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               sessionId,
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
+              durationMs,
             });
           } else {
             publishToPromptTabSafely({
@@ -1990,6 +2057,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
               messageId: assistantMessageId,
               branchId: primaryBranch.branchId,
               errorMessage,
+              durationMs,
             });
           }
           if (status === 'cancelled') {

@@ -162,6 +162,50 @@ describe('ChatThread', () => {
     expect(within(screen.getByTestId('branch-branch-1')).getByRole('button', { name: '打开分支预览' })).toBeVisible();
   });
 
+  it('助手分支在模型名右侧显示终态耗时，未记录耗时时不显示', () => {
+    render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '回答',
+                status: 'done',
+                errorMessage: null,
+                durationMs: 1234,
+              },
+              {
+                id: 'branch-2',
+                modelId: 'model-2',
+                modelLabel: '模型二',
+                isPrimary: false,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+                durationMs: null,
+              },
+            ],
+            selectedBranchId: 'branch-1',
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('branch-header-branch-1')).toHaveTextContent('模型一(1.2 s)');
+    expect(screen.getByTestId('branch-header-branch-2')).toHaveTextContent('模型二');
+    expect(screen.getByTestId('branch-header-branch-2')).not.toHaveTextContent('s)');
+  });
+
   it('助手消息 Markdown 会按展示配置渲染标题和正文样式', () => {
     render(
       <ChatThread

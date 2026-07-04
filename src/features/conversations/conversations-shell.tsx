@@ -549,6 +549,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           content: message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? '',
                           status: 'loading',
                           errorMessage: null,
+                          durationMs: null,
                         },
                       ]
                     : message?.branches ?? [],
@@ -592,6 +593,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           content: `${message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? ''}${payload.chunk}`,
                           status: 'loading',
                           errorMessage: null,
+                          durationMs: message?.branches.find((branch) => branch.id === payload.branchId)?.durationMs ?? null,
                         },
                       ]
                     : message?.branches ?? [],
@@ -620,6 +622,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                               ...branch,
                               status: 'done',
                               errorMessage: null,
+                              durationMs: payload.durationMs,
                             }
                           : branch,
                       )
@@ -651,6 +654,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 modelId: '',
                 modelLabel: t('workspace.status.primaryBranch'),
                 isPrimary: true,
+                durationMs: payload.durationMs,
               }),
             );
           }
@@ -684,6 +688,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                               ...branch,
                               status: 'cancelled',
                               errorMessage: t('workspace.status.cancelled'),
+                              durationMs: payload.durationMs,
                             }
                           : branch,
                       )
@@ -709,6 +714,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 content: branch?.content ?? '',
                 status: 'loading',
                 errorMessage: null,
+                durationMs: null,
               })),
             );
           }
@@ -724,6 +730,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 content: `${branch?.content ?? ''}${payload.chunk}`,
                 status: 'loading',
                 errorMessage: null,
+                durationMs: branch?.durationMs ?? null,
               })),
             );
           }
@@ -743,6 +750,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     modelId: '',
                     modelLabel: t('workspace.status.branch'),
                     isPrimary: false,
+                    durationMs: payload.durationMs,
                   })
                 : upsertAssistantBranch(current, payload.messageId, payload.branchId, (branch) => ({
                     id: payload.branchId,
@@ -752,6 +760,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     content: branch?.content ?? '',
                     status: payload.type === 'BRANCH_STREAM_FINISHED' ? 'done' : 'cancelled',
                     errorMessage: payload.type === 'BRANCH_STREAM_CANCELLED' ? t('workspace.status.cancelled') : null,
+                    durationMs: payload.durationMs,
                   })),
             );
           }
@@ -988,6 +997,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               content: errorMessage,
               status: 'error',
               errorMessage,
+              durationMs: null,
             },
           ],
           selectedBranchId: branchId,
@@ -1177,6 +1187,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                         content: '',
                         status: 'loading',
                         errorMessage: null,
+                        durationMs: null,
                       }
                     : branch,
                 ),

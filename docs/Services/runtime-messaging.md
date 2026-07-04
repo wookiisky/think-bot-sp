@@ -80,6 +80,12 @@ long-lived port 事件：
 - `LOADING_STATE_UPDATE`
 - `RESTORE_LOADING`
 
+终态流式事件字段：
+
+- `CHAT_STREAM_FINISHED / CHAT_STREAM_FAILED / CHAT_STREAM_CANCELLED`
+- `BRANCH_STREAM_FINISHED / BRANCH_STREAM_FAILED / BRANCH_STREAM_CANCELLED`
+- 上述事件必须携带 `durationMs: number | null`。`number` 表示对应分支从发起 `streamText` 到本地消费完流的毫秒耗时；`null` 表示请求未进入模型调用阶段。
+
 阶段 4 当前落地边界：
 
 - 已落地：side panel one-shot command schema、sender 校验、`background` 侧 `chrome.runtime.onConnect`、按 `normalizedUrl + promptTabId` 路由的 `port-bus`、`SEND_CHAT / STOP_SESSION / CLEAR_PAGE_CONTEXT / CLEAR_TAB_CONVERSATION / EXPORT_CONVERSATION` 命令、`RESTORE_LOADING` 恢复握手、设置页 `GET_CONFIG / SAVE_CONFIG / RESET_CONFIG / IMPORT_CONFIG / EXPORT_CONFIG / GET_LOCAL_CACHE_STATS / CLEAR_LOCAL_CACHE / TEST_SYNC_CONNECTION / TEST_MODEL / SYNC_NOW`。

@@ -20,7 +20,7 @@
 - 追加用户消息。
 - 创建带首个主分支的助手占位消息。
 - 追加当前选中主分支 chunk。
-- 把当前选中主分支与助手镜像一起收敛为 `done`、`error` 或 `cancelled`。
+- 把当前选中主分支与助手镜像一起收敛为 `done`、`error` 或 `cancelled`，并写入该分支本次调用的 `durationMs`。
 - 编辑用户消息并裁剪其后的依赖消息。
 - 按目标消息裁剪其后的全部消息。
 - 追加、更新、删除分支。
@@ -35,12 +35,14 @@
 - 流式完成、取消、错误后必须清理 loading。
 - setup 若在助手占位消息创建后失败，仓储需要支持把该助手消息补偿为 `error`，避免残留 `loading`。
 - `failAssistantMessage` / `failAssistantBranch` 只负责收敛终态；Provider 原始错误文本应由实时事件展示，仓储可写入 `errorMessage: null` 避免持久化错误详情。
+- `finishAssistantMessage / failAssistantMessage / finishAssistantBranch / failAssistantBranch` 接收 `durationMs: number | null`；未进入模型调用阶段的失败写 `null`，不伪造成 `0`。
 - `appendAssistantChunk` 只允许作用于 `loading` 且当前选中分支仍为 `loading` 的助手消息。
 - `finishAssistantMessage` 与 `failAssistantMessage` 不允许覆盖已终态助手消息。
 - 分支写入不得覆盖其他分支或主消息。
 - 编辑用户消息时，消息更新与后续依赖结果裁剪必须在同一事务序列内完成。
 - 主分支切换只允许发生在当前轮之后没有新消息时。
 - 助手分支重试前，必须先裁剪该轮之后的全部消息。
+- 助手分支重试进入 `loading` 时必须清空旧 `durationMs`，等待本次终态重新写入。
 
 ## 5. 上层依赖边界
 

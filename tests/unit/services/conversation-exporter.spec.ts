@@ -65,6 +65,7 @@ describe('conversation-exporter', () => {
                   content: '分支回答',
                   status: 'done',
                   errorMessage: null,
+                  durationMs: null,
                   createdAt: 2,
                   updatedAt: 2,
                 },

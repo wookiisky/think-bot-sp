@@ -201,6 +201,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-1',
         messageId: 'assistant-1',
         branchId: 'branch-1',
+        durationMs: 86,
       },
       {
         type: 'LOADING_STATE_UPDATE',
@@ -439,6 +440,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-2',
         messageId: 'assistant-2',
         branchId: 'branch-2',
+        durationMs: 76,
       },
       {
         type: 'LOADING_STATE_UPDATE',
@@ -572,6 +574,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-3',
         branchId: 'branch-3',
         errorMessage: 'provider timeout',
+        durationMs: 66,
       },
       {
         type: 'LOADING_STATE_UPDATE',
@@ -869,6 +872,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         messageId: 'assistant-rollback',
         branchId: 'branch-rollback',
         errorMessage: 'provider timeout',
+        durationMs: 56,
         rollbackOnFailure: true,
         userMessageId: 'user-rollback',
       },
@@ -1161,6 +1165,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-6',
         messageId: 'assistant-6',
         branchId: 'branch-6',
+        durationMs: 36,
       },
       {
         type: 'LOADING_STATE_UPDATE',
@@ -1752,6 +1757,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-edit',
         messageId: 'assistant-edit',
         branchId: 'assistant-edit:primary',
+        durationMs: 2,
       },
       {
         type: 'LOADING_STATE_UPDATE',
@@ -2147,6 +2153,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         sessionId: 'session-user-retry',
         messageId: 'assistant-user-retry',
         branchId: 'branch-user-retry',
+        durationMs: 66,
       },
       {
         type: 'LOADING_STATE_UPDATE',

@@ -80,6 +80,7 @@ Provider 适配规则：
    - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
 6. 主分支与并行分支分别建立流式会话；每个 chunk 都先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
 7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
+7.0. 每个已进入 `streamText` 的分支都会记录从发起调用到本地消费完流的 `durationMs`；若在调用前失败则保持 `null`。终态事件携带同一 `durationMs`，UI 可在模型名右侧即时显示秒数。
 7.1. Provider 返回 `APICallError.responseBody` 或 `data` 时，实时失败事件优先携带该原始 API 返回内容，再回退到 SDK 错误消息。
 7.2. 流式失败只把 `error / cancelled` 状态写入会话历史，不把 Provider 原始错误文本持久化；UI 用本次 port 事件把错误详情展示在当前回复中。若当前回复尚无内容，错误文本直接作为本地回复正文展示。
 7.2.1. 若失败事件早于 UI 订阅或早于 `SEND_CHAT` 成功响应，`port-bus` 会短暂补发失败事件，UI 必须把同一 `sessionId` 标记为终态，禁止较晚的命令成功响应把错误回复重新覆盖为 loading。
