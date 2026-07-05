@@ -175,6 +175,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-1',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -423,6 +424,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-2',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -556,6 +558,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-3',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -854,6 +857,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-rollback',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -1148,6 +1152,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-6',
         modelId: 'model-6',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -1740,6 +1745,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'assistant-edit:primary',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',
@@ -2136,6 +2142,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         branchId: 'branch-user-retry',
         modelId: 'model-1',
         modelLabel: '主模型',
+        startedAt: expect.any(Number),
       },
       {
         type: 'CHAT_STREAM_CHUNK',

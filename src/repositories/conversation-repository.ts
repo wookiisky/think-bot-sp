@@ -475,6 +475,38 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       });
     },
 
+    /** 标记主请求的大模型调用开始时间。 */
+    async markLoadingStateStarted({
+      normalizedUrl,
+      promptTabId,
+      startedAt,
+      now,
+    }: {
+      /** 归一化页面 URL。 */
+      normalizedUrl: string;
+      /** promptTab 稳定 id。 */
+      promptTabId: string;
+      /** 大模型调用开始时间。 */
+      startedAt: number;
+      /** 当前更新时间。 */
+      now: number;
+    }) {
+      return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
+        const current = await readLoadingState(normalizedUrl, promptTabId);
+        if (!current) {
+          return null;
+        }
+
+        const next = loadingStateRecordSchema.parse({
+          ...current,
+          startedAt,
+          updatedAt: now,
+        });
+        await storage.set({ [getLoadingKey(normalizedUrl, promptTabId)]: next });
+        return next;
+      });
+    },
+
     /** 按消息 id 回滚刚创建的一轮消息。 */
     async rollbackTurnMessages({
       normalizedUrl,
@@ -1206,6 +1238,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       branchId,
       modelId,
       status,
+      startedAt,
       now,
     }: {
       /** 归一化页面 URL。 */
@@ -1222,23 +1255,28 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => {
       modelId: string;
       /** 分支当前状态。 */
       status: 'loading' | 'cancelled' | 'error';
+      /** 分支请求的大模型调用开始时间。 */
+      startedAt?: number | null;
       /** 当前时间。 */
       now: number;
     }) {
       return withPromptTabMutation(normalizedUrl, promptTabId, async () => {
         const current = await readLoadingState(normalizedUrl, promptTabId);
+        const currentBranch = current?.branchStates.find((item) => item.branchId === branchId) ?? null;
         const next = loadingStateRecordSchema.parse({
           id: getLoadingKey(normalizedUrl, promptTabId),
           normalizedUrl,
           promptTabId,
-          sessionId: current?.sessionId ?? sessionId,
-          promptTabStatus: current?.promptTabStatus ?? 'idle',
-          branchStates: [
+	          sessionId: current?.sessionId ?? sessionId,
+	          promptTabStatus: current?.promptTabStatus ?? 'idle',
+	          startedAt: current?.startedAt ?? null,
+	          branchStates: [
             ...(current?.branchStates.filter((item) => item.branchId !== branchId) ?? []),
             {
               branchId,
               status,
               modelId,
+              startedAt: startedAt ?? currentBranch?.startedAt ?? null,
             },
           ],
           resumeTarget: {

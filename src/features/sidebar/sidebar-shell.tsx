@@ -457,6 +457,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                             status: 'loading',
                             errorMessage: null,
                             durationMs: null,
+                            startedAt: payload.startedAt,
                           },
                         ]
                       : message?.branches ?? [],
@@ -500,6 +501,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                             status: 'loading',
                             errorMessage: null,
                             durationMs: message?.branches.find((branch) => branch.id === payload.branchId)?.durationMs ?? null,
+                            startedAt: message?.branches.find((branch) => branch.id === payload.branchId)?.startedAt ?? null,
                           },
                         ]
                       : message?.branches ?? [],
@@ -529,6 +531,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                                 status: 'done',
                                 errorMessage: null,
                                 durationMs: payload.durationMs,
+                                startedAt: null,
                               }
                             : branch,
                         )
@@ -562,6 +565,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   modelLabel: t('workspace.status.primaryBranch'),
                   isPrimary: true,
                   durationMs: payload.durationMs,
+                  startedAt: null,
                 }),
               );
             }
@@ -596,6 +600,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                                 status: 'cancelled',
                                 errorMessage: t('workspace.status.cancelled'),
                                 durationMs: payload.durationMs,
+                                startedAt: null,
                               }
                             : branch,
                         )
@@ -622,6 +627,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   status: 'loading',
                   errorMessage: null,
                   durationMs: null,
+                  startedAt: payload.startedAt,
                 })),
               );
             }
@@ -638,6 +644,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   status: 'loading',
                   errorMessage: null,
                   durationMs: branch?.durationMs ?? null,
+                  startedAt: branch?.startedAt ?? null,
                 })),
               );
             }
@@ -654,6 +661,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   status: 'done',
                   errorMessage: null,
                   durationMs: payload.durationMs,
+                  startedAt: null,
                 })),
               );
             }
@@ -671,6 +679,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   modelLabel: t('workspace.status.branch'),
                   isPrimary: false,
                   durationMs: payload.durationMs,
+                  startedAt: null,
                 }),
               );
             }
@@ -687,6 +696,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                   status: 'cancelled',
                   errorMessage: t('workspace.status.cancelled'),
                   durationMs: payload.durationMs,
+                  startedAt: null,
                 })),
               );
             }
@@ -704,15 +714,34 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                 [promptTabId]: payload.messageId as string,
               }));
               setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, () => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content: payload.content as string,
-                  status: 'loading',
-                  errorMessage: null,
-                  branches: current.find((message) => message.id === payload.messageId)?.branches ?? [],
-                  selectedBranchId: current.find((message) => message.id === payload.messageId)?.selectedBranchId ?? null,
-                })),
+                upsertAssistantMessage(current, payload.messageId as string, (message) => {
+                  const branchStartedAtMap = new Map(payload.branchStates.map((branchState) => [branchState.branchId, branchState.startedAt]));
+                  const selectedBranchId = message?.selectedBranchId ?? null;
+                  const nextBranches =
+                    message?.branches.map((branch) => {
+                      const branchStartedAt = branchStartedAtMap.get(branch.id);
+                      return {
+                        ...branch,
+                        startedAt:
+                          branch.status === 'loading'
+                            ? branchStartedAt !== undefined
+                              ? branchStartedAt
+                              : branch.isPrimary
+                                ? payload.startedAt
+                                : branch.startedAt
+                            : null,
+                      };
+                    }) ?? [];
+                  return {
+                    id: payload.messageId as string,
+                    role: 'assistant',
+                    content: payload.content as string,
+                    status: payload.startedAt !== null ? 'loading' : message?.status ?? 'loading',
+                    errorMessage: payload.startedAt !== null ? null : message?.errorMessage ?? null,
+                    branches: nextBranches,
+                    selectedBranchId,
+                  };
+                }),
               );
             }
             return;
@@ -777,7 +806,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           fallbackModelId,
           chatLabel: resources.t('workspace.chatTab', nextLocaleCode),
         });
-        const nextMessageMap = buildMessageStateMap(nextPromptTabs, bootstrap.conversations);
+        const nextMessageMap = buildMessageStateMap(nextPromptTabs, bootstrap.conversations, bootstrap.loadingStates);
         const nextActiveSessionIds = buildActiveSessionIdMap(nextPromptTabs, bootstrap.loadingStates);
 
         setLocaleResources(resources);
@@ -1040,6 +1069,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
               status: 'error',
               errorMessage,
               durationMs: null,
+              startedAt: null,
             },
           ],
           selectedBranchId: branchId,
@@ -1229,6 +1259,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
                           status: 'loading',
                           errorMessage: null,
                           durationMs: null,
+                          startedAt: null,
                         }
                       : branch,
                   ),

@@ -23,9 +23,12 @@
   - 含义：一次发送请求的唯一会话。
 - `promptTabStatus`
   - 类型：`'idle' | 'loading' | 'cancelled' | 'error'`
+- `startedAt`
+  - 类型：`number | null`
+  - 含义：主请求进入大模型调用的时间戳；用于 side panel 重开后延续主分支 loading 计时。未进入模型调用时为 `null`。
 - `branchStates`
-  - 类型：`Array<{ branchId, status, modelId }>`
-  - 含义：分支级 loading、取消、错误恢复状态。
+  - 类型：`Array<{ branchId, status, modelId, startedAt }>`
+  - 含义：分支级 loading、取消、错误恢复状态；`startedAt` 是该分支进入大模型调用的时间戳。
 - `resumeTarget`
   - 类型：`{ messageId, branchId? } | null`
   - 含义：优先恢复的消息或分支锚点；阶段 4 若为空，可回退到当前 `loading` 的助手消息。
@@ -40,6 +43,7 @@
 - `branchId` 在同一 `sessionId` 下唯一。
 - 完成、取消、错误后必须清理或归档为可恢复终态，不能长期残留 loading。
 - 当前 UI 对分支停止和删除只依赖 `branchId`，不要求为每个分支额外暴露独立 sessionId 给前端。
+- 主请求和分支请求的 `startedAt` 分开记录，计时只对应单个大模型请求。
 
 ## 4. 读写路径
 
@@ -65,6 +69,7 @@
 - 流式期间持续更新。
 - 结束后立刻回收。
 - side panel 重开或 worker 重启后，恢复链路优先读取 `LoadingStateRecord`，再结合 `ConversationRecord` 中仍处于 `loading` 的助手消息恢复可见状态。
+- 单分支仍在 loading 时，即使助手消息顶层已经是终态，也必须基于 `branchStates` 恢复该分支计时。
 - 风险：
   - service worker 重启导致内存状态丢失。
   - side panel 关闭期间状态未落盘，导致恢复失败。

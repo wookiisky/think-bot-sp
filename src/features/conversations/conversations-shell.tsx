@@ -287,7 +287,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
     setDetail(input.detail);
     setPromptTabs(nextPromptTabs);
-    setMessageMap(buildMessageStateMap(nextPromptTabs, input.detail.conversations));
+    setMessageMap(buildMessageStateMap(nextPromptTabs, input.detail.conversations, input.detail.loadingStates));
     setRestoreMessageIds(
       buildRestoreMessageIdMap({
         promptTabs: nextPromptTabs,
@@ -550,6 +550,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           status: 'loading',
                           errorMessage: null,
                           durationMs: null,
+                          startedAt: payload.startedAt,
                         },
                       ]
                     : message?.branches ?? [],
@@ -594,6 +595,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           status: 'loading',
                           errorMessage: null,
                           durationMs: message?.branches.find((branch) => branch.id === payload.branchId)?.durationMs ?? null,
+                          startedAt: message?.branches.find((branch) => branch.id === payload.branchId)?.startedAt ?? null,
                         },
                       ]
                     : message?.branches ?? [],
@@ -623,6 +625,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                               status: 'done',
                               errorMessage: null,
                               durationMs: payload.durationMs,
+                              startedAt: null,
                             }
                           : branch,
                       )
@@ -655,6 +658,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 modelLabel: t('workspace.status.primaryBranch'),
                 isPrimary: true,
                 durationMs: payload.durationMs,
+                startedAt: null,
               }),
             );
           }
@@ -689,6 +693,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                               status: 'cancelled',
                               errorMessage: t('workspace.status.cancelled'),
                               durationMs: payload.durationMs,
+                              startedAt: null,
                             }
                           : branch,
                       )
@@ -715,6 +720,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 status: 'loading',
                 errorMessage: null,
                 durationMs: null,
+                startedAt: payload.startedAt,
               })),
             );
           }
@@ -731,6 +737,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 status: 'loading',
                 errorMessage: null,
                 durationMs: branch?.durationMs ?? null,
+                startedAt: branch?.startedAt ?? null,
               })),
             );
           }
@@ -751,6 +758,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     modelLabel: t('workspace.status.branch'),
                     isPrimary: false,
                     durationMs: payload.durationMs,
+                    startedAt: null,
                   })
                 : upsertAssistantBranch(current, payload.messageId, payload.branchId, (branch) => ({
                     id: payload.branchId,
@@ -761,6 +769,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                     status: payload.type === 'BRANCH_STREAM_FINISHED' ? 'done' : 'cancelled',
                     errorMessage: payload.type === 'BRANCH_STREAM_CANCELLED' ? t('workspace.status.cancelled') : null,
                     durationMs: payload.durationMs,
+                    startedAt: null,
                   })),
             );
           }
@@ -778,15 +787,34 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               [promptTabId]: payload.messageId,
             }));
             setPromptTabMessages(promptTabId, (current) =>
-              upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                id: payload.messageId as string,
-                role: 'assistant',
-                content: payload.content,
-                status: 'loading',
-                errorMessage: null,
-                branches: message?.branches ?? [],
-                selectedBranchId: message?.selectedBranchId ?? null,
-              })),
+              upsertAssistantMessage(current, payload.messageId as string, (message) => {
+                const branchStartedAtMap = new Map(payload.branchStates.map((branchState) => [branchState.branchId, branchState.startedAt]));
+                const selectedBranchId = message?.selectedBranchId ?? null;
+                const nextBranches =
+                  message?.branches.map((branch) => {
+                    const branchStartedAt = branchStartedAtMap.get(branch.id);
+                    return {
+                      ...branch,
+                      startedAt:
+                        branch.status === 'loading'
+                          ? branchStartedAt !== undefined
+                            ? branchStartedAt
+                            : branch.isPrimary
+                              ? payload.startedAt
+                              : branch.startedAt
+                          : null,
+                    };
+                  }) ?? [];
+                return {
+                  id: payload.messageId as string,
+                  role: 'assistant',
+                  content: payload.content,
+                  status: payload.startedAt !== null ? 'loading' : message?.status ?? 'loading',
+                  errorMessage: payload.startedAt !== null ? null : message?.errorMessage ?? null,
+                  branches: nextBranches,
+                  selectedBranchId,
+                };
+              }),
             );
           }
           return;
@@ -998,6 +1026,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               status: 'error',
               errorMessage,
               durationMs: null,
+              startedAt: null,
             },
           ],
           selectedBranchId: branchId,
@@ -1188,6 +1217,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                         status: 'loading',
                         errorMessage: null,
                         durationMs: null,
+                        startedAt: null,
                       }
                     : branch,
                 ),

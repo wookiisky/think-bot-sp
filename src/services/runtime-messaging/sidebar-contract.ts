@@ -39,6 +39,17 @@ export const sidebarConversationRecordSchema = conversationRecordSchema;
 /** loading 状态记录。 */
 export const sidebarLoadingStateRecordSchema = loadingStateRecordSchema;
 
+const sidebarRestoreLoadingBranchStateSchema = z.object({
+  /** 分支稳定 id。 */
+  branchId: z.string().min(1),
+  /** 分支恢复状态。 */
+  status: z.enum(['loading', 'cancelled', 'error']),
+  /** 分支模型 id。 */
+  modelId: z.string().min(1),
+  /** 分支请求的大模型调用开始时间。 */
+  startedAt: z.number().int().nonnegative().nullable(),
+});
+
 const sidebarCommandBaseSchema = z.object({
   /** 浏览器标签页 id。 */
   tabId: z.number().int(),
@@ -341,6 +352,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     modelId: z.string().min(1),
     /** 分支模型展示名。 */
     modelLabel: z.string().min(1),
+    /** 分支请求的大模型调用开始时间。 */
+    startedAt: z.number().int().nonnegative(),
   }),
   z.object({
     /** 事件类型。 */
@@ -429,6 +442,8 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     modelId: z.string().min(1),
     /** 主分支模型展示名。 */
     modelLabel: z.string().min(1),
+    /** 主请求的大模型调用开始时间。 */
+    startedAt: z.number().int().nonnegative(),
   }),
   z.object({
     /** 事件类型。 */
@@ -525,6 +540,10 @@ export const sidebarPortEventSchema = z.discriminatedUnion('type', [
     messageId: z.string().min(1),
     /** 当前已落库内容。 */
     content: z.string(),
+    /** 主请求的大模型调用开始时间。 */
+    startedAt: z.number().int().nonnegative().nullable(),
+    /** 分支级 loading 恢复状态。 */
+    branchStates: z.array(sidebarRestoreLoadingBranchStateSchema),
   }),
 ]);
 export type SidebarPortEvent = z.infer<typeof sidebarPortEventSchema>;

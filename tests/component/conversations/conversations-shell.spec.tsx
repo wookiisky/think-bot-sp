@@ -682,6 +682,19 @@ describe('ConversationsShell', () => {
     expect(screen.getByTestId('prompt-tab-loading-chat')).toBeVisible();
 
     emitPortMessage(portMessageListener, {
+      type: 'CHAT_STREAM_STARTED',
+      normalizedUrl: 'https://example.com/article-a',
+      promptTabId: 'chat',
+      sessionId: 'session-1',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+      startedAt: Date.now(),
+    });
+    expect(await screen.findByTestId('branch-loading-elapsed-branch-1')).toBeVisible();
+
+    emitPortMessage(portMessageListener, {
       type: 'CHAT_STREAM_FAILED',
       normalizedUrl: 'https://example.com/article-a',
       promptTabId: 'chat',
@@ -696,6 +709,7 @@ describe('ConversationsShell', () => {
     await waitFor(() => expect(within(chatPanel).getByText('provider timeout')).toBeVisible());
     expect(within(chatPanel).getByText('历史页发送失败')).toBeVisible();
     expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+    expect(screen.queryByTestId('branch-loading-elapsed-branch-1')).toBeNull();
   });
 
   it('发送命令失败时保留用户消息，并在历史工作台本地回复中展示错误', async () => {

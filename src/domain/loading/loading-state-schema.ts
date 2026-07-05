@@ -6,6 +6,7 @@ const branchStateSchema = z.object({
   branchId: z.string().min(1),
   status: z.enum(['loading', 'cancelled', 'error']),
   modelId: z.string().min(1),
+  startedAt: z.number().int().nonnegative().nullable().default(null),
 });
 
 export const loadingStateRecordSchema = z
@@ -17,6 +18,7 @@ export const loadingStateRecordSchema = z
     }),
     sessionId: z.string().min(1),
     promptTabStatus: z.enum(['idle', 'loading', 'cancelled', 'error']),
+    startedAt: z.number().int().nonnegative().nullable().default(null),
     branchStates: z.array(branchStateSchema),
     resumeTarget: z
       .object({
@@ -51,11 +53,14 @@ export const createLoadingState = ({
   normalizedUrl,
   promptTabId,
   sessionId,
+  startedAt = null,
   now = Date.now(),
 }: {
   normalizedUrl: string;
   promptTabId: string;
   sessionId: string;
+  /** 主请求的大模型调用开始时间。 */
+  startedAt?: number | null;
   now?: number;
 }) =>
   loadingStateRecordSchema.parse({
@@ -64,6 +69,7 @@ export const createLoadingState = ({
     promptTabId,
     sessionId,
     promptTabStatus: 'loading',
+    startedAt,
     branchStates: [],
     resumeTarget: null,
     cancelRequested: false,

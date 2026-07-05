@@ -24,6 +24,8 @@ export type BranchMessageState = {
   errorMessage: string | null;
   /** 本次调用从发起到本地消费完流的耗时。 */
   durationMs: number | null;
+  /** 本次大模型调用开始时间。 */
+  startedAt: number | null;
 };
 
 /** 聊天消息运行态。 */
@@ -194,6 +196,7 @@ export const appendAssistantBranches = (
         status: 'loading',
         errorMessage: null,
         durationMs: null,
+        startedAt: currentIndex >= 0 ? nextBranches[currentIndex]?.startedAt ?? null : null,
       };
       if (currentIndex >= 0) {
         nextBranches[currentIndex] = nextBranch;
@@ -226,6 +229,8 @@ export const upsertAssistantFailure = (
     isPrimary: boolean;
     /** 本次调用从发起到本地消费完流的耗时。 */
     durationMs?: number | null;
+    /** 本次大模型调用开始时间。 */
+    startedAt?: number | null;
   },
 ) =>
   upsertAssistantMessage(messages, input.messageId, (message) => {
@@ -239,6 +244,7 @@ export const upsertAssistantFailure = (
       status: 'error',
       errorMessage: input.errorMessage,
       durationMs: 'durationMs' in input ? input.durationMs ?? null : currentBranch?.durationMs ?? null,
+      startedAt: 'startedAt' in input ? input.startedAt ?? null : currentBranch?.startedAt ?? null,
     };
     const nextBranches = currentBranch
       ? (message?.branches ?? []).map((branch) => (branch.id === input.branchId ? nextBranch : branch))
@@ -389,11 +395,13 @@ export const buildComposerStateMap = (promptTabs: PromptTabDefinition[]): Record
 export const buildMessageStateMap = (
   promptTabs: PromptTabDefinition[],
   conversations: SidebarConversationRecord[],
+  loadingStates: SidebarLoadingStateRecord[] = [],
 ): Record<string, ChatMessageState[]> =>
   Object.fromEntries(
     promptTabs.map((promptTab) => {
       const conversation = conversations.find((item) => item.promptTabId === promptTab.id) ?? null;
-      return [promptTab.id, toChatMessageStates(conversation?.messages ?? [])];
+      const loadingState = loadingStates.find((item) => item.promptTabId === promptTab.id) ?? null;
+      return [promptTab.id, applyLoadingStateToMessages(toChatMessageStates(conversation?.messages ?? []), loadingState)];
     }),
   );
 
@@ -475,6 +483,7 @@ const normalizeAssistantBranches = (
       status: branch.status,
       errorMessage: branch.errorMessage,
       durationMs: branch.durationMs,
+      startedAt: null,
     }));
   }
 
@@ -488,6 +497,7 @@ const normalizeAssistantBranches = (
       status: message.status,
       errorMessage: message.errorMessage,
       durationMs: null,
+      startedAt: null,
     },
   ];
 };
@@ -525,4 +535,42 @@ export const syncAssistantMessageState = (message: ChatMessageState): ChatMessag
     errorMessage: selectedBranch.errorMessage,
     selectedBranchId,
   };
+};
+
+/** 把持久化 loading 开始时间合并到页面运行态消息中。 */
+export const applyLoadingStateToMessages = (
+  messages: ChatMessageState[],
+  loadingState: SidebarLoadingStateRecord | null,
+): ChatMessageState[] => {
+  if (!loadingState) {
+    return messages;
+  }
+
+  const targetMessageId = loadingState.resumeTarget?.messageId ?? null;
+  const branchStartedAtMap = new Map(loadingState.branchStates.map((branchState) => [branchState.branchId, branchState.startedAt]));
+
+  return messages.map((message) => {
+    if (message.role !== 'assistant') {
+      return message;
+    }
+
+    const nextBranches = message.branches.map((branch) => {
+      const branchStartedAt = branchStartedAtMap.get(branch.id);
+      const startedAt =
+        branchStartedAt !== undefined
+          ? branchStartedAt
+          : message.id === targetMessageId && branch.isPrimary && message.status === 'loading'
+            ? loadingState.startedAt
+            : branch.startedAt;
+      return {
+        ...branch,
+        startedAt: branch.status === 'loading' ? startedAt : null,
+      };
+    });
+
+    return syncAssistantMessageState({
+      ...message,
+      branches: nextBranches,
+    });
+  });
 };

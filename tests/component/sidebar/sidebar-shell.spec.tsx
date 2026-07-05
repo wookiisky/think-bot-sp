@@ -2108,10 +2108,12 @@ describe('SidebarShell', () => {
       branchId: 'branch-preview',
       modelId: 'model-1',
       modelLabel: '主模型',
+      startedAt: 1000,
     });
 
     await waitFor(() => expect(screen.queryByTestId('branch-preview-dialog')).toBeNull());
     expect(screen.queryByRole('button', { name: '打开分支预览' })).toBeNull();
+    expect(screen.getByTestId('branch-loading-elapsed-branch-preview')).toBeVisible();
     expect(screen.getByRole('button', { name: '停止' })).toBeVisible();
   });
 

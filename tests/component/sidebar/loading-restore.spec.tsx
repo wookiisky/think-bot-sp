@@ -52,6 +52,7 @@ describe('SidebarShell loading restore', () => {
             promptTabId: 'chat',
             sessionId: 'session-1',
             promptTabStatus: 'loading',
+            startedAt: Date.now(),
             branchStates: [],
             resumeTarget: { messageId: 'assistant-1' },
             cancelRequested: false,
@@ -121,8 +122,174 @@ describe('SidebarShell loading restore', () => {
     expect(await screen.findByText('部分回答')).toBeVisible();
     const branchCard = screen.getByTestId('branch-assistant-1:primary');
     expect(branchCard).toHaveTextContent('部分回答');
+    expect(within(branchCard).getByTestId('branch-loading-elapsed-assistant-1:primary')).toBeVisible();
     expect(within(branchCard).queryByRole('button', { name: '停止' })).not.toBeNull();
     expect(screen.queryByText('恢复生成中')).toBeNull();
+  });
+
+  it('重开 side panel 且选中非主分支时仍恢复主请求计时', async () => {
+    const api = {
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: null,
+        conversations: [
+          {
+            id: 'https://example.com/article:chat',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'chat',
+            messages: [
+              {
+                id: 'assistant-1',
+                role: 'assistant',
+                content: '主分支部分回答',
+                images: [],
+                status: 'loading',
+                errorMessage: null,
+                modelId: 'model-1',
+                branches: [
+                  {
+                    id: 'branch-1',
+                    modelId: 'model-1',
+                    modelLabel: '主模型',
+                    isPrimary: true,
+                    content: '主分支部分回答',
+                    status: 'loading',
+                    errorMessage: null,
+                    durationMs: null,
+                    createdAt: 1,
+                    updatedAt: 2,
+                  },
+                  {
+                    id: 'branch-2',
+                    modelId: 'model-2',
+                    modelLabel: '并行模型',
+                    isPrimary: false,
+                    content: '并行分支部分回答',
+                    status: 'loading',
+                    errorMessage: null,
+                    durationMs: null,
+                    createdAt: 1,
+                    updatedAt: 2,
+                  },
+                ],
+                selectedBranchId: 'branch-2',
+                retryFromMessageId: null,
+                editedAt: null,
+                createdAt: 1,
+                updatedAt: 2,
+              },
+            ],
+            lastAssistantState: {
+              messageId: 'assistant-1',
+              status: 'loading',
+              summary: '并行分支部分回答',
+            },
+            updatedAt: 2,
+          },
+        ],
+        loadingStates: [
+          {
+            id: 'loading:https://example.com/article:chat',
+            normalizedUrl: 'https://example.com/article',
+            promptTabId: 'chat',
+            sessionId: 'session-1',
+            promptTabStatus: 'loading',
+            startedAt: Date.now(),
+            branchStates: [
+              {
+                branchId: 'branch-2',
+                status: 'loading',
+                modelId: 'model-2',
+                startedAt: Date.now(),
+              },
+            ],
+            resumeTarget: { messageId: 'assistant-1', branchId: 'branch-2' },
+            cancelRequested: false,
+            updatedAt: 2,
+          },
+        ],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      confirmBlacklistContinue: vi.fn(),
+      reExtractContent: vi.fn(),
+      switchExtractionMethod: vi.fn(),
+      clearPageContext: vi.fn(),
+      clearTabConversation: vi.fn(),
+      openHistoryPage: vi.fn(),
+      openSettingsPage: vi.fn(),
+      openGithubProject: vi.fn(),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+            {
+              id: 'model-2',
+              name: '并行模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 1,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      sendChat: vi.fn(),
+      editUserMessage: vi.fn(),
+      retryUserMessage: vi.fn(),
+      retryMessage: vi.fn(),
+      selectAssistantBranch: vi.fn(),
+      expandMessageBranches: vi.fn(),
+      stopBranch: vi.fn(),
+      deleteBranch: vi.fn(),
+      stopSession: vi.fn(),
+      exportConversation: vi.fn(),
+      connectStream: vi.fn(() => ({
+        disconnect: vi.fn(),
+        onMessage: {
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        },
+      })),
+    };
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    expect(await screen.findByText('并行分支部分回答')).toBeVisible();
+    expect(within(screen.getByTestId('branch-branch-1')).getByTestId('branch-loading-elapsed-branch-1')).toBeVisible();
+    expect(within(screen.getByTestId('branch-branch-2')).getByTestId('branch-loading-elapsed-branch-2')).toBeVisible();
   });
 
   it('存在快捷输入 loading 时优先打开对应 promptTab', async () => {

@@ -390,7 +390,9 @@ export default defineBackground(() => {
           const restoreMessage =
             conversation.messages.find((messageRecord) => messageRecord.id === restoreMessageId && messageRecord.role === 'assistant') ?? loadingAssistantMessage;
 
-          if (!restoreMessage || restoreMessage.status !== 'loading') {
+          const hasActiveLoading =
+            loadingState.promptTabStatus === 'loading' || loadingState.branchStates.some((branchState) => branchState.status === 'loading');
+          if (!restoreMessage || !hasActiveLoading) {
             return;
           }
 
@@ -402,6 +404,8 @@ export default defineBackground(() => {
               sessionId: loadingState.sessionId,
               messageId: restoreMessage.id,
               content: restoreMessage.content,
+              startedAt: loadingState.startedAt,
+              branchStates: loadingState.branchStates,
             }),
           );
         })

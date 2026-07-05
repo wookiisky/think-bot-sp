@@ -71,6 +71,7 @@ describe('conversation-repository', () => {
       promptTabId: 'chat',
       sessionId: 'session-2',
       promptTabStatus: 'loading',
+      startedAt: null,
       branchStates: [],
       resumeTarget: null,
       cancelRequested: false,
@@ -90,10 +91,55 @@ describe('conversation-repository', () => {
       promptTabId: 'chat',
       sessionId: 'session-2',
       promptTabStatus: 'loading',
+      startedAt: null,
       branchStates: [],
       resumeTarget: null,
       cancelRequested: false,
       updatedAt: 2,
+    });
+  });
+
+  it('记录主请求和分支请求的大模型调用开始时间', async () => {
+    const storage = createFakeStorageArea();
+    const repo = createConversationRepository(createChromeLocalAdapter(storage));
+
+    await repo.saveLoadingState({
+      id: 'loading:https://example.com/a:chat',
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      sessionId: 'session-main',
+      promptTabStatus: 'loading',
+      branchStates: [],
+      resumeTarget: null,
+      cancelRequested: false,
+      updatedAt: 1,
+    });
+    await repo.markLoadingStateStarted({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      startedAt: 1000,
+      now: 1000,
+    });
+    await repo.upsertBranchLoadingState({
+      normalizedUrl: 'https://example.com/a',
+      promptTabId: 'chat',
+      sessionId: 'session-branch',
+      messageId: 'assistant-1',
+      branchId: 'branch-1',
+      modelId: 'model-1',
+      status: 'loading',
+      startedAt: 2000,
+      now: 2000,
+    });
+
+    await expect(repo.getLoadingState('https://example.com/a', 'chat')).resolves.toMatchObject({
+      startedAt: 1000,
+      branchStates: [
+        {
+          branchId: 'branch-1',
+          startedAt: 2000,
+        },
+      ],
     });
   });
 
@@ -157,6 +203,7 @@ describe('conversation-repository', () => {
         promptTabId: 'chat',
         sessionId: 'session-1',
         promptTabStatus: 'loading',
+        startedAt: null,
         branchStates: [],
         resumeTarget: null,
         cancelRequested: false,

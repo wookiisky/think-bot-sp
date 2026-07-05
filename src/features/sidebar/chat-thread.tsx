@@ -70,6 +70,8 @@ type ChatThreadProps = {
       errorMessage: string | null;
       /** 本次调用从发起到本地消费完流的耗时。 */
       durationMs?: number | null;
+      /** 本次大模型调用开始时间。 */
+      startedAt?: number | null;
     }>;
     /** 当前选中的主分支。 */
     selectedBranchId: string | null;
@@ -698,10 +700,11 @@ const AssistantBranchRail = ({
                     </Tooltip>
                   ) : null}
                 </div>
-                {isBranchLoading ? (
-                  <div className="mt-1 flex items-center gap-1">
-                    <WorkspaceStatusGlyph label={t('workspace.status.loading')} status="loading" className="size-3.5" />
-                    <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
+	                {isBranchLoading ? (
+	                  <div className="mt-1 flex items-center gap-1">
+	                    <WorkspaceStatusGlyph label={t('workspace.status.loading')} status="loading" className="size-3.5" />
+	                    {branch.startedAt !== null && branch.startedAt !== undefined ? <AssistantBranchLoadingElapsed branchId={branch.id} startedAt={branch.startedAt} /> : null}
+	                    <Tooltip content={t(branch.isPrimary ? 'workspace.stop' : 'workspace.stopBranch')}>
                       <Button
                         type="button"
                         variant="ghost"
@@ -765,6 +768,37 @@ const formatBranchDurationSeconds = (durationMs: number): string => {
   return `${Math.round(seconds)} s`;
 };
 
+/** 助手分支 loading 期间展示单个请求已运行时间。 */
+const AssistantBranchLoadingElapsed = ({ branchId, startedAt }: { branchId: string; startedAt: number }) => {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timerId);
+    };
+  }, []);
+
+  return (
+    <span
+      data-testid={`branch-loading-elapsed-${branchId}`}
+      className="min-w-[2.75rem] shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80"
+    >
+      {formatLoadingElapsedClock(nowMs - startedAt)}
+    </span>
+  );
+};
+
+/** 把 loading 已运行毫秒数格式化为 mm:ss。 */
+const formatLoadingElapsedClock = (elapsedMs: number): string => {
+  const normalizedSeconds = Math.max(0, Math.floor(elapsedMs / 1000));
+  const minutes = Math.floor(normalizedSeconds / 60);
+  const seconds = normalizedSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
 /** 统一助手消息展示分支，兼容旧消息只保留主回答的情况。 */
 const resolveDisplayBranches = (message: ChatThreadMessage, primaryBranchLabel: string): ChatThreadBranch[] => {
   if (message.role !== 'assistant') {
@@ -783,6 +817,7 @@ const resolveDisplayBranches = (message: ChatThreadMessage, primaryBranchLabel: 
       status: message.status,
       errorMessage: message.errorMessage,
       durationMs: null,
+      startedAt: null,
     },
   ];
 };

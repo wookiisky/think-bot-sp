@@ -80,6 +80,13 @@ long-lived port 事件：
 - `LOADING_STATE_UPDATE`
 - `RESTORE_LOADING`
 
+启动与恢复事件字段：
+
+- `CHAT_STREAM_STARTED / BRANCH_STREAM_STARTED`
+- 上述事件必须携带 `startedAt: number`。该字段表示对应单个大模型请求进入调用的时间戳，UI 用它在 loader 右侧展示 `mm:ss` 计时。
+- `RESTORE_LOADING` 必须携带 `startedAt: number | null` 和 `branchStates[].startedAt: number | null`，用于 side panel 重开后延续真实已运行时间。
+- 若只有单个分支仍在 loading，即使助手消息顶层已是终态，也必须通过 `branchStates` 恢复该分支计时。
+
 终态流式事件字段：
 
 - `CHAT_STREAM_FINISHED / CHAT_STREAM_FAILED / CHAT_STREAM_CANCELLED`

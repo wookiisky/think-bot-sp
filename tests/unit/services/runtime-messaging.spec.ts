@@ -255,6 +255,8 @@ describe('runtime-messaging', () => {
         sessionId: 'session-1',
         messageId: 'assistant-1',
         content: '部分回答',
+        startedAt: 1000,
+        branchStates: [],
       }),
     ).toEqual(
       expect.objectContaining({
@@ -272,6 +274,7 @@ describe('runtime-messaging', () => {
         branchId: 'branch-1',
         modelId: 'model-2',
         modelLabel: '分支模型',
+        startedAt: 2000,
       }),
     ).toEqual(
       expect.objectContaining({
@@ -393,6 +396,7 @@ describe('runtime-messaging', () => {
           promptTabId: 'chat',
           sessionId: 'session-1',
           promptTabStatus: 'loading',
+          startedAt: null,
           branchStates: [],
           resumeTarget: null,
           cancelRequested: false,
@@ -1488,6 +1492,8 @@ describe('runtime-messaging', () => {
         sessionId: 'session-1',
         messageId: 'assistant-1',
         content: '部分回答',
+        startedAt: 1000,
+        branchStates: [],
       },
     );
     expect(port.postMessage).toHaveBeenCalledWith({
@@ -1497,6 +1503,8 @@ describe('runtime-messaging', () => {
       sessionId: 'session-1',
       messageId: 'assistant-1',
       content: '部分回答',
+      startedAt: 1000,
+      branchStates: [],
     });
     expect(secondPort.postMessage).not.toHaveBeenCalled();
 
@@ -1569,6 +1577,7 @@ describe('runtime-messaging', () => {
       branchId: 'branch-2',
       modelId: 'model-1',
       modelLabel: '主模型',
+      startedAt: 2000,
     });
 
     const secondPort = {

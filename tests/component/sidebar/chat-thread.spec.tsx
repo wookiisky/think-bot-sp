@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -83,6 +83,7 @@ const createBaseProps = () => ({
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -204,6 +205,80 @@ describe('ChatThread', () => {
     expect(screen.getByTestId('branch-header-branch-1')).toHaveTextContent('模型一(1.2 s)');
     expect(screen.getByTestId('branch-header-branch-2')).toHaveTextContent('模型二');
     expect(screen.getByTestId('branch-header-branch-2')).not.toHaveTextContent('s)');
+  });
+
+  it('助手分支 loading loader 右侧展示单请求计时，终态后隐藏', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1000);
+
+    const { rerender } = render(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '',
+            status: 'loading',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '',
+                status: 'loading',
+                errorMessage: null,
+                durationMs: null,
+                startedAt: 1000,
+              },
+            ],
+            selectedBranchId: 'branch-1',
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('branch-loading-elapsed-branch-1')).toHaveTextContent('00:00');
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByTestId('branch-loading-elapsed-branch-1')).toHaveTextContent('00:01');
+    await act(async () => {
+      vi.advanceTimersByTime(60000);
+    });
+    expect(screen.getByTestId('branch-loading-elapsed-branch-1')).toHaveTextContent('01:01');
+
+    rerender(
+      <ChatThread
+        {...createBaseProps()}
+        messages={[
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: '回答',
+            status: 'done',
+            errorMessage: null,
+            branches: [
+              {
+                id: 'branch-1',
+                modelId: 'model-1',
+                modelLabel: '模型一',
+                isPrimary: true,
+                content: '回答',
+                status: 'done',
+                errorMessage: null,
+                durationMs: 61000,
+                startedAt: null,
+              },
+            ],
+            selectedBranchId: 'branch-1',
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByTestId('branch-loading-elapsed-branch-1')).toBeNull();
   });
 
   it('助手消息 Markdown 会按展示配置渲染标题和正文样式', () => {

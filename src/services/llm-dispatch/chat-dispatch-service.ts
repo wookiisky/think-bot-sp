@@ -59,9 +59,11 @@ type ChatStreamEvent =
       branchId: string;
       /** 主分支模型 id。 */
       modelId: string;
-      /** 主分支模型展示名。 */
-      modelLabel: string;
-    }
+        /** 主分支模型展示名。 */
+        modelLabel: string;
+        /** 主请求的大模型调用开始时间。 */
+        startedAt: number;
+      }
   | {
       /** 事件类型。 */
       type: 'BRANCH_STREAM_STARTED';
@@ -77,9 +79,11 @@ type ChatStreamEvent =
       branchId: string;
       /** 分支模型 id。 */
       modelId: string;
-      /** 分支模型展示名。 */
-      modelLabel: string;
-    }
+        /** 分支模型展示名。 */
+        modelLabel: string;
+        /** 分支请求的大模型调用开始时间。 */
+        startedAt: number;
+      }
   | {
       /** 事件类型。 */
       type: 'BRANCH_STREAM_CHUNK';
@@ -334,8 +338,15 @@ type ChatDispatchServiceDeps = {
   conversationRepository: {
     /** 保存 loading 状态。 */
     saveLoadingState: (_value: unknown) => Promise<unknown>;
-    /** 删除 loading 状态。 */
-    removeLoadingState: (_normalizedUrl: string, _promptTabId: string) => Promise<void>;
+      /** 删除 loading 状态。 */
+      removeLoadingState: (_normalizedUrl: string, _promptTabId: string) => Promise<void>;
+      /** 标记主请求的大模型调用开始时间。 */
+      markLoadingStateStarted: (_input: {
+        normalizedUrl: string;
+        promptTabId: string;
+        startedAt: number;
+        now: number;
+      }) => Promise<unknown>;
     /** 追加用户消息。 */
     appendUserMessage: (_input: {
       /** 归一化页面 URL。 */
@@ -545,11 +556,12 @@ type ChatDispatchServiceDeps = {
       promptTabId: string;
       sessionId: string;
       messageId: string;
-      branchId: string;
-      modelId: string;
-      status: 'loading' | 'cancelled' | 'error';
-      now: number;
-    }) => Promise<unknown>;
+        branchId: string;
+        modelId: string;
+        status: 'loading' | 'cancelled' | 'error';
+        startedAt?: number | null;
+        now: number;
+      }) => Promise<unknown>;
     /** 删除分支 loading。 */
     removeBranchLoadingState: (_normalizedUrl: string, _promptTabId: string, _branchId: string) => Promise<void>;
     /** 重新启动既有助手分支。 */
@@ -956,44 +968,46 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     /** 流式对话历史。 */
     streamMessages: ConversationHistoryMessage[];
     /** 可选的开始前准备。 */
-    prepare?: (sessionId: string) => Promise<void>;
+      prepare?: (sessionId: string, startedAt: number) => Promise<void>;
   }): BranchStreamSession => {
     const sessionId = createSessionId();
     const abortScope = createModelAbortScope(input.requestTimeoutSeconds);
     const resolvedModel = deps.providerRegistry.resolveProviderModel(input.model);
-    const done = (async (): Promise<ChatStreamResult> => {
-      let result: ChatStreamResult;
-      let hasLoggedFirstChunk = false;
-      let streamStartedAt: number | null = null;
-      try {
-        await input.prepare?.(sessionId);
-        logger.info('branch.stream.started', {
-          normalizedUrl: input.normalizedUrl,
-          promptTab: input.promptTabId,
-          sessionId,
-          messageId: input.messageId,
-          branchId: input.branchId,
-          provider: resolvedModel.providerId,
-          modelId: input.model.id,
-        });
-        publishToPromptTabSafely({
-          type: 'BRANCH_STREAM_STARTED',
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          messageId: input.messageId,
-          branchId: input.branchId,
-          modelId: input.model.id,
-          modelLabel: resolvedModel.modelLabel,
-        });
-        streamStartedAt = now();
-        const response = await deps.streamText(
-          buildModelInvocation({
-            resolvedModel,
-            messages: input.streamMessages,
-            abortSignal: abortScope.signal,
-          }),
-        );
+      const done = (async (): Promise<ChatStreamResult> => {
+        let result: ChatStreamResult;
+        let hasLoggedFirstChunk = false;
+        let streamStartedAt: number | null = null;
+        try {
+          const startedAt = now();
+          await input.prepare?.(sessionId, startedAt);
+	        logger.info('branch.stream.started', {
+	          normalizedUrl: input.normalizedUrl,
+	          promptTab: input.promptTabId,
+	          sessionId,
+	          messageId: input.messageId,
+	          branchId: input.branchId,
+	          provider: resolvedModel.providerId,
+	          modelId: input.model.id,
+	        });
+	        publishToPromptTabSafely({
+	          type: 'BRANCH_STREAM_STARTED',
+	          normalizedUrl: input.normalizedUrl,
+	          promptTabId: input.promptTabId,
+	          sessionId,
+	          messageId: input.messageId,
+	          branchId: input.branchId,
+	          modelId: input.model.id,
+	          modelLabel: resolvedModel.modelLabel,
+	          startedAt,
+	        });
+	        streamStartedAt = startedAt;
+	        const response = await deps.streamText(
+	          buildModelInvocation({
+	            resolvedModel,
+	            messages: input.streamMessages,
+	            abortSignal: abortScope.signal,
+	          }),
+	        );
 
         for await (const chunk of response.textStream) {
           if (!hasLoggedFirstChunk) {
@@ -1286,47 +1300,56 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           model: plan.model,
           requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
-          prepare: async (branchSessionId) => {
-            await deps.conversationRepository.upsertBranchLoadingState({
+            prepare: async (branchSessionId, startedAt) => {
+              await deps.conversationRepository.upsertBranchLoadingState({
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId: branchSessionId,
               messageId: assistantMessageId,
               branchId: plan.branchId,
-              modelId: plan.modelId,
-              status: 'loading',
-              now: now(),
-            });
+                modelId: plan.modelId,
+                status: 'loading',
+                startedAt,
+                now: now(),
+              });
           },
         }),
       );
       const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
 
-      const done = (async (): Promise<ChatStreamResult> => {
-        let result: ChatStreamResult;
-        let hasLoggedFirstChunk = false;
-        let streamStartedAt: number | null = null;
-        try {
-          logger.info('chat.stream.started', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            provider: resolvedModel.providerId,
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_STARTED',
+        const done = (async (): Promise<ChatStreamResult> => {
+          let result: ChatStreamResult;
+          let hasLoggedFirstChunk = false;
+          let streamStartedAt: number | null = null;
+          try {
+            const startedAt = now();
+            await deps.conversationRepository.markLoadingStateStarted({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              startedAt,
+              now: startedAt,
+            });
+            logger.info('chat.stream.started', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              provider: resolvedModel.providerId,
+            });
+            publishToPromptTabSafely({
+              type: 'CHAT_STREAM_STARTED',
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            modelId: model.id,
-            modelLabel: resolvedModel.modelLabel,
-          });
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+              modelId: model.id,
+              modelLabel: resolvedModel.modelLabel,
+              startedAt,
+            });
 
-          streamStartedAt = now();
-          const response = await deps.streamText(
+            streamStartedAt = startedAt;
+            const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
               messages: streamMessages,
@@ -1606,46 +1629,55 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           model: plan.model,
           requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
-          prepare: async (branchSessionId) => {
-            await deps.conversationRepository.upsertBranchLoadingState({
+            prepare: async (branchSessionId, startedAt) => {
+              await deps.conversationRepository.upsertBranchLoadingState({
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId: branchSessionId,
               messageId: assistantMessageId,
               branchId: plan.branchId,
-              modelId: plan.modelId,
-              status: 'loading',
-              now: now(),
-            });
+                modelId: plan.modelId,
+                status: 'loading',
+                startedAt,
+                now: now(),
+              });
           },
         }),
       );
       const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
 
-      const done = (async (): Promise<ChatStreamResult> => {
-        let result: ChatStreamResult;
-        let hasLoggedFirstChunk = false;
-        let streamStartedAt: number | null = null;
-        try {
-          logger.info('chat.stream.started', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            provider: resolvedModel.providerId,
-          });
-          publishToPromptTabSafely({
+        const done = (async (): Promise<ChatStreamResult> => {
+          let result: ChatStreamResult;
+          let hasLoggedFirstChunk = false;
+          let streamStartedAt: number | null = null;
+          try {
+            const startedAt = now();
+            await deps.conversationRepository.markLoadingStateStarted({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              startedAt,
+              now: startedAt,
+            });
+            logger.info('chat.stream.started', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              provider: resolvedModel.providerId,
+            });
+            publishToPromptTabSafely({
             type: 'CHAT_STREAM_STARTED',
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            modelId: model.id,
-            modelLabel: resolvedModel.modelLabel,
-          });
-          streamStartedAt = now();
-          const response = await deps.streamText(
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+              modelId: model.id,
+              modelLabel: resolvedModel.modelLabel,
+              startedAt,
+            });
+            streamStartedAt = startedAt;
+            const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
               messages: streamMessages,
@@ -1919,45 +1951,54 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           model: plan.model,
           requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages,
-          prepare: async (branchSessionId) => {
-            await deps.conversationRepository.upsertBranchLoadingState({
+            prepare: async (branchSessionId, startedAt) => {
+              await deps.conversationRepository.upsertBranchLoadingState({
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId: branchSessionId,
               messageId: assistantMessageId,
               branchId: plan.branchId,
-              modelId: plan.modelId,
-              status: 'loading',
-              now: now(),
-            });
+                modelId: plan.modelId,
+                status: 'loading',
+                startedAt,
+                now: now(),
+              });
           },
         }),
       );
       const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
 
-      const done = (async (): Promise<ChatStreamResult> => {
-        let result: ChatStreamResult;
-        let hasLoggedFirstChunk = false;
-        let streamStartedAt: number | null = null;
-        try {
-          logger.info('chat.stream.started', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            provider: resolvedModel.providerId,
-          });
-          publishToPromptTabSafely({
+        const done = (async (): Promise<ChatStreamResult> => {
+          let result: ChatStreamResult;
+          let hasLoggedFirstChunk = false;
+          let streamStartedAt: number | null = null;
+          try {
+            const startedAt = now();
+            await deps.conversationRepository.markLoadingStateStarted({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              startedAt,
+              now: startedAt,
+            });
+            logger.info('chat.stream.started', {
+              normalizedUrl: input.normalizedUrl,
+              promptTab: input.promptTabId,
+              sessionId,
+              messageId: assistantMessageId,
+              provider: resolvedModel.providerId,
+            });
+            publishToPromptTabSafely({
             type: 'CHAT_STREAM_STARTED',
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            modelId: model.id,
-            modelLabel: resolvedModel.modelLabel,
-          });
-          streamStartedAt = now();
+              sessionId,
+              messageId: assistantMessageId,
+              branchId: primaryBranch.branchId,
+              modelId: model.id,
+              modelLabel: resolvedModel.modelLabel,
+              startedAt,
+            });
+            streamStartedAt = startedAt;
           const response = await deps.streamText(
             buildModelInvocation({
               resolvedModel,
@@ -2182,17 +2223,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         model,
         requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
         streamMessages,
-        prepare: async (sessionId) => {
-          await deps.conversationRepository.upsertBranchLoadingState({
+          prepare: async (sessionId, startedAt) => {
+            await deps.conversationRepository.upsertBranchLoadingState({
             normalizedUrl: input.normalizedUrl,
             promptTabId: input.promptTabId,
             sessionId,
             messageId: input.messageId,
             branchId: input.branchId,
-            modelId: model.id,
-            status: 'loading',
-            now: now(),
-          });
+              modelId: model.id,
+              status: 'loading',
+              startedAt,
+              now: now(),
+            });
         },
       });
     },
@@ -2258,17 +2300,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           model,
           requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages: branchMessages,
-          prepare: async (sessionId) => {
-            await deps.conversationRepository.upsertBranchLoadingState({
+            prepare: async (sessionId, startedAt) => {
+              await deps.conversationRepository.upsertBranchLoadingState({
               normalizedUrl: input.normalizedUrl,
               promptTabId: input.promptTabId,
               sessionId,
               messageId: input.messageId,
               branchId,
-              modelId: model.id,
-              status: 'loading',
-              now: now(),
-            });
+                modelId: model.id,
+                status: 'loading',
+                startedAt,
+                now: now(),
+              });
           },
         }),
       ];
