@@ -826,7 +826,7 @@ describe('SidebarShell', () => {
 
     expect(api.reExtractContent).not.toHaveBeenCalled();
     expect(api.sendChat).not.toHaveBeenCalled();
-    expect(within(screen.getByRole('alert')).getByText('当前没有可复制的提取内容')).toBeVisible();
+    expect(within(screen.getByRole('alert')).getByText('当前没有提取内容')).toBeVisible();
   });
 
   it('根据 quickInputs 渲染多 promptTab，并在切换标签时按需直接触发快捷输入', async () => {

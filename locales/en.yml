@@ -215,7 +215,7 @@ sidebar.method.jina: Jina
 sidebar.tablistLabel: Sidebar Workspace
 sidebar.browserTabLabel: Browser Tab
 sidebar.resizeExtraction: Resize Extraction Panel
-sidebar.notice.emptyExtraction: No extracted content to copy
+sidebar.notice.emptyExtraction: No extracted content
 sidebar.notice.copySuccess: Extracted content copied
 sidebar.notice.copyFailed: Failed to copy extracted content. Please retry.
 sidebar.notice.reExtractFailed: Failed to re-extract. Please retry.
@@ -247,7 +247,7 @@ conversations.tablistLabel: History Workspace Tabs
 conversations.resizeSidebar: Resize History Sidebar
 conversations.resizeExtraction: Resize Extraction Panel
 conversations.editTitle: Edit Page Title
-conversations.notice.emptyExtraction: No extracted content to copy
+conversations.notice.emptyExtraction: No extracted content
 conversations.notice.copySuccess: Extracted content copied
 conversations.notice.copyFailed: Failed to copy extracted content. Please retry.
 conversations.notice.openSourceFailed: Failed to open the source page. Please retry.

@@ -215,7 +215,7 @@ sidebar.method.jina: Jina
 sidebar.tablistLabel: 侧边栏工作台
 sidebar.browserTabLabel: 浏览器标签
 sidebar.resizeExtraction: 调整提取区高度
-sidebar.notice.emptyExtraction: 当前没有可复制的提取内容
+sidebar.notice.emptyExtraction: 当前没有提取内容
 sidebar.notice.copySuccess: 已复制提取内容
 sidebar.notice.copyFailed: 复制提取内容失败，请重试
 sidebar.notice.reExtractFailed: 重新提取失败，请重试
@@ -247,7 +247,7 @@ conversations.tablistLabel: 历史工作台标签
 conversations.resizeSidebar: 调整历史栏宽度
 conversations.resizeExtraction: 调整提取区高度
 conversations.editTitle: 编辑页面标题
-conversations.notice.emptyExtraction: 当前没有可复制的提取内容
+conversations.notice.emptyExtraction: 当前没有提取内容
 conversations.notice.copySuccess: 已复制提取内容
 conversations.notice.copyFailed: 复制提取内容失败，请重试
 conversations.notice.openSourceFailed: 打开原网页失败，请重试
