@@ -178,6 +178,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const themeRootAttributes = useDocumentTheme(themePreference);
   const terminalSessionIdsRef = useRef<Set<string>>(new Set());
   const t = createWorkspaceTranslator(localeResources, localeCode);
+  const promptTabSubscriptionKey = JSON.stringify(promptTabs.map((promptTab) => promptTab.id));
 
   const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? promptTabs[0] ?? null;
   const activeComposer =
@@ -401,15 +402,16 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   };
 
   useEffect(() => {
-    if (promptTabs.length === 0) {
+    const promptTabSubscriptionIds = JSON.parse(promptTabSubscriptionKey) as string[];
+    if (promptTabSubscriptionIds.length === 0) {
       return;
     }
 
-    const subscriptions = promptTabs.map((promptTab) => {
+    const subscriptions = promptTabSubscriptionIds.map((promptTabId) => {
       const port = api.connectStream({
         tabId,
         pageUrl,
-        promptTabId: promptTab.id,
+        promptTabId,
       });
 
       const handlePortMessage = (event: unknown) => {
@@ -779,7 +781,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         subscription.port.disconnect();
       }
     };
-  }, [api, pageUrl, promptTabs, tabId]);
+  }, [api, pageUrl, promptTabSubscriptionKey, tabId]);
 
   useEffect(() => {
     let cancelled = false;

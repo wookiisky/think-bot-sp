@@ -687,7 +687,27 @@ describe('SidebarShell', () => {
 
   it('清空当前页面数据后点击快捷标签时使用 Readability 补提取并发送当前标签', async () => {
     const user = userEvent.setup();
+    const portMessageListeners: Record<string, PortMessageListener> = {};
+    const disconnectFns: Array<ReturnType<typeof vi.fn>> = [];
+    let resolveSendChat: (value: unknown) => void = () => {};
+    const sendChatPromise = new Promise((resolve) => {
+      resolveSendChat = resolve;
+    });
     const api = createSidebarApi({
+      sendChat: vi.fn().mockReturnValue(sendChatPromise),
+      connectStream: vi.fn((input: { promptTabId: string }) => {
+        const disconnect = vi.fn();
+        disconnectFns.push(disconnect);
+        return {
+          disconnect,
+          onMessage: {
+            addListener: vi.fn((listener: PortMessageListener) => {
+              portMessageListeners[input.promptTabId] = listener;
+            }),
+            removeListener: vi.fn(),
+          },
+        };
+      }),
       getSidebarBootstrap: vi.fn().mockResolvedValue({
         type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
         browserTabId: 7,
@@ -826,8 +846,22 @@ describe('SidebarShell', () => {
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
 
+    await screen.findByRole('tab', { name: /翻译/ });
+    await waitFor(() => expect(portMessageListeners['quick-summary']).toBeTypeOf('function'));
+    const quickSummaryPortMessageListener = portMessageListeners['quick-summary'] ?? null;
+    api.connectStream.mockClear();
+    disconnectFns.forEach((disconnect) => {
+      disconnect.mockClear();
+    });
+
     await user.click(await screen.findByRole('button', { name: '清空当前页面数据' }));
     await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
+    await waitFor(() => expect(api.clearPageContext).toHaveBeenCalledTimes(1));
+    expect(api.connectStream).not.toHaveBeenCalled();
+    for (const disconnect of disconnectFns) {
+      expect(disconnect).not.toHaveBeenCalled();
+    }
+
     await user.click(screen.getByRole('tab', { name: /总结/ }));
 
     await waitFor(() =>
@@ -851,8 +885,32 @@ describe('SidebarShell', () => {
         rollbackOnFailure: true,
       }),
     );
+    emitPortMessage(quickSummaryPortMessageListener, {
+      type: 'CHAT_STREAM_STARTED',
+      normalizedUrl: 'https://example.com/article',
+      promptTabId: 'quick-summary',
+      sessionId: 'session-quick-summary',
+      messageId: 'assistant-quick-summary',
+      branchId: 'branch-quick-summary',
+      modelId: 'model-1',
+      modelLabel: '主模型',
+      startedAt: Date.now(),
+    });
+    expect(await screen.findByTestId('branch-loading-elapsed-branch-quick-summary')).toBeVisible();
     expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
     expect(screen.queryByText('当前没有提取内容')).toBeNull();
+
+    resolveSendChat({
+      type: 'SEND_CHAT_SUCCESS',
+      payload: {
+        sessionId: 'session-quick-summary',
+        userMessageId: 'user-quick-summary',
+        messageId: 'assistant-quick-summary',
+        branchId: 'branch-quick-summary',
+        modelId: 'model-1',
+        modelLabel: '主模型',
+      },
+    });
   });
 
   it('快捷标签补提取返回空正文时不发送聊天请求', async () => {
