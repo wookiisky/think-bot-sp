@@ -685,7 +685,7 @@ describe('SidebarShell', () => {
     expect(await screen.findByLabelText('包含页面内容')).not.toBeChecked();
   });
 
-  it('清空当前页面数据后点击快捷标签时提示先刷新且不发送', async () => {
+  it('清空当前页面数据后点击快捷标签时使用 Readability 补提取并发送当前标签', async () => {
     const user = userEvent.setup();
     const api = createSidebarApi({
       getSidebarBootstrap: vi.fn().mockResolvedValue({
@@ -699,7 +699,7 @@ describe('SidebarShell', () => {
           title: '示例页面',
           faviconUrl: '',
           content: '已有提取内容',
-          extractionMethod: 'readability',
+          extractionMethod: 'jina',
           includePageContent: true,
           promptTabStates: [],
           createdAt: 1,
@@ -797,7 +797,7 @@ describe('SidebarShell', () => {
               id: 'quick-summary',
               name: '总结',
               prompt: '请总结当前页面',
-              autoTrigger: true,
+              autoTrigger: false,
               modelId: 'model-1',
               parallelModelIds: [],
               order: 0,
@@ -816,6 +816,12 @@ describe('SidebarShell', () => {
           ],
         }),
       }),
+      reExtractContent: vi.fn().mockResolvedValue({
+        payload: {
+          content: 'Readability 重新提取内容',
+          extractionMethod: 'readability',
+        },
+      }),
     });
 
     render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
@@ -824,9 +830,196 @@ describe('SidebarShell', () => {
     await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
     await user.click(screen.getByRole('tab', { name: /总结/ }));
 
-    expect(api.reExtractContent).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(api.reExtractContent).toHaveBeenCalledWith({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'readability',
+        source: 'prompt_tab_click',
+      }),
+    );
+    await waitFor(() =>
+      expect(api.sendChat).toHaveBeenCalledWith({
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+        modelId: 'model-1',
+        text: '请总结当前页面',
+        displayText: '总结',
+        images: [],
+        includePageContent: true,
+        rollbackOnFailure: true,
+      }),
+    );
+    expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('总结')).toBeVisible();
+    expect(screen.queryByText('当前没有提取内容')).toBeNull();
+  });
+
+  it('快捷标签补提取返回空正文时不发送聊天请求', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '已有提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结当前页面',
+              autoTrigger: false,
+              modelId: 'model-1',
+              parallelModelIds: [],
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      reExtractContent: vi.fn().mockResolvedValue({
+        payload: {
+          content: '   ',
+          extractionMethod: 'readability',
+        },
+      }),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.click(await screen.findByRole('button', { name: '清空当前页面数据' }));
+    await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
+    await user.click(screen.getByRole('tab', { name: /总结/ }));
+
+    await waitFor(() => expect(api.reExtractContent).toHaveBeenCalledTimes(1));
     expect(api.sendChat).not.toHaveBeenCalled();
     expect(within(screen.getByRole('alert')).getByText('当前没有提取内容')).toBeVisible();
+    expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('还没有聊天记录')).toBeVisible();
+  });
+
+  it('快捷标签补提取失败时不发送聊天请求且不留下消息', async () => {
+    const user = userEvent.setup();
+    const api = createSidebarApi({
+      getSidebarBootstrap: vi.fn().mockResolvedValue({
+        type: 'GET_SIDEBAR_BOOTSTRAP_SUCCESS',
+        browserTabId: 7,
+        normalizedUrl: 'https://example.com/article',
+        page: {
+          id: 'https://example.com/article',
+          url: 'https://example.com/article',
+          normalizedUrl: 'https://example.com/article',
+          title: '示例页面',
+          faviconUrl: '',
+          content: '已有提取内容',
+          extractionMethod: 'readability',
+          includePageContent: true,
+          promptTabStates: [],
+          createdAt: 1,
+          updatedAt: 1,
+          expiresAt: 2,
+        },
+        conversations: [],
+        loadingStates: [],
+        blockedByBlacklist: false,
+        matchedRuleId: null,
+        shouldExtract: false,
+      }),
+      getConfig: vi.fn().mockResolvedValue({
+        type: 'GET_CONFIG_SUCCESS',
+        config: createDefaultConfig({
+          basic: {
+            defaultModelId: 'model-1',
+          },
+          models: [
+            {
+              id: 'model-1',
+              name: '主模型',
+              provider: 'openai-compatible',
+              enabled: true,
+              model: 'gpt-4.1-mini',
+              baseUrl: 'https://api.example.com',
+              apiKey: 'token',
+              deployment: '',
+              temperature: 0,
+              tools: [],
+              thinkingBudget: null,
+              maxOutputTokens: null,
+              supportsImages: true,
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+          quickInputs: [
+            {
+              id: 'quick-summary',
+              name: '总结',
+              prompt: '请总结当前页面',
+              autoTrigger: false,
+              modelId: 'model-1',
+              parallelModelIds: [],
+              order: 0,
+              deletedAt: null,
+            },
+          ],
+        }),
+      }),
+      reExtractContent: vi.fn().mockRejectedValue(new Error('readability failed')),
+    });
+
+    render(<SidebarShell api={api} tabId={7} pageUrl="https://example.com/article" />);
+
+    await user.click(await screen.findByRole('button', { name: '清空当前页面数据' }));
+    await user.click(within(screen.getByTestId('clear-page-confirm')).getByRole('button', { name: '清空当前页面数据' }));
+    await user.click(screen.getByRole('tab', { name: /总结/ }));
+
+    await waitFor(() => expect(api.reExtractContent).toHaveBeenCalledTimes(1));
+    expect(api.sendChat).not.toHaveBeenCalled();
+    expect(within(screen.getByRole('alert')).getByText('重新提取失败，请重试')).toBeVisible();
+    expect(within(screen.getByRole('tabpanel', { name: /总结/ })).getByText('还没有聊天记录')).toBeVisible();
   });
 
   it('根据 quickInputs 渲染多 promptTab，并在切换标签时按需直接触发快捷输入', async () => {

@@ -126,6 +126,21 @@ describe('runtime-messaging', () => {
     });
     expect(
       sidebarCommandSchema.parse({
+        type: 'RE_EXTRACT_CONTENT',
+        tabId: 7,
+        pageUrl: 'https://example.com/article',
+        method: 'readability',
+        source: 'prompt_tab_click',
+      }),
+    ).toEqual({
+      type: 'RE_EXTRACT_CONTENT',
+      tabId: 7,
+      pageUrl: 'https://example.com/article',
+      method: 'readability',
+      source: 'prompt_tab_click',
+    });
+    expect(
+      sidebarCommandSchema.parse({
         type: 'CLEAR_PAGE_CONTEXT',
         tabId: 7,
         pageUrl: 'https://example.com/article',

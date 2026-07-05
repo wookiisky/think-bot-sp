@@ -46,6 +46,7 @@
 - 初始化时优先读取当前方法缓存。
 - 切换提取方法只读取对应方法缓存，不触发新提取。
 - 手动重新提取时只刷新当前方法缓存。
+- 页面级清空后点击快捷 `promptTab` 且缺少页面正文时，side panel 以 `prompt_tab_click` 来源触发一次 Readability 提取，成功后只继续发送当前快捷 `promptTab`。
 - Readability 失败时直接失败并保留旧 Readability 缓存，不回退 Jina。
 - 调用 Jina 时会带上用户配置的可选 API Key。
 - Jina 返回正文后会按 `jinaResponseTemplate` 生成最终文本：
@@ -95,6 +96,7 @@
 - 不把提取方法做成全局共享状态。
 - 不在提取服务里持久化提取区高度或文本字号；这些值只作为 UI 默认状态由设置配置消费。
 - `GET_SIDEBAR_BOOTSTRAP` 不触发提取，提取只由 `RE_EXTRACT_CONTENT` 显式启动。
+- `prompt_tab_click` 兜底提取固定使用 Readability，不沿用页面当前提取方法，也不触发后台全量自动触发。
 
 ## 10. 测试要求
 

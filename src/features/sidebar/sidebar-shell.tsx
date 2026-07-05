@@ -313,6 +313,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     setContent(extraction.payload.content);
     setMethod(extraction.payload.extractionMethod);
     setState('ready');
+    return extraction.payload;
   };
 
   /** 复制当前提取内容。 */
@@ -1088,7 +1089,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       return;
     }
 
-    if (!normalizeExtractionText(pageContent)) {
+    let requestPageContent = pageContent;
+    if (!normalizeExtractionText(requestPageContent)) {
+      try {
+        const extraction = await runExtraction('readability', 'prompt_tab_click');
+        requestPageContent = extraction.content;
+      } catch {
+        setState('error');
+        pushToast('error', t('sidebar.notice.reExtractFailed'));
+        return;
+      }
+    }
+
+    if (!normalizeExtractionText(requestPageContent)) {
       pushToast('error', t('sidebar.notice.emptyExtraction'));
       return;
     }
