@@ -52,7 +52,8 @@
 
 关键验证点：
 
-- `sidePanel.open()` 需要用户手势；扩展图标链路不能在异步链路里手动调用，应依赖浏览器原生点击打开行为。
+- `sidePanel.open()` 需要用户手势；只允许真实扩展按钮用户手势在普通页兜底调用，异步消息和 E2E 消息驱动不能调用。
+- `openPanelOnActionClick` 是全局按钮状态，普通页开启，受限页和扩展页关闭。
 - side panel 初始化只能由 side panel 自己拉取 `GET_SIDEBAR_BOOTSTRAP`，background 不主动推送首屏初始化命令。
 - 普通页打开时优先显示缓存而不是空白页。
 - content script 不可用时必须进入异常流而不是静默失败。
@@ -81,12 +82,14 @@
 
 1. 用户点击扩展图标。
 2. background 判断为 Chrome 受限页面或不支持注入的页面。
-3. 若当前页是 `conversations.html`，则直接打开设置页。
-4. 否则不进入侧边栏抽取流程，直接打开 conversations 页面作为退化入口。
+3. background 禁用当前 `browserTab` 的 side panel，并关闭全局 `openPanelOnActionClick`。
+4. 若当前页是 `conversations.html`，则直接打开设置页。
+5. 否则不进入侧边栏抽取流程，直接打开 conversations 页面作为退化入口。
 
 关键验证点：
 
 - 不尝试对受限页面执行脚本。
+- 不允许 Chrome 内部页先打开 side panel。
 - 用户有明确可继续工作的入口。
 - `conversations.html` 再次点击扩展图标不会原地回环。
 

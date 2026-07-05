@@ -20,12 +20,14 @@
 
 - 扩展图标入口复用 `tests/e2e/helpers/browser-entry-driver.ts`，通过显式 `__E2E_BROWSER_ACTION_CLICK__` 协议走同一条 background 入口逻辑。
 - `sidebar-extraction` 场景通过 `sidebar.html?tabId=&pageUrl=` 显式恢复 side panel 上下文，避免把用户手势约束和提取闭环耦死在同一个 E2E 用例里。
+- 真实工具栏图标点击无法稳定自动化，`sidePanel.open` 兜底和 `openPanelOnActionClick` 分流主要由单元测试覆盖；E2E 覆盖受限页 disabled、普通页 enabled/path 等可观察配置。
 
 阶段 3 当前复核现状：
 
 - 已覆盖：普通网页点击扩展图标、浏览器内部页退化到 conversations、conversations 再进入设置页、两阶段 bootstrap、黑名单确认后提取。
 - 未覆盖：右键菜单打开 conversations、首次安装快速上手文档。
 - 已覆盖：`browserTab` 切换后自动隐藏，当前活动页会重新预配置 side panel，保证下一次点击可直接打开。
+- 已覆盖：浏览器内部页禁用 side panel 配置，切回普通页恢复 side panel 预配置。
 
 阶段 3 本次修复过程中的测试复盘：
 

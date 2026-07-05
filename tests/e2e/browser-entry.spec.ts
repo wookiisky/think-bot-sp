@@ -2,6 +2,7 @@ import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
 import { expect, test } from './helpers/extension-fixture';
 import {
   activateBrowserTab,
+  getActiveBrowserTabId,
   getBrowserTabIdForUrl,
   getSidePanelOptionsForTab,
   openBrowserActionForTab,
@@ -25,6 +26,17 @@ test('浏览器内部页通过 __E2E_BROWSER_ACTION_CLICK__ 协议退化到 conv
   const restricted = await context.newPage();
   await restricted.goto('chrome://extensions');
   const driverPage = await context.newPage();
+  const restrictedTabId = await getActiveBrowserTabId({ context });
+
+  await expect.poll(
+    async () => getSidePanelOptionsForTab({ context, tabId: restrictedTabId }),
+    {
+      timeout: 5000,
+      message: '浏览器内部页必须禁用 side panel，避免真实扩展按钮先打开侧边栏',
+    },
+  ).toMatchObject({
+    enabled: false,
+  });
 
   await expect(
     openBrowserActionForTab({ context, extensionId, page: restricted, driverPage }),
@@ -34,6 +46,44 @@ test('浏览器内部页通过 __E2E_BROWSER_ACTION_CLICK__ 协议退化到 conv
   });
 
   await driverPage.close();
+});
+
+test('从浏览器内部页切回普通网页后会恢复 side panel 预配置', async ({ context }) => {
+  const restricted = await context.newPage();
+  await restricted.goto('chrome://extensions');
+  const restrictedTabId = await getActiveBrowserTabId({ context });
+
+  await expect.poll(
+    async () => getSidePanelOptionsForTab({ context, tabId: restrictedTabId }),
+    {
+      timeout: 5000,
+      message: '浏览器内部页应关闭 side panel 配置',
+    },
+  ).toMatchObject({
+    enabled: false,
+  });
+
+  const page = await context.newPage();
+  await page.goto('https://example.com/');
+  const pageTabId = await getBrowserTabIdForUrl({
+    context,
+    url: page.url(),
+  });
+  await activateBrowserTab({
+    context,
+    tabId: pageTabId,
+  });
+
+  await expect.poll(
+    async () => getSidePanelOptionsForTab({ context, tabId: pageTabId }),
+    {
+      timeout: 5000,
+      message: '普通网页应恢复 side panel 预配置，保证下一次真实点击可打开',
+    },
+  ).toMatchObject({
+    enabled: true,
+    path: 'sidebar.html',
+  });
 });
 
 test('conversations 页通过 __E2E_BROWSER_ACTION_CLICK__ 协议继续进入设置页', async ({ context, extensionId }) => {

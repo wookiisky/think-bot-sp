@@ -67,7 +67,18 @@ type E2EBrowserActionMessage = {
   pageUrl: string;
 };
 
+type BrowserActionClickSource = 'browser_action' | 'message_driver';
+
 const stripLeadingSlash = (route: string) => (route.startsWith('/') ? route.slice(1) : route);
+
+/** 判断 URL 是否允许启用 side panel；拿不到 URL 时按受限页保守处理。 */
+const canEnableSidePanelForUrl = (rawUrl: string | undefined): rawUrl is string => {
+  if (!rawUrl?.trim()) {
+    return false;
+  }
+
+  return !isRestrictedUrl(rawUrl);
+};
 
 /** 创建浏览器入口服务，统一处理扩展按钮、右键菜单、安装和标签切换。 */
 export const createBrowserEntryService = ({
@@ -79,18 +90,36 @@ export const createBrowserEntryService = ({
   contextMenus,
   getUiLocale,
 }: BrowserEntryDependencies) => {
-  /** 配置扩展按钮点击后由浏览器原生打开 side panel。 */
-  const configureActionClickBehavior = async () => {
+  let activeTabSyncVersion = 0;
+  let latestActiveTabId: number | null = null;
+  let latestActiveTabAllowsPanel: boolean | null = null;
+
+  /** 开始一次活动标签页同步，用版本号隔离旧异步结果。 */
+  const beginActiveTabSync = (tabId: number | null) => {
+    activeTabSyncVersion += 1;
+    latestActiveTabId = tabId;
+    latestActiveTabAllowsPanel = null;
+    return activeTabSyncVersion;
+  };
+
+  /** 判断活动标签页同步是否已经过期。 */
+  const isStaleActiveTabSync = (version: number) => version !== activeTabSyncVersion;
+
+  /** 判断过期同步启用的标签页是否需要补偿禁用。 */
+  const shouldDisableStaleEnabledTab = (tabId: number) => latestActiveTabId !== tabId || latestActiveTabAllowsPanel !== true;
+
+  /** 同步扩展按钮点击是否交给浏览器原生打开 side panel。 */
+  const setActionClickOpensPanel = async (openPanelOnActionClick: boolean) => {
     if (!sidePanel.setPanelBehavior) {
       logger.warn('侧边栏按钮行为能力不可用', {});
       return;
     }
 
     await sidePanel.setPanelBehavior({
-      openPanelOnActionClick: true,
+      openPanelOnActionClick,
     });
-    logger.info('侧边栏按钮行为已配置', {
-      openPanelOnActionClick: true,
+    logger.info('扩展按钮侧边栏行为已同步', {
+      openPanelOnActionClick,
     });
   };
 
@@ -108,6 +137,35 @@ export const createBrowserEntryService = ({
       return currentUrl.origin === targetUrl.origin && currentUrl.pathname === targetUrl.pathname;
     } catch {
       return false;
+    }
+  };
+
+  /** 配置扩展按钮点击行为，使它匹配当前活动标签页。 */
+  const configureActionClickBehavior = async () => {
+    if (!tabs.query) {
+      await setActionClickOpensPanel(false);
+      logger.warn('活动标签页查询能力不可用', {});
+      return;
+    }
+
+    const syncVersion = beginActiveTabSync(null);
+    try {
+      const [activeTab] = await tabs.query({
+        active: true,
+        lastFocusedWindow: true,
+      });
+      if (isStaleActiveTabSync(syncVersion)) {
+        return;
+      }
+      await syncSidePanelForActiveTab(activeTab, syncVersion);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      if (!isStaleActiveTabSync(syncVersion)) {
+        await setActionClickOpensPanel(false);
+      }
+      logger.warn('活动标签页入口初始化失败', {
+        reason,
+      });
     }
   };
 
@@ -160,6 +218,23 @@ export const createBrowserEntryService = ({
     };
   };
 
+  /** 在真实扩展按钮用户手势内打开 side panel。 */
+  const openSidePanelFromBrowserAction = async (tabId: number) => {
+    if (!sidePanel.open) {
+      logger.warn('侧边栏打开能力不可用', {
+        browserTabId: tabId,
+      });
+      return;
+    }
+
+    await sidePanel.open({
+      tabId,
+    });
+    logger.info('侧边栏已通过扩展按钮打开', {
+      browserTabId: tabId,
+    });
+  };
+
   /** 禁用目标标签页的 side panel。 */
   const disableSidePanelForTab = async (tabId: number) => {
     await sidePanel.setOptions({
@@ -170,13 +245,32 @@ export const createBrowserEntryService = ({
   };
 
   /** 按当前标签页 URL 同步 side panel 可用态。 */
-  const syncSidePanelForActiveTab = async (tab: chrome.tabs.Tab | undefined) => {
+  const syncSidePanelForActiveTab = async (tab: chrome.tabs.Tab | undefined, syncVersion: number) => {
     if (!tab?.id) {
+      if (!isStaleActiveTabSync(syncVersion)) {
+        latestActiveTabId = null;
+        latestActiveTabAllowsPanel = false;
+        await setActionClickOpensPanel(false);
+      }
       return;
     }
 
-    if (isRestrictedUrl(tab.url ?? '')) {
-      await disableSidePanelForTab(tab.id);
+    if (!canEnableSidePanelForUrl(tab.url)) {
+      if (isStaleActiveTabSync(syncVersion)) {
+        return;
+      }
+      latestActiveTabId = tab.id;
+      latestActiveTabAllowsPanel = false;
+      await setActionClickOpensPanel(false);
+      await disableSidePanelForTab(tab.id).catch((error: unknown) => {
+        logger.warn('当前标签页侧边栏禁用失败', {
+          browserTabId: tab.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      });
+      if (isStaleActiveTabSync(syncVersion)) {
+        return;
+      }
       logger.info('当前标签页侧边栏已禁用', {
         browserTabId: tab.id,
         url: tab.url,
@@ -184,24 +278,46 @@ export const createBrowserEntryService = ({
       return;
     }
 
+    if (isStaleActiveTabSync(syncVersion)) {
+      return;
+    }
+    latestActiveTabId = tab.id;
+    latestActiveTabAllowsPanel = true;
     await openSidePanelForTab(tab.id);
+    if (isStaleActiveTabSync(syncVersion)) {
+      if (shouldDisableStaleEnabledTab(tab.id)) {
+        await disableSidePanelForTab(tab.id).catch((error: unknown) => {
+          logger.warn('过期侧边栏入口补偿清理失败', {
+            browserTabId: tab.id,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
+      return;
+    }
     logger.info('当前标签页侧边栏已预配置', {
       browserTabId: tab.id,
       url: tab.url,
     });
+    await setActionClickOpensPanel(true);
   };
 
   /** 处理扩展按钮点击。 */
-  const handleActionClick = async (tab: Pick<chrome.tabs.Tab, 'id' | 'url'> | undefined): Promise<BrowserEntryActionResult> => {
+  const handleActionClick = async (
+    tab: Pick<chrome.tabs.Tab, 'id' | 'url'> | undefined,
+    source: BrowserActionClickSource = 'message_driver',
+  ): Promise<BrowserEntryActionResult> => {
     logger.info('action.clicked', {
       tabId: tab?.id,
       url: tab?.url,
+      source,
     });
 
     if (!tab?.id) {
       logger.warn('action.missing-tab', {
         url: tab?.url,
       });
+      await setActionClickOpensPanel(false);
       return openConversationsPage();
     }
 
@@ -210,22 +326,55 @@ export const createBrowserEntryService = ({
         browserTabId: tab.id,
         url: tab.url,
       });
+      await setActionClickOpensPanel(false);
+      await disableSidePanelForTab(tab.id).catch((error: unknown) => {
+        logger.warn('受限页侧边栏禁用失败', {
+          browserTabId: tab.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      });
       return openOptionsPage();
     }
 
-    if (isRestrictedUrl(tab.url ?? '')) {
+    if (!canEnableSidePanelForUrl(tab.url)) {
       logger.warn('action.restricted', {
         browserTabId: tab.id,
         url: tab.url,
       });
+      await setActionClickOpensPanel(false);
+      await disableSidePanelForTab(tab.id).catch((error: unknown) => {
+        logger.warn('受限页侧边栏禁用失败', {
+          browserTabId: tab.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      });
       return openConversationsPage();
     }
 
+    if (source === 'browser_action') {
+      const configurePanel = openSidePanelForTab(tab.id);
+      const configureActionClick = setActionClickOpensPanel(true);
+      const openPanel = openSidePanelFromBrowserAction(tab.id);
+
+      await Promise.all([configurePanel, configureActionClick, openPanel]);
+      return {
+        kind: 'sidepanel-opened',
+        tabId: tab.id,
+      };
+    }
+
+    await setActionClickOpensPanel(true);
     return openSidePanelForTab(tab.id);
+  };
+
+  /** 处理真实扩展按钮点击。 */
+  const handleBrowserActionClick = async (tab: Pick<chrome.tabs.Tab, 'id' | 'url'> | undefined): Promise<BrowserEntryActionResult> => {
+    return handleActionClick(tab, 'browser_action');
   };
 
   /** 处理标签页切换后的 side panel 启用态清理。 */
   const handleTabActivated = async ({ tabId }: { tabId: number }) => {
+    const syncVersion = beginActiveTabSync(tabId);
     const enabledTabIds = await panelState.getEnabledTabIds();
 
     for (const openedTabId of enabledTabIds) {
@@ -248,7 +397,11 @@ export const createBrowserEntryService = ({
     }
 
     try {
-      await syncSidePanelForActiveTab(await tabs.get(tabId));
+      const activeTab = await tabs.get(tabId);
+      if (isStaleActiveTabSync(syncVersion)) {
+        return;
+      }
+      await syncSidePanelForActiveTab(activeTab, syncVersion);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn('panel.active_tab_sync_failed', {
@@ -272,8 +425,9 @@ export const createBrowserEntryService = ({
       return;
     }
 
+    const syncVersion = beginActiveTabSync(tabId);
     try {
-      await syncSidePanelForActiveTab(tab);
+      await syncSidePanelForActiveTab(tab, syncVersion);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       logger.warn('panel.active_tab_sync_failed', {
@@ -327,12 +481,13 @@ export const createBrowserEntryService = ({
     return handleActionClick({
       id: message.tabId,
       url: message.pageUrl,
-    });
+    }, 'message_driver');
   };
 
   return {
     configureActionClickBehavior,
     handleActionClick,
+    handleBrowserActionClick,
     handleContextMenuClick,
     handleInstalled,
     handleTabActivated,

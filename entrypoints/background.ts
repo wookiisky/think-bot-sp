@@ -464,7 +464,12 @@ export default defineBackground(() => {
       if (tab?.id) {
         clearBypassForTab(tab.id);
       }
-      void browserEntry.handleActionClick(tab);
+      void browserEntry.handleBrowserActionClick(tab).catch((error: unknown) => {
+        logger.warn('扩展按钮入口处理失败', {
+          browserTabId: tab?.id,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      });
     });
   } else {
     logger.warn('扩展按钮能力不可用', {});

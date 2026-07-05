@@ -14,7 +14,11 @@
 ### 2.1 Side Panel
 
 - `sidePanel.open()` 需要用户手势。
-- 扩展图标点击打开 side panel 时，优先使用 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`，不要在异步链路里手动补一次 `open()`。
+- 扩展图标点击打开 side panel 时，普通页优先使用 `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })`。
+- `openPanelOnActionClick` 是全局状态；受限页和扩展页必须同步为 `false`，否则 Chrome 内部页可能先打开 side panel。
+- `tabs.Tab.url` 在 Chrome 内部页可能不可见；拿不到 URL 时必须保守关闭 side panel 入口。
+- 进入受限页时必须先关闭全局按钮直开，再执行 tab 级 side panel 清理；tab 级清理失败不能阻断全局关闭。
+- `sidePanel.open({ tabId })` 只允许真实 `chrome.action.onClicked` 普通页兜底调用，不能在 E2E 消息驱动或其他异步消息链路调用。
 - side panel 是 extension page，可访问 Chrome API。
 - side panel 默认存在全局 panel 和 `browserTab` 级 panel 两种语义，业务侧必须显式使用 `browserTab` 级 panel。
 - 切换到未启用 side panel 的 `browserTab` 时，浏览器会自动隐藏 side panel。
@@ -27,6 +31,7 @@
 - 不要把“切换 tab 后仍会自动恢复”简单归因成 worker 内存丢失。内存态丢失只会放大问题，但不是唯一根因。
 - WXT 的 `sidepanel.html` / `entrypoints/sidepanel/*` 是保留入口名。继续使用这组命名时，构建产物会自动注入 `manifest.side_panel.default_path`，直接破坏按 `browserTab` 管理 side panel 的前提。
 - `openPanelOnActionClick` 模式下，当前 tab 的 side panel 必须在点击前已经配置好。若把 `setOptions({ enabled: true })` 放到 `action.onClicked` 回调里，真实浏览器会退化成第一次点击只配置、第二次点击才打开。
+- 动态同步 `openPanelOnActionClick` 时，必须同时保护 tab 级 `setOptions`、`panelState` 和全局按钮行为，避免旧活动页异步结果覆盖最新活动页。
 - 用测试驱动消息复用 `handleActionClick` 只能验证业务分支，不足以验证浏览器真实点击时序；必须额外关注真实 action 语义是否被测试覆盖。
 
 ### 2.2 Content Script

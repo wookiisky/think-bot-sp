@@ -46,6 +46,11 @@
 - `browser-entry` 通过 `chrome.storage.session` 维护已启用 `browserTab` 集合，解决 worker 休眠/重启后的旧 tab 清理。
 - `tabs.onActivated` 负责禁用旧 tab，并为当前活动 tab 预配置 side panel。
 - `tabs.onUpdated` 负责在当前活动 tab URL 变化后重新同步 side panel，可注入页预配置、受限页禁用。
+- `openPanelOnActionClick` 是全局按钮行为，必须随当前活动页动态同步：普通页开启，受限页和扩展页关闭。
+- 进入受限页或 URL 不可见页时，必须先关闭全局 `openPanelOnActionClick`，再清理 tab 级 side panel。
+- 活动页事件拿不到 URL 时按受限页保守处理，不能默认启用 side panel。
+- 真实扩展按钮入口在普通页可用 `sidePanel.open({ tabId })` 兜底，但只允许发生在 `chrome.action.onClicked` 用户手势链路；E2E 消息驱动和异步消息链路不能调用。
+- 活动页同步使用版本隔离，旧同步不能覆盖最新 `browserTab` 的 side panel 启用态和全局按钮行为。
 - 黑名单放行令牌只在 URL 真实变化时清理，避免普通加载完成把当前放行状态误删。
 - 扩展图标点击链路只承担“浏览器原生打开或受限页退化”的职责，不再承担首次配置职责。
 
@@ -90,8 +95,9 @@
 
 1. 用户点击扩展图标。
 2. background 判断当前页面为不可注入页面。
-3. 若当前页是 `conversations.html`，则直接打开 `options.html`。
-4. 否则不尝试执行脚本注入，直接打开 conversations 页面，并在需要时带上受限页提示。
+3. background 禁用当前 `browserTab` 的 side panel，并把全局 `openPanelOnActionClick` 同步为 `false`，避免 Chrome 内部页先打开侧边栏。
+4. 若当前页是 `conversations.html`，则直接打开 `options.html`。
+5. 否则不尝试执行脚本注入，直接打开 conversations 页面，并在需要时带上受限页提示。
 
 ### 4.4 扩展图标右键菜单
 
@@ -125,10 +131,14 @@
 
 ## 6. 约束与禁止事项
 
-- `sidePanel.open()` 需要用户手势；扩展图标链路优先使用 `openPanelOnActionClick`，不要在异步消息或 `await` 之后手动调用。
+- `sidePanel.open()` 需要用户手势；只能在真实 `chrome.action.onClicked` 普通页兜底中调用，不得在 E2E 消息驱动或其他异步消息链路调用。
+- `openPanelOnActionClick` 是全局状态，必须随当前活动页同步；受限页和扩展页必须关闭。
+- 受限页同步时，关闭全局按钮直开不能被 tab 级 `setOptions` 失败阻断。
+- `tabs.Tab.url` 缺失时必须按受限页处理，避免 Chrome 内部页因 URL 不可见而误启用 side panel。
 - side panel 必须按 `browserTab` 维度启用，不能退化成全局 panel。
 - `browserTab` 切换后 side panel 只允许自动隐藏，不允许切回原 `browserTab` 时自动展示。
 - 当前活动 `browserTab` 需要提前预配置 side panel，不能把首次配置延后到扩展图标点击时，否则会退化成需要点击两次才能打开。
+- 活动页同步存在异步竞争，旧同步不得覆盖最新活动页的 tab 级 side panel 状态和全局按钮行为。
 - 右键菜单入口只能打开 conversations，不能隐式进入 side panel。
 - 首次安装只负责打开快速上手文档，不预热页面提取和模型调用。
 - 受限页判断失败不能降级为“先尝试注入，失败再说”。
