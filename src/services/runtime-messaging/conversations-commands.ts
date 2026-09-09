@@ -1,3 +1,5 @@
+import { toPageSummary, type PageSummary } from '../../domain/page/page-summary';
+import { hasActiveLoading } from '../../domain/loading/loading-state-schema';
 import {
   conversationsCommandEnvelopeSchema,
   deletePageCommandSchema,
@@ -16,9 +18,9 @@ type ConversationsHandlerContext = {
 
 type PageRepository = {
   /** 按最近更新时间返回页面。 */
-  listRecentPages(): Promise<unknown[]>;
+  listRecentPages(): Promise<PageSummary[]>;
   /** 按标题、URL 和提取正文搜索页面。 */
-  searchPages(query: string): Promise<unknown[]>;
+  searchPages(query: string): Promise<PageSummary[]>;
   /** 读取单个页面。 */
   getPage(normalizedUrl: string): Promise<unknown | null>;
   /** 更新标题。 */
@@ -31,7 +33,7 @@ type ConversationRepository = {
   /** 按页面列出全部会话。 */
   listPageConversations(normalizedUrl: string): Promise<Array<{ promptTabId: string; messages: Array<{ content: string; status: string }> }>>;
   /** 按页面列出全部 loading。 */
-  listPageLoadingStates(normalizedUrl: string): Promise<Array<{ promptTabId: string; promptTabStatus: string }>>;
+  listPageLoadingStates(normalizedUrl: string): Promise<Array<{ promptTabId: string; promptTabStatus: string; branchStates: Array<{ status: string }> }>>;
 };
 
 type ConfigRepository = {
@@ -64,9 +66,9 @@ const pickInitialPromptTabId = ({
   loadingStates,
 }: {
   conversations: Array<{ promptTabId: string; messages: Array<{ content: string; status: string }> }>;
-  loadingStates: Array<{ promptTabId: string; promptTabStatus: string }>;
+  loadingStates: Awaited<ReturnType<ConversationRepository['listPageLoadingStates']>>;
 }) => {
-  const loadingPromptTab = loadingStates.find((item) => item.promptTabStatus === 'loading')?.promptTabId ?? null;
+  const loadingPromptTab = loadingStates.find(hasActiveLoading)?.promptTabId ?? null;
   if (loadingPromptTab) {
     return loadingPromptTab;
   }
@@ -114,14 +116,14 @@ export const createConversationsCommandHandler = ({
         listPagesCommandSchema.parse(input);
         return {
           type: 'LIST_PAGES_SUCCESS' as const,
-          pages: await pageRepository.listRecentPages(),
+          pages: (await pageRepository.listRecentPages()).map(toPageSummary),
         };
       case 'SEARCH_PAGES': {
         const command = searchPagesCommandSchema.parse(input);
         return {
           type: 'SEARCH_PAGES_SUCCESS' as const,
           query: command.query,
-          pages: await pageRepository.searchPages(command.query),
+          pages: (await pageRepository.searchPages(command.query)).map(toPageSummary),
         };
       }
       case 'GET_PAGE_DETAIL': {

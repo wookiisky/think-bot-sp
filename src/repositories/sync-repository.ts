@@ -3,7 +3,7 @@ import { applySystemConfigSeeds, createDefaultConfig, extensionConfigSchema } fr
 import type { ExtensionConfig } from '../domain/config/config-schema';
 import { createDefaultSyncState, syncSnapshotSchema, syncStateSchema } from '../domain/sync/sync-snapshot-schema';
 import type { SyncSnapshot, SyncState } from '../domain/sync/sync-snapshot-schema';
-import { loadingStateRecordSchema } from '../domain/loading/loading-state-schema';
+import { hasActiveLoading, loadingStateRecordSchema } from '../domain/loading/loading-state-schema';
 import { pageRecordSchema } from '../domain/page/page-schema';
 import { conversationRecordSchema } from '../domain/conversation/conversation-schema';
 import { assertBlacklistRulesPersistable } from '../services/blacklist/blacklist-service';
@@ -19,11 +19,6 @@ import {
 } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
-
-/** 主请求结束后仍可能有独立分支请求。 */
-const hasActiveLoading = (loading: ReturnType<typeof loadingStateRecordSchema.parse>): boolean =>
-  loading.promptTabStatus === 'loading' || loading.branchStates.some((branch) => branch.status === 'loading');
-
 
 type ConfigRepository = {
   /** 读取当前配置。 */

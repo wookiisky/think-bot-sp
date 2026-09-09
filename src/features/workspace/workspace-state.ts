@@ -1,4 +1,5 @@
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
+import { hasActiveLoading } from '../../domain/loading/loading-state-schema';
 
 type ConversationMessageRecord = SidebarConversationRecord['messages'][number];
 type AssistantConversationMessageRecord = ConversationMessageRecord & { role: 'assistant' };
@@ -439,7 +440,7 @@ export const buildActiveSessionIdMap = (promptTabs: PromptTabDefinition[], loadi
 /** 选择首次展示的标签。 */
 export const pickInitialPromptTabId = (promptTabs: PromptTabDefinition[], loadingStates: SidebarLoadingStateRecord[]) => {
   const loadingPromptTab = promptTabs.find((promptTab) =>
-    loadingStates.some((loadingState) => loadingState.promptTabId === promptTab.id && loadingState.promptTabStatus === 'loading'),
+    loadingStates.some((loadingState) => loadingState.promptTabId === promptTab.id && hasActiveLoading(loadingState)),
   );
   return loadingPromptTab?.id ?? CHAT_PROMPT_TAB_ID;
 };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyLoadingStateToMessages, findBranchPreviewDetail, upsertAssistantFailure, type ChatMessageState } from '../../../src/features/workspace/workspace-state';
+import { applyLoadingStateToMessages, findBranchPreviewDetail, pickInitialPromptTabId, upsertAssistantFailure, type ChatMessageState, type PromptTabDefinition } from '../../../src/features/workspace/workspace-state';
+import { createLoadingState } from '../../../src/domain/loading/loading-state-schema';
 
 const createAssistantMessage = (status: ChatMessageState['status'], branchStatus: ChatMessageState['branches'][number]['status']): ChatMessageState => ({
   id: 'assistant-1',
@@ -25,6 +26,20 @@ const createAssistantMessage = (status: ChatMessageState['status'], branchStatus
 });
 
 describe('workspace-state', () => {
+  it('首次展示仍有独立分支生成的标签，忽略已移除的标签', () => {
+    const makePromptTab = (id: string): PromptTabDefinition => ({
+      id, name: id, defaultText: '', triggerPrompt: null, preferredModelId: '', autoTrigger: false, promptTabState: null,
+    });
+    const loading = createLoadingState({ normalizedUrl: 'https://example.com', promptTabId: 'summary', sessionId: 'session-1', now: 1 });
+    loading.promptTabStatus = 'idle';
+    loading.branchStates = [{ branchId: 'branch-1', modelId: 'model-1', status: 'loading', startedAt: 1 }];
+
+    expect(pickInitialPromptTabId([makePromptTab('chat'), makePromptTab('summary')], [loading])).toBe('summary');
+    expect(pickInitialPromptTabId([makePromptTab('chat')], [loading])).toBe('chat');
+    loading.branchStates[0]!.status = 'error';
+    expect(pickInitialPromptTabId([makePromptTab('chat'), makePromptTab('summary')], [loading])).toBe('chat');
+  });
+
   it('loading 分支不能生成预览详情', () => {
     const detail = findBranchPreviewDetail([createAssistantMessage('loading', 'loading')], 'assistant-1', 'branch-1');
 

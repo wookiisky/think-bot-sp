@@ -2,6 +2,13 @@ import { z } from 'zod';
 
 import { buildLoadingStorageKey } from '../../shared/storage-keys';
 
+/** 主请求结束后，独立分支仍可能在生成。 */
+export const hasActiveLoading = (loading: {
+  promptTabStatus: string;
+  branchStates: readonly { status: string }[];
+} | null | undefined): boolean =>
+  !!loading && (loading.promptTabStatus === 'loading' || loading.branchStates.some((branch) => branch.status === 'loading'));
+
 const branchStateSchema = z.object({
   branchId: z.string().min(1),
   status: z.enum(['loading', 'cancelled', 'error']),

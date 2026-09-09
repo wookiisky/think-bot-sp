@@ -70,6 +70,7 @@
 - 结束后立刻回收。
 - side panel 重开或 worker 重启后，恢复链路优先读取 `LoadingStateRecord`，再结合 `ConversationRecord` 中仍处于 `loading` 的助手消息恢复可见状态。
 - 单分支仍在 loading 时，即使助手消息顶层已经是终态，也必须基于 `branchStates` 恢复该分支计时。
+- 初始标签选择和同步保护共用 `hasActiveLoading`：主请求或任意分支处于 `loading` 即视为活跃，不能只检查 `promptTabStatus`。
 - 风险：
   - service worker 重启导致内存状态丢失。
   - side panel 关闭期间状态未落盘，导致恢复失败。

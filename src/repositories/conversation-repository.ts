@@ -1,7 +1,20 @@
 import { createStorageRepository } from './chrome-local-adapter';
 import { z } from 'zod';
 
-import { buildConversationKey, conversationRecordSchema } from '../domain/conversation/conversation-schema';
+import { conversationRecordSchema } from '../domain/conversation/conversation-schema';
+import {
+  appendAssistantBranch,
+  createEmptyConversation,
+  createLoadingAssistantMessage,
+  deleteAssistantBranch,
+  requireAssistantMessage,
+  requireUserMessage,
+  selectAssistantBranch,
+  transitionAssistantBranch,
+  withConversationMessages,
+  type ConversationRecord,
+  type InitialBranchSeed,
+} from '../domain/conversation/conversation-state';
 import { loadingStateRecordSchema } from '../domain/loading/loading-state-schema';
 import {
   CONVERSATION_STORAGE_PREFIX,
@@ -11,30 +24,7 @@ import {
 } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
-type ConversationRecord = z.infer<typeof conversationRecordSchema>;
 type LoadingStateRecord = z.infer<typeof loadingStateRecordSchema>;
-type ConversationMessageRecord = ConversationRecord['messages'][number];
-type AssistantMessageRecord = ConversationMessageRecord & { role: 'assistant' };
-type UserMessageRecord = ConversationMessageRecord & { role: 'user' };
-type BranchRecord = AssistantMessageRecord['branches'][number];
-type InitialBranchSeed = {
-  /** 分支稳定 id。 */
-  id: string;
-  /** 分支模型 id。 */
-  modelId: string;
-  /** 分支模型展示名。 */
-  modelLabel: string;
-  /** 是否为主分支。 */
-  isPrimary: boolean;
-};
-
-/** 判断消息是否为 assistant 消息。 */
-const isAssistantMessageRecord = (message: ConversationMessageRecord | undefined): message is AssistantMessageRecord =>
-  message?.role === 'assistant';
-
-/** 判断消息是否为 user 消息。 */
-const isUserMessageRecord = (message: ConversationMessageRecord | undefined): message is UserMessageRecord =>
-  message?.role === 'user';
 
 /** 规范化用户消息展示文本，避免把与真实内容相同的值重复落库。 */
 const toDisplayContentPatch = (content: string, displayContent?: string) =>
@@ -59,127 +49,6 @@ const matchesPageScopedKey = (key: string, prefix: string, normalizedUrl: string
   }
 
   return suffix.slice(0, separatorIndex) === normalizedUrl;
-};
-
-/** 创建空 conversation，供增量编辑首次落库使用。 */
-const createEmptyConversation = (
-  normalizedUrl: string,
-  promptTabId: string,
-  now: number,
-): ConversationRecord =>
-  conversationRecordSchema.parse({
-    id: buildConversationKey(normalizedUrl, promptTabId),
-    normalizedUrl,
-    promptTabId,
-    messages: [],
-    lastAssistantState: null,
-    updatedAt: now,
-  });
-
-/** 创建 loading 中的助手消息占位。 */
-const createLoadingAssistantMessage = ({
-  messageId,
-  branches,
-  selectedBranchId,
-  retryFromMessageId,
-  now,
-}: {
-  /** 新助手消息 id。 */
-  messageId: string;
-  /** 初始分支列表。 */
-  branches: InitialBranchSeed[];
-  /** 当前选中的分支 id。 */
-  selectedBranchId: string;
-  /** 被替换的旧助手消息 id。 */
-  retryFromMessageId: string | null;
-  /** 当前时间。 */
-  now: number;
-}): AssistantMessageRecord => {
-  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? branches[0];
-  if (!selectedBranch) {
-    throw new Error(`selected branch is required: ${messageId}`);
-  }
-
-  return {
-    id: messageId,
-    role: 'assistant',
-    content: '',
-    images: [],
-    status: 'loading',
-    modelId: selectedBranch.modelId,
-    branches: branches.map((branch) => ({
-      id: branch.id,
-      modelId: branch.modelId,
-      modelLabel: branch.modelLabel,
-      isPrimary: branch.isPrimary,
-      content: '',
-      status: 'loading',
-      errorMessage: null,
-      durationMs: null,
-      createdAt: now,
-      updatedAt: now,
-    })),
-    selectedBranchId: selectedBranch.id,
-    retryFromMessageId,
-    editedAt: null,
-    errorMessage: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-};
-
-/** 解析 assistant 当前选中的主分支。 */
-const getSelectedBranch = (assistantMessage: AssistantMessageRecord): BranchRecord | null => {
-  const selectedBranchId = assistantMessage.selectedBranchId ?? assistantMessage.branches[0]?.id ?? null;
-  if (!selectedBranchId) {
-    return null;
-  }
-
-  return assistantMessage.branches.find((branch) => branch.id === selectedBranchId) ?? assistantMessage.branches[0] ?? null;
-};
-
-/** 用选中的主分支镜像 assistant 容器，统一后续会话与导出语义。 */
-const syncAssistantMessageFromSelectedBranch = (
-  assistantMessage: AssistantMessageRecord,
-  now: number,
-): AssistantMessageRecord => {
-  const selectedBranch = getSelectedBranch(assistantMessage);
-  if (!selectedBranch) {
-    return {
-      ...assistantMessage,
-      content: '',
-      status: 'done',
-      errorMessage: null,
-      modelId: null,
-      selectedBranchId: null,
-      updatedAt: now,
-    };
-  }
-
-  return {
-    ...assistantMessage,
-    content: selectedBranch.content,
-    status: selectedBranch.status,
-    errorMessage: selectedBranch.errorMessage,
-    modelId: selectedBranch.modelId,
-    selectedBranchId: selectedBranch.id,
-    updatedAt: now,
-  };
-};
-
-/** 从消息列表推导最新助手摘要。 */
-const buildLastAssistantState = (messages: ConversationRecord['messages']): ConversationRecord['lastAssistantState'] => {
-  const assistantMessages = messages.filter((message): message is AssistantMessageRecord => message.role === 'assistant');
-  const lastAssistantMessage = assistantMessages.at(-1) ?? null;
-  if (!lastAssistantMessage) {
-    return null;
-  }
-
-  return {
-    messageId: lastAssistantMessage.id,
-    status: lastAssistantMessage.status,
-    summary: lastAssistantMessage.content,
-  };
 };
 
 /** 会话仓储，负责 conversation 和 loading 的持久化。 */
@@ -217,42 +86,6 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
     promptTabId: string,
     now: number,
   ): Promise<ConversationRecord> => readConversation(normalizedUrl, promptTabId).then((value) => value ?? createEmptyConversation(normalizedUrl, promptTabId, now));
-  /** 查找指定 assistant 消息。 */
-  const requireAssistantMessage = (conversation: ConversationRecord, messageId: string): AssistantMessageRecord => {
-    const message = conversation.messages.find((item) => item.id === messageId);
-    if (!isAssistantMessageRecord(message)) {
-      throw new Error(`assistant message not found: ${messageId}`);
-    }
-
-    return message;
-  };
-  /** 查找指定用户消息。 */
-  const requireUserMessage = (conversation: ConversationRecord, messageId: string): UserMessageRecord => {
-    const message = conversation.messages.find((item) => item.id === messageId);
-    if (!isUserMessageRecord(message)) {
-      throw new Error(`user message not found: ${messageId}`);
-    }
-
-    return message;
-  };
-  /** 要求 assistant 仍处于 loading，避免非法状态迁移。 */
-  const requireLoadingAssistantMessage = (conversation: ConversationRecord, messageId: string): AssistantMessageRecord => {
-    const message = requireAssistantMessage(conversation, messageId);
-    if (message.status !== 'loading') {
-      throw new Error(`assistant message is already terminal: ${messageId}`);
-    }
-
-    return message;
-  };
-  /** 查找指定分支。 */
-  const requireAssistantBranch = (assistantMessage: AssistantMessageRecord, branchId: string): BranchRecord => {
-    const branch = assistantMessage.branches.find((item) => item.id === branchId);
-    if (!branch) {
-      throw new Error(`assistant branch not found: ${branchId}`);
-    }
-
-    return branch;
-  };
   /** 读取全部 conversation 记录。 */
   const getAllConversations = async () => {
     const all = await storage.getByPrefix(CONVERSATION_STORAGE_PREFIX);
@@ -341,12 +174,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
           now,
         }),
       ];
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
+      const next = withConversationMessages(conversation, nextMessages, now);
       return persistConversation(next);
     },
 
@@ -372,12 +200,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
         throw new Error(`message not found: ${messageId}`);
       }
       const nextMessages = conversation.messages.slice(0, targetIndex + 1);
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
+      const next = withConversationMessages(conversation, nextMessages, now);
       return persistConversation(next);
     },
 
@@ -420,12 +243,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
           now,
         }),
       ];
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
+      const next = withConversationMessages(conversation, nextMessages, now);
       return persistConversation(next);
     },
 
@@ -500,12 +318,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
         return null;
       }
       const nextMessages = conversation.messages.filter((message) => message.id !== userMessageId && message.id !== assistantMessageId);
-      const nextConversation = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
+      const nextConversation = withConversationMessages(conversation, nextMessages, now);
       return persistConversationOrRemove(nextConversation);
     },
 
@@ -583,27 +396,16 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: [
-          ...conversation.messages,
-          {
-            ...createLoadingAssistantMessage({
-              messageId,
-              branches: initialBranches,
-              selectedBranchId,
-              retryFromMessageId: null,
-              now,
-            }),
-          },
-        ],
-        lastAssistantState: {
+      const next = withConversationMessages(conversation, [
+        ...conversation.messages,
+        createLoadingAssistantMessage({
           messageId,
-          status: 'loading',
-          summary: '',
-        },
-        updatedAt: now,
-      });
+          branches: initialBranches,
+          selectedBranchId,
+          retryFromMessageId: null,
+          now,
+        }),
+      ], now);
       return persistConversation(next);
     },
 
@@ -627,40 +429,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const target = requireLoadingAssistantMessage(conversation, messageId);
-      const selectedBranch = getSelectedBranch(target);
-      if (!selectedBranch || selectedBranch.status !== 'loading') {
-        throw new Error(`assistant selected branch is already terminal: ${messageId}`);
-      }
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...target,
-                  branches: target.branches.map((branch) =>
-                    branch.id === selectedBranch.id
-                      ? {
-                          ...branch,
-                          content: branch.content + chunk,
-                          updatedAt: now,
-                        }
-                      : branch,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        lastAssistantState: {
-          messageId,
-          status: selectedBranch.status,
-          summary: selectedBranch.content + chunk,
-        },
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, undefined, { type: 'chunk', chunk }, now));
     },
 
     /** 收敛助手消息为完成态。 */
@@ -683,42 +452,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const target = requireLoadingAssistantMessage(conversation, messageId);
-      const selectedBranch = getSelectedBranch(target);
-      if (!selectedBranch || selectedBranch.status !== 'loading') {
-        throw new Error(`assistant selected branch is already terminal: ${messageId}`);
-      }
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...target,
-                  branches: target.branches.map((branch) =>
-                    branch.id === selectedBranch.id
-                      ? {
-                          ...branch,
-                          status: 'done',
-                          errorMessage: null,
-                          durationMs,
-                          updatedAt: now,
-                        }
-                      : branch,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        lastAssistantState: {
-          messageId,
-          status: 'done',
-          summary: selectedBranch.content,
-        },
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, undefined, { type: 'done', durationMs }, now));
     },
 
     /** 收敛助手消息为失败或取消态。 */
@@ -747,42 +481,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const target = requireLoadingAssistantMessage(conversation, messageId);
-      const selectedBranch = getSelectedBranch(target);
-      if (!selectedBranch || selectedBranch.status !== 'loading') {
-        throw new Error(`assistant selected branch is already terminal: ${messageId}`);
-      }
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...target,
-                  branches: target.branches.map((branch) =>
-                    branch.id === selectedBranch.id
-                      ? {
-                          ...branch,
-                          status,
-                          errorMessage,
-                          durationMs,
-                          updatedAt: now,
-                        }
-                      : branch,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        lastAssistantState: {
-          messageId,
-          status,
-          summary: selectedBranch.content,
-        },
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, undefined, { type: status, errorMessage, durationMs }, now));
     },
 
     /** 追加助手分支占位。 */
@@ -811,37 +510,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...assistantMessage,
-                  branches: [
-                    ...assistantMessage.branches,
-                    {
-                      id: branchId,
-                      modelId,
-                      modelLabel,
-                      isPrimary: false,
-                      content: '',
-                      status: 'loading',
-                      errorMessage: null,
-                      durationMs: null,
-                      createdAt: now,
-                      updatedAt: now,
-                    },
-                  ],
-                },
-                now,
-              )
-            : message,
-        ),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(appendAssistantBranch(conversation, messageId, { id: branchId, modelId, modelLabel, isPrimary: false }, now));
     },
 
     /** 追加助手分支 chunk。 */
@@ -867,36 +536,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      const branch = requireAssistantBranch(assistantMessage, branchId);
-      if (branch.status !== 'loading') {
-        throw new Error(`assistant branch is already terminal: ${branchId}`);
-      }
-
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          content: item.content + chunk,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, branchId, { type: 'chunk', chunk }, now));
     },
 
     /** 收敛分支为完成态。 */
@@ -922,38 +562,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      const branch = requireAssistantBranch(assistantMessage, branchId);
-      if (branch.status !== 'loading') {
-        throw new Error(`assistant branch is already terminal: ${branchId}`);
-      }
-
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          status: 'done',
-                          errorMessage: null,
-                          durationMs,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, branchId, { type: 'done', durationMs }, now));
     },
 
     /** 收敛分支为失败或取消态。 */
@@ -985,38 +594,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      const branch = requireAssistantBranch(assistantMessage, branchId);
-      if (branch.status !== 'loading') {
-        throw new Error(`assistant branch is already terminal: ${branchId}`);
-      }
-
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...assistantMessage,
-                  branches: assistantMessage.branches.map((item) =>
-                    item.id === branchId
-                      ? {
-                          ...item,
-                          status,
-                          errorMessage,
-                          durationMs,
-                          updatedAt: now,
-                        }
-                      : item,
-                  ),
-                },
-                now,
-              )
-            : message,
-        ),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, branchId, { type: status, errorMessage, durationMs }, now));
     },
 
     /** 删除目标分支。 */
@@ -1039,34 +617,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      requireAssistantBranch(assistantMessage, branchId);
-
-      const nextMessages =
-        assistantMessage.branches.length === 1
-          ? conversation.messages.filter((message) => message.id !== messageId)
-          : conversation.messages.map((message) =>
-              message.id === messageId
-                ? syncAssistantMessageFromSelectedBranch(
-                    {
-                      ...assistantMessage,
-                      branches: assistantMessage.branches.filter((item) => item.id !== branchId),
-                      selectedBranchId:
-                        assistantMessage.selectedBranchId === branchId
-                          ? assistantMessage.branches.find((item) => item.id !== branchId)?.id ?? null
-                          : assistantMessage.selectedBranchId,
-                    },
-                    now,
-                  )
-                : message,
-            );
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
-      return persistConversationOrRemove(next);
+      return persistConversationOrRemove(deleteAssistantBranch(conversation, messageId, branchId, now));
     },
 
     /** 重置单个助手分支为 loading。 */
@@ -1089,34 +640,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      requireAssistantBranch(assistantMessage, branchId);
-      const nextAssistantMessage = syncAssistantMessageFromSelectedBranch(
-        {
-          ...assistantMessage,
-          branches: assistantMessage.branches.map((branch) =>
-            branch.id === branchId
-              ? {
-                  ...branch,
-                  content: '',
-                  status: 'loading',
-                  errorMessage: null,
-                  durationMs: null,
-                  updatedAt: now,
-                }
-              : branch,
-          ),
-        },
-        now,
-      );
-      const nextMessages = conversation.messages.map((message) => (message.id === messageId ? nextAssistantMessage : message));
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: nextMessages,
-        lastAssistantState: buildLastAssistantState(nextMessages),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(transitionAssistantBranch(conversation, messageId, branchId, { type: 'restart' }, now));
     },
 
     /** 更新当前轮的主分支选择。 */
@@ -1139,37 +663,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       now: number;
     }) {
       const conversation = await getOrCreateConversation(normalizedUrl, promptTabId, now);
-      const assistantMessage = requireAssistantMessage(conversation, messageId);
-      requireAssistantBranch(assistantMessage, branchId);
-      const next = conversationRecordSchema.parse({
-        ...conversation,
-        messages: conversation.messages.map((message) =>
-          message.id === messageId
-            ? syncAssistantMessageFromSelectedBranch(
-                {
-                  ...assistantMessage,
-                  selectedBranchId: branchId,
-                },
-                now,
-              )
-            : message,
-        ),
-        lastAssistantState: buildLastAssistantState(
-          conversation.messages.map((message) =>
-            message.id === messageId
-              ? syncAssistantMessageFromSelectedBranch(
-                  {
-                    ...assistantMessage,
-                    selectedBranchId: branchId,
-                  },
-                  now,
-                )
-              : message,
-          ),
-        ),
-        updatedAt: now,
-      });
-      return persistConversation(next);
+      return persistConversation(selectAssistantBranch(conversation, messageId, branchId, now));
     },
 
     /** 写入或更新单个分支 loading。 */

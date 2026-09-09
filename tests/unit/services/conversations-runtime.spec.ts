@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { buildPageRecord } from '../../../src/domain/page/page-schema';
+import { createChromeLocalAdapter } from '../../../src/repositories/chrome-local-adapter';
+import { createPageRepository } from '../../../src/repositories/page-repository';
+import { createFakeStorageArea } from '../../helpers/fake-storage';
 import { createConversationsCommandHandler, isConversationsCommandMessage } from '../../../src/services/runtime-messaging/conversations-commands';
 import {
   conversationsCommandSchema,
@@ -38,7 +42,70 @@ describe('conversations-runtime', () => {
     expect(isConversationsCommandMessage({ type: 'GET_PAGE_DETAIL' })).toBe(true);
   });
 
-  it('详情恢复返回页面、会话、loading 和目标标签', async () => {
+  it('列表只传页面摘要，正文搜索仍命中并能按需恢复完整详情', async () => {
+    const pageRepository = createPageRepository(createChromeLocalAdapter(createFakeStorageArea()));
+    const olderPage = await pageRepository.savePage({
+      ...buildPageRecord({ url: 'https://example.com/older', now: 1 }),
+      title: '旧页面',
+    });
+    const page = await pageRepository.savePage({
+      ...buildPageRecord({ url: 'https://example.com/article', now: 2 }),
+      title: '当前页面',
+      faviconUrl: 'https://example.com/favicon.ico',
+      extractionCaches: {
+        readability: { content: `只在正文中出现的关键词 ${'正文'.repeat(10_000)}`, updatedAt: 2 },
+        jina: { content: '另一份提取缓存', updatedAt: 2 },
+      },
+    });
+    const handler = createConversationsCommandHandler({
+      runtime: { id: 'ext-id' },
+      pageRepository,
+      conversationRepository: {
+        listPageConversations: vi.fn().mockResolvedValue([]),
+        listPageLoadingStates: vi.fn().mockResolvedValue([]),
+      },
+      configRepository: {
+        getConfig: vi.fn(),
+      },
+      sessionRegistry: {
+        cancelPageSessions: vi.fn(),
+      },
+    });
+    const context = { sender: { id: 'ext-id', url: 'chrome-extension://ext-id/conversations.html' } };
+    const summary = {
+      normalizedUrl: page.normalizedUrl,
+      url: page.url,
+      title: page.title,
+      faviconUrl: page.faviconUrl,
+    };
+
+    await expect(handler({ type: 'LIST_PAGES' }, context)).resolves.toEqual({
+      type: 'LIST_PAGES_SUCCESS',
+      pages: [summary, {
+        normalizedUrl: olderPage.normalizedUrl,
+        url: olderPage.url,
+        title: olderPage.title,
+        faviconUrl: olderPage.faviconUrl,
+      }],
+    });
+    await expect(handler({ type: 'SEARCH_PAGES', query: '只在正文中出现的关键词' }, context)).resolves.toEqual({
+      type: 'SEARCH_PAGES_SUCCESS',
+      query: '只在正文中出现的关键词',
+      pages: [summary],
+    });
+    await expect(handler({ type: 'GET_PAGE_DETAIL', normalizedUrl: page.normalizedUrl }, context)).resolves.toEqual({
+      type: 'GET_PAGE_DETAIL_SUCCESS',
+      page,
+      conversations: [],
+      loadingStates: [],
+      activePromptTabId: 'chat',
+    });
+  });
+
+  it.each([
+    { promptTabStatus: 'loading', branchStates: [] },
+    { promptTabStatus: 'idle', branchStates: [{ branchId: 'branch-1', status: 'loading' }] },
+  ])('详情恢复优先选择仍有主请求或分支生成的标签：%j', async ({ promptTabStatus, branchStates }) => {
     const handler = createConversationsCommandHandler({
       runtime: { id: 'ext-id' },
       pageRepository: {
@@ -67,7 +134,7 @@ describe('conversations-runtime', () => {
             id: 'https://example.com/article:chat',
             normalizedUrl: 'https://example.com/article',
             promptTabId: 'chat',
-            messages: [],
+            messages: [{ content: '已有聊天记录', status: 'done' }],
             lastAssistantState: null,
             updatedAt: 1,
           },
@@ -105,8 +172,8 @@ describe('conversations-runtime', () => {
             normalizedUrl: 'https://example.com/article',
             promptTabId: 'quick-summary',
             sessionId: 'session-1',
-            promptTabStatus: 'loading',
-            branchStates: [],
+            promptTabStatus,
+            branchStates,
             resumeTarget: null,
             cancelRequested: false,
             updatedAt: 1,

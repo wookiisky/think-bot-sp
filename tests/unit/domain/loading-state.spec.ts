@@ -2,10 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createLoadingState,
+  hasActiveLoading,
   loadingStateRecordSchema,
 } from '../../../src/domain/loading/loading-state-schema';
 
 describe('loading state schema', () => {
+  it('主请求和独立分支任一个生成中即视为活跃', () => {
+    expect(hasActiveLoading({ promptTabStatus: 'loading', branchStates: [] })).toBe(true);
+    expect(hasActiveLoading({ promptTabStatus: 'idle', branchStates: [{ status: 'loading' }] })).toBe(true);
+    expect(hasActiveLoading({ promptTabStatus: 'error', branchStates: [{ status: 'loading' }] })).toBe(true);
+    expect(hasActiveLoading({ promptTabStatus: 'idle', branchStates: [{ status: 'error' }, { status: 'cancelled' }] })).toBe(false);
+    expect(hasActiveLoading(null)).toBe(false);
+    expect(hasActiveLoading(undefined)).toBe(false);
+  });
+
   it('创建单个 promptTab 的主 loading 会话', () => {
     const state = createLoadingState({
       normalizedUrl: 'https://example.com',

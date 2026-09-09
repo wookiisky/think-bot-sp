@@ -64,6 +64,7 @@ import {
   WORKSPACE_VERTICAL_RESIZE_HANDLE_CLASS,
 } from '../workspace/workspace-resize-handle-style';
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
+import { toPageSummary, type PageSummary } from '../../domain/page/page-summary';
 import { ChatInput } from '../sidebar/chat-input';
 import { ChatThread } from '../sidebar/chat-thread';
 import {
@@ -147,7 +148,7 @@ const getReplyErrorMessage = (error: unknown, fallback: string): string =>
 export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [localeResources, setLocaleResources] = useState<ReturnType<typeof loadWorkspaceLocaleResources>>(loadWorkspaceLocaleResources());
   const [localeCode, setLocaleCode] = useState<WorkspaceLocaleCode>('zh-CN');
-  const [pages, setPages] = useState<SidebarPageRecord[]>([]);
+  const [pages, setPages] = useState<PageSummary[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPageUrl, setSelectedPageUrl] = useState<string | null>(null);
   const isCurrentPage = usePageScope(selectedPageUrl);
@@ -615,7 +616,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         normalizedUrl: detail.page.normalizedUrl,
         title: nextTitle,
       });
-      setPages((current) => current.map((page) => (page.normalizedUrl === response.page.normalizedUrl ? response.page : page)));
+      setPages((current) => current.map((page) => (page.normalizedUrl === response.page.normalizedUrl ? toPageSummary(response.page) : page)));
       if (!isCurrentPage()) return;
       setDetail((current) => ({
         ...current,

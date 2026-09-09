@@ -1,4 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import type { PageSummary } from '../../domain/page/page-summary';
 import { requestRuntimeMessage } from '../../shared/runtime-request';
 import type {
   SidebarConversationRecord,
@@ -10,7 +11,7 @@ type PageListResponse = {
   /** 响应类型。 */
   type: 'LIST_PAGES_SUCCESS';
   /** 页面列表。 */
-  pages: SidebarPageRecord[];
+  pages: PageSummary[];
 };
 
 type SearchPagesResponse = {
@@ -19,7 +20,7 @@ type SearchPagesResponse = {
   /** 搜索词。 */
   query: string;
   /** 搜索结果。 */
-  pages: SidebarPageRecord[];
+  pages: PageSummary[];
 };
 
 type GetPageDetailResponse = {
