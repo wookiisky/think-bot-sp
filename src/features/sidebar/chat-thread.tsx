@@ -786,7 +786,7 @@ const AssistantBranchRail = ({
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>
   cn(
     'relative min-w-0 grid gap-1 transition-colors',
-    role === 'assistant' && 'w-full bg-background px-0 pr-0 text-foreground',
+    role === 'assistant' && 'w-full bg-assistant-surface px-0 pr-0 text-foreground',
     role === 'user' && 'w-full bg-muted/55 px-2 py-1.5 pr-10 text-foreground',
     role === 'system' && 'pr-0 text-amber-900',
     status === 'error' && 'text-destructive',

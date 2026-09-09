@@ -8,6 +8,8 @@
 
 :root {
   --background: oklch(1 0 0);
+  /* 助手消息底色，比纯白略暖，长时间阅读更舒适（#FBFBF9）。 */
+  --assistant-surface: oklch(0.988 0.0025 100.8);
   --foreground: oklch(0.218 0.02 262.8);
   --button-ink: oklch(0.46 0.018 262.4);
   --card: oklch(1 0 0);
@@ -45,6 +47,8 @@
 .dark {
   color-scheme: dark;
   --background: oklch(0.235 0.018 257);
+  /* 暗色下沿用页面底色，避免出现比背景更亮的色块。 */
+  --assistant-surface: oklch(0.235 0.018 257);
   --foreground: oklch(0.925 0.012 78);
   --button-ink: oklch(0.805 0.02 250);
   --card: oklch(0.265 0.02 257);
@@ -113,6 +117,7 @@
   --color-foreground: var(--foreground);
   --color-button-ink: var(--button-ink);
   --color-background: var(--background);
+  --color-assistant-surface: var(--assistant-surface);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);

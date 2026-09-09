@@ -180,7 +180,7 @@ describe('ChatThread', () => {
     expect(screen.getByTestId('branch-branch-1')).toHaveTextContent('分支模型');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('bg-muted/55');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('border');
-    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-background');
+    expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('bg-assistant-surface');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('w-full');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).not.toContain('px-0.5');
     expect(screen.getByTestId('chat-message-bubble-assistant-1').className).toContain('pr-0');
