@@ -1,11 +1,18 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import ReactMarkdown from 'react-markdown';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG } from '../../../src/domain/config/assistant-markdown-display-config';
 import { ChatMarkdown } from '../../../src/features/workspace/chat-markdown';
 
+vi.mock('react-markdown', async (importOriginal) => {
+  const original = await importOriginal<typeof import('react-markdown')>();
+  return { ...original, default: vi.fn(original.default) };
+});
+
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe('ChatMarkdown', () => {
@@ -13,6 +20,57 @@ describe('ChatMarkdown', () => {
     const { container } = render(<ChatMarkdown content="   " />);
 
     expect(container.firstElementChild).toBeNull();
+  });
+
+  it('流式追加正文时保留已有标题和段落节点', () => {
+    const content = '# 一级标题\n\n## 二级标题\n\n### 三级标题\n\n#### 四级标题\n\n已有段落';
+    const { rerender } = render(
+      <ChatMarkdown content={content} assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />,
+    );
+    const headings = screen.getAllByRole('heading');
+    const paragraph = screen.getByText('已有段落');
+
+    rerender(
+      <ChatMarkdown content={`${content}追加内容\n\n新段落`} assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />,
+    );
+
+    screen.getAllByRole('heading').forEach((heading, index) => {
+      expect(heading).toBe(headings[index]);
+    });
+    expect(screen.getByText('已有段落追加内容')).toBe(paragraph);
+    expect(screen.getByText('新段落')).toBeVisible();
+  });
+
+  it('容器或展示设置变化时复用正文解析，同时更新样式', () => {
+    const content = '# 标题\n\n正文';
+    const { rerender } = render(
+      <ChatMarkdown content={content} assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />,
+    );
+    const paragraph = screen.getByText('正文');
+    const initialParseCount = vi.mocked(ReactMarkdown).mock.calls.length;
+
+    rerender(
+      <ChatMarkdown content={content} className="text-muted-foreground" assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />,
+    );
+    expect(vi.mocked(ReactMarkdown).mock.calls.length).toBe(initialParseCount);
+
+    rerender(
+      <ChatMarkdown
+        content={content}
+        assistantDisplayConfig={{
+          ...DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+          body: { fontSizePx: 30, color: '#111827', underline: true },
+        }}
+      />,
+    );
+    expect(vi.mocked(ReactMarkdown).mock.calls.length).toBe(initialParseCount);
+    expect(screen.getByText('正文')).toBe(paragraph);
+    expect(paragraph).toHaveStyle({ fontSize: '30px', lineHeight: '38px', textDecoration: 'underline' });
+
+    rerender(<ChatMarkdown content={content} />);
+    expect(vi.mocked(ReactMarkdown).mock.calls.length).toBe(initialParseCount);
+    expect(screen.getByText('正文')).toBe(paragraph);
+    expect(paragraph.style.fontSize).toBe('');
   });
 
   it('普通 Markdown 使用紧凑的默认行距和块间距', () => {

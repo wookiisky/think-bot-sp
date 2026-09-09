@@ -72,6 +72,7 @@ Chrome manifest 展示名称固定为 `Think Bot`，描述固定为 `面向深�
 - 设置页独立管理长期配置，但使用相同数据结构和校验规则。
 - 浏览器入口与安装生命周期统一由 background 协调，覆盖扩展图标点击、右键菜单和首次安装。
 - Background 通过 typed command/port 向三个 extension pages 暴露能力。
+- 侧边栏和对话管理页共用 `reduceWorkspaceEvent` 与会话状态转换；Shell 负责页面生命周期、订阅和布局，避免维护两套流事件规则。
 - 调试日志只用于运行时排障，不持久化、不参与同步、也不作为恢复依据。
 - 同步服务只读写新的版本化快照格式，不兼容旧远端结构。
 

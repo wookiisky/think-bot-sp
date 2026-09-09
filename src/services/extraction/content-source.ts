@@ -1,28 +1,13 @@
+import type { CollectPageSourceInput, CollectPageSourceMessage, PageSource } from './page-source';
+
 const RETRY_DELAY_MS = 200;
 const RETRY_AFTER_RELOAD_COUNT = 5;
-
-type PageSource = {
-  /** 页面 URL。 */
-  url: string;
-  /** 页面标题。 */
-  title: string;
-  /** 页面 HTML。 */
-  html: string;
-  /** 页面纯文本。 */
-  text: string;
-  /** 页面 favicon。 */
-  faviconUrl: string;
-  /** content script 内预提取的 Readability Markdown。 */
-  readabilityContent?: string;
-  /** content script 内预提取的 Readability 标题。 */
-  readabilityTitle?: string;
-};
 
 type TabsApi = {
   /** 按需注入 content script。 */
   executeScript: (...args: [number]) => Promise<void>;
   /** 向 content script 发送消息。 */
-  sendMessage: (...args: [number, unknown]) => Promise<PageSource>;
+  sendMessage: (...args: [number, CollectPageSourceMessage]) => Promise<PageSource>;
   /** 刷新标签页。 */
   reload: (...args: [number]) => Promise<void>;
 };
@@ -32,10 +17,11 @@ const delay = (timeoutMs: number) => new Promise<void>((resolve) => setTimeout(r
 
 /** 创建页面源读取器，负责 content script 断连后的单次自动刷新重试。 */
 export const createContentSource = ({ tabs }: { tabs: TabsApi }) => ({
-  /** 采集页面 HTML 和基础元数据。 */
-  async collect({ tabId }: { tabId: number }): Promise<PageSource> {
+  /** 按提取方法采集正文或基础元数据。 */
+  async collect({ tabId, method }: CollectPageSourceInput): Promise<PageSource> {
+    const request: CollectPageSourceMessage = { type: 'COLLECT_PAGE_SOURCE', method };
     try {
-      return await tabs.sendMessage(tabId, { type: 'COLLECT_PAGE_SOURCE' });
+      return await tabs.sendMessage(tabId, request);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes('Receiving end does not exist')) {
@@ -45,7 +31,7 @@ export const createContentSource = ({ tabs }: { tabs: TabsApi }) => ({
       try {
         await tabs.executeScript(tabId);
         await delay(RETRY_DELAY_MS);
-        return await tabs.sendMessage(tabId, { type: 'COLLECT_PAGE_SOURCE' });
+        return await tabs.sendMessage(tabId, request);
       } catch (injectionError) {
         const injectionMessage = injectionError instanceof Error ? injectionError.message : String(injectionError);
         if (!injectionMessage.includes('Receiving end does not exist')) {
@@ -58,7 +44,7 @@ export const createContentSource = ({ tabs }: { tabs: TabsApi }) => ({
       for (let retry = 0; retry < RETRY_AFTER_RELOAD_COUNT; retry += 1) {
         await delay(RETRY_DELAY_MS);
         try {
-          return await tabs.sendMessage(tabId, { type: 'COLLECT_PAGE_SOURCE' });
+          return await tabs.sendMessage(tabId, request);
         } catch (retryError) {
           lastRetryError = retryError;
           const retryMessage = retryError instanceof Error ? retryError.message : String(retryError);

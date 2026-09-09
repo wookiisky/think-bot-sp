@@ -36,6 +36,8 @@ type SyncTestProvider = {
 };
 
 type SyncRepository = {
+  getRevision?(): Promise<number>;
+  mergeSnapshot?(merge: (local: SyncSnapshot) => SyncSnapshot, sinceRevision: number): Promise<SyncSnapshot>;
   /** 构建完整同步快照。 */
   buildSnapshot(config?: ExtensionConfig): Promise<SyncSnapshot>;
   /** 把合并后的快照回写到本地。 */
@@ -121,11 +123,13 @@ const mergeExtractionCaches = (localPage: PageRecord | null, remotePage: PageRec
 
 /** 合并页面主记录后，按方法时间合并缓存并重建当前正文镜像。 */
 const mergePageRecords = (localPages: PageRecord[], remotePages: PageRecord[]) => {
-  const keys = new Set([...localPages.map((page) => page.normalizedUrl), ...remotePages.map((page) => page.normalizedUrl)]);
+  const localByUrl = new Map(localPages.map((page) => [page.normalizedUrl, page]));
+  const remoteByUrl = new Map(remotePages.map((page) => [page.normalizedUrl, page]));
+  const keys = new Set([...localByUrl.keys(), ...remoteByUrl.keys()]);
 
   return Array.from(keys).map((normalizedUrl) => {
-    const localPage = localPages.find((page) => page.normalizedUrl === normalizedUrl) ?? null;
-    const remotePage = remotePages.find((page) => page.normalizedUrl === normalizedUrl) ?? null;
+    const localPage = localByUrl.get(normalizedUrl) ?? null;
+    const remotePage = remoteByUrl.get(normalizedUrl) ?? null;
     const basePage = localPage && remotePage ? (localPage.updatedAt >= remotePage.updatedAt ? localPage : remotePage) : (localPage ?? remotePage);
     if (!basePage) {
       throw new Error(`page not found during sync merge: ${normalizedUrl}`);
@@ -248,6 +252,57 @@ export const createSyncService = ({
   /** 解析当前真实 provider。 */
   const resolveProvider = (sync: ExtensionConfig['sync']) => (sync.provider === 'gist' ? gistProvider : webdavProvider);
 
+  const performSync = async (config: ExtensionConfig) => {
+    ensureSyncEnabled(config.sync);
+
+    const activeTestProvider = resolveTestProvider();
+    if (activeTestProvider) {
+      return activeTestProvider.syncNow(config);
+    }
+
+    const provider = resolveProvider(config.sync);
+    const revision = await syncRepository?.getRevision?.();
+    const remoteSnapshot = await provider.readSnapshot(config.sync);
+    let nextSnapshot: SyncSnapshot;
+    if (syncRepository?.mergeSnapshot && revision !== undefined) {
+      nextSnapshot = await syncRepository.mergeSnapshot(
+        (localSnapshot) => mergeSyncSnapshots({ localSnapshot, remoteSnapshot, now }), revision,
+      );
+    } else {
+      const localSnapshot = await buildSnapshot(config);
+      const mergedSnapshot = mergeSyncSnapshots({ localSnapshot, remoteSnapshot, now });
+      if (syncRepository) await syncRepository.applyMergedSnapshot(mergedSnapshot);
+      nextSnapshot = syncRepository ? await buildSnapshot() : mergedSnapshot;
+    }
+    const lastSyncAt = now();
+    const finalSnapshot = {
+      ...nextSnapshot,
+      lastSyncAt,
+      config: {
+        ...nextSnapshot.config,
+        sync: {
+          ...nextSnapshot.config.sync,
+          lastSyncAt,
+        },
+      },
+    };
+    const baseResult = await provider.syncNow(config.sync, finalSnapshot);
+
+    if (syncRepository) {
+      await syncRepository.markSyncCompleted({
+        snapshotVersion: finalSnapshot.snapshotVersion,
+        lastSyncAt,
+      });
+    }
+
+    return {
+      ...baseResult,
+      lastSyncAt,
+    };
+  };
+
+  let syncQueue = Promise.resolve();
+
   return {
     /** 测试当前同步配置。 */
     async testConnection(sync: ExtensionConfig['sync']) {
@@ -265,54 +320,11 @@ export const createSyncService = ({
       return webdavProvider.testConnection(sync);
     },
 
-    /** 推送当前配置到远端 provider。 */
-    async syncNow(config: ExtensionConfig) {
-      ensureSyncEnabled(config.sync);
-
-      const activeTestProvider = resolveTestProvider();
-      if (activeTestProvider) {
-        return activeTestProvider.syncNow(config);
-      }
-
-      const provider = resolveProvider(config.sync);
-      const localSnapshot = await buildSnapshot(config);
-      const remoteSnapshot = await provider.readSnapshot(config.sync);
-      const mergedSnapshot = mergeSyncSnapshots({
-        localSnapshot,
-        remoteSnapshot,
-        now,
-      });
-
-      if (syncRepository) {
-        await syncRepository.applyMergedSnapshot(mergedSnapshot);
-      }
-
-      const nextSnapshot = await buildSnapshot(syncRepository ? undefined : mergedSnapshot.config);
-      const lastSyncAt = now();
-      const finalSnapshot = {
-        ...nextSnapshot,
-        lastSyncAt,
-        config: {
-          ...nextSnapshot.config,
-          sync: {
-            ...nextSnapshot.config.sync,
-            lastSyncAt,
-          },
-        },
-      };
-      const baseResult = await provider.syncNow(config.sync, finalSnapshot);
-
-      if (syncRepository) {
-        await syncRepository.markSyncCompleted({
-          snapshotVersion: finalSnapshot.snapshotVersion,
-          lastSyncAt,
-        });
-      }
-
-      return {
-        ...baseResult,
-        lastSyncAt,
-      };
+    /** 同步任务串行，但远端 I/O 不占用本地存储队列。 */
+    syncNow(config: ExtensionConfig) {
+      const result = syncQueue.then(() => performSync(config));
+      syncQueue = result.then(() => undefined, () => undefined);
+      return result;
     },
   };
 };

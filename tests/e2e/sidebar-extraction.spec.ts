@@ -4,6 +4,10 @@ import { expect, test } from './helpers/extension-fixture';
 
 test('side panel 先恢复 bootstrap，再在放行后进入提取', async ({ context, extensionId }) => {
   const page = await context.newPage();
+  await page.route('https://example.com/', (route) => route.fulfill({
+    contentType: 'text/html',
+    body: '<html><head><title>Example Domain</title></head><body><article><h1>Example Domain</h1><p>This domain is for use in documentation examples without needing permission.</p><p><a href="https://iana.org/domains/example">Learn more</a></p></article></body></html>',
+  }));
   await page.goto('https://example.com/');
   await page.bringToFront();
 
@@ -14,11 +18,10 @@ test('side panel 先恢复 bootstrap，再在放行后进入提取', async ({ co
 
   const tab = await serviceWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({
-      active: true,
-      lastFocusedWindow: true,
+      url: 'https://example.com/',
     });
     if (!tab?.id || !tab.url) {
-      throw new Error('未找到当前活动 browserTab');
+      throw new Error('未找到提取测试页面对应的 browserTab');
     }
     return {
       id: tab.id,

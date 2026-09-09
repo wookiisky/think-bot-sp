@@ -1,7 +1,11 @@
-import { applySystemConfigSeeds, extensionConfigSchema } from '../domain/config/config-schema';
+import { createStorageRepository } from './chrome-local-adapter';
+import { applySystemConfigSeeds, createDefaultConfig, extensionConfigSchema } from '../domain/config/config-schema';
 import type { ExtensionConfig } from '../domain/config/config-schema';
 import { createDefaultSyncState, syncSnapshotSchema, syncStateSchema } from '../domain/sync/sync-snapshot-schema';
 import type { SyncSnapshot, SyncState } from '../domain/sync/sync-snapshot-schema';
+import { loadingStateRecordSchema } from '../domain/loading/loading-state-schema';
+import { pageRecordSchema } from '../domain/page/page-schema';
+import { conversationRecordSchema } from '../domain/conversation/conversation-schema';
 import { assertBlacklistRulesPersistable } from '../services/blacklist/blacklist-service';
 import {
   CONFIG_STORAGE_KEY,
@@ -15,6 +19,11 @@ import {
 } from '../shared/storage-keys';
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
+
+/** 主请求结束后仍可能有独立分支请求。 */
+const hasActiveLoading = (loading: ReturnType<typeof loadingStateRecordSchema.parse>): boolean =>
+  loading.promptTabStatus === 'loading' || loading.branchStates.some((branch) => branch.status === 'loading');
+
 
 type ConfigRepository = {
   /** 读取当前配置。 */
@@ -43,9 +52,6 @@ type ConversationRepository = {
 /** 同步仓储，负责快照导出和 tombstone 维护。 */
 export const createSyncRepository = ({
   storage,
-  configRepository,
-  pageRepository,
-  conversationRepository,
   now = () => Date.now(),
 }: {
   /** 本地存储适配器。 */
@@ -58,7 +64,7 @@ export const createSyncRepository = ({
   conversationRepository: ConversationRepository;
   /** 当前时间。 */
   now?: () => number;
-}) => {
+}) => createStorageRepository(storage, (storage) => {
   /** 读取完整存储，用于同步替换时计算增删集合。 */
   const readAll = async () => storage.get<Record<string, unknown>>(null);
   /** 读取当前同步状态。 */
@@ -75,7 +81,79 @@ export const createSyncRepository = ({
     return next;
   };
 
-  return {
+  const repository = {
+    /** 记录网络请求开始前的本地版本。 */
+    async getRevision() {
+      return storage.getRevision();
+    },
+
+    /** 在同一个事务内合并最新本地数据，保护请求期间的写入和活动会话。 */
+    async mergeSnapshot(merge: (local: SyncSnapshot) => SyncSnapshot, sinceRevision: number): Promise<SyncSnapshot> {
+      const all = await readAll();
+      const local = await repository.buildSnapshot(undefined, all);
+      const changedKeys = storage.getChangedKeysSince(sinceRevision);
+      const merged = merge(local);
+      const preserveAll = changedKeys.has('*');
+      const protectedPageUrls = new Set<string>();
+      const protectedConversationKeys = new Set<string>();
+      for (const key of changedKeys) {
+        if (key.startsWith(PAGE_STORAGE_PREFIX)) protectedPageUrls.add(key.slice(PAGE_STORAGE_PREFIX.length));
+        if (key.startsWith(CONVERSATION_STORAGE_PREFIX)) protectedConversationKeys.add(key);
+      }
+      for (const [key, value] of Object.entries(all)) {
+        if (key.startsWith(LOADING_STORAGE_PREFIX)) {
+          const loading = loadingStateRecordSchema.parse(value);
+          if (hasActiveLoading(loading)) {
+            protectedConversationKeys.add(CONVERSATION_STORAGE_PREFIX + key.slice(LOADING_STORAGE_PREFIX.length));
+            protectedPageUrls.add(loading.normalizedUrl);
+          }
+        }
+      }
+      const localPages = new Map(local.pages.map((page) => [page.normalizedUrl, page]));
+      const localConversations = new Map(local.conversations.map((conversation) => [
+        buildConversationStorageKey(conversation.normalizedUrl, conversation.promptTabId), conversation,
+      ]));
+      const nextPages = new Map(merged.pages.map((page) => [page.normalizedUrl, page]));
+      const nextConversations = new Map(merged.conversations.map((conversation) => [
+        buildConversationStorageKey(conversation.normalizedUrl, conversation.promptTabId), conversation,
+      ]));
+      for (const url of protectedPageUrls) {
+        const current = localPages.get(url);
+        if (current) nextPages.set(url, current);
+        else nextPages.delete(url);
+      }
+      for (const key of protectedConversationKeys) {
+        const current = localConversations.get(key);
+        if (current) {
+          nextConversations.set(key, current);
+          const page = localPages.get(current.normalizedUrl);
+          if (page) {
+            nextPages.set(page.normalizedUrl, page);
+            protectedPageUrls.add(page.normalizedUrl);
+          }
+        } else nextConversations.delete(key);
+      }
+      // 本地写入和活动请求优先；对应页面不能同时保留远端删除标记。
+      const nextTombstones = new Map(merged.tombstones.map((item) => [item.normalizedUrl, item]));
+      const localTombstones = new Map(local.tombstones.map((item) => [item.normalizedUrl, item]));
+      for (const url of protectedPageUrls) {
+        if (!localPages.has(url)) continue;
+        const tombstone = localTombstones.get(url);
+        if (tombstone) nextTombstones.set(url, tombstone);
+        else nextTombstones.delete(url);
+      }
+      const snapshot = syncSnapshotSchema.parse({
+        ...merged,
+        tombstones: preserveAll ? local.tombstones : [...nextTombstones.values()],
+        config: preserveAll || changedKeys.has(CONFIG_STORAGE_KEY) ? local.config : merged.config,
+        pages: preserveAll ? local.pages : [...nextPages.values()],
+        conversations: preserveAll ? local.conversations : [...nextConversations.values()]
+          .filter((conversation) => nextPages.has(conversation.normalizedUrl)),
+      });
+      await repository.applyMergedSnapshot(snapshot, all);
+      return { ...snapshot, config: applySystemConfigSeeds(snapshot.config), snapshotVersion: snapshot.snapshotVersion + 1 };
+    },
+
     /** 读取当前同步状态。 */
     async getSyncState() {
       return readSyncState();
@@ -120,13 +198,17 @@ export const createSyncRepository = ({
     },
 
     /** 构建当前完整快照。 */
-    async buildSnapshot(config?: ExtensionConfig) {
-      const [resolvedConfig, syncState, pages, conversations] = await Promise.all([
-        config ? Promise.resolve(config) : configRepository.getConfig(),
-        readSyncState(),
-        pageRepository.getAllPages(),
-        conversationRepository.getAllConversations(),
-      ]);
+    async buildSnapshot(config?: ExtensionConfig, values?: Record<string, unknown>) {
+      const all = values ?? await readAll();
+      const resolvedConfig = config ?? (all[CONFIG_STORAGE_KEY]
+        ? applySystemConfigSeeds(extensionConfigSchema.parse(all[CONFIG_STORAGE_KEY]))
+        : createDefaultConfig());
+      const syncState = all[SYNC_STATE_STORAGE_KEY]
+        ? syncStateSchema.parse(all[SYNC_STATE_STORAGE_KEY]) : createDefaultSyncState();
+      const pages = Object.entries(all).filter(([key]) => key.startsWith(PAGE_STORAGE_PREFIX))
+        .map(([, value]) => pageRecordSchema.parse(value));
+      const conversations = Object.entries(all).filter(([key]) => key.startsWith(CONVERSATION_STORAGE_PREFIX))
+        .map(([, value]) => conversationRecordSchema.parse(value));
       const tombstoneMap = new Map(syncState.tombstones.map((item) => [item.normalizedUrl, item.deletedAt]));
       const visiblePages = pages.filter((page) => {
         const deletedAt = tombstoneMap.get(page.normalizedUrl) ?? null;
@@ -148,9 +230,11 @@ export const createSyncRepository = ({
     },
 
     /** 把合并后的完整快照回写到本地稳定存储。 */
-    async applyMergedSnapshot(snapshot: SyncSnapshot) {
+    async applyMergedSnapshot(snapshot: SyncSnapshot, values?: Record<string, unknown>) {
       const nextSnapshot = syncSnapshotSchema.parse(snapshot);
-      const currentState = await readSyncState();
+      const all = values ?? await readAll();
+      const currentState = all[SYNC_STATE_STORAGE_KEY]
+        ? syncStateSchema.parse(all[SYNC_STATE_STORAGE_KEY]) : createDefaultSyncState();
       const nextLastSyncAt = [currentState.lastSyncAt, nextSnapshot.lastSyncAt].reduce<number | null>(
         (latest, value) => (value === null ? latest : Math.max(latest ?? 0, value)),
         null,
@@ -166,7 +250,6 @@ export const createSyncRepository = ({
       );
       assertBlacklistRulesPersistable(nextConfig.blacklist);
 
-      const all = await readAll();
       const nextPageEntries = Object.fromEntries(
         nextSnapshot.pages.map((page) => [buildPageStorageKey(page.normalizedUrl), page] as const),
       );
@@ -179,6 +262,14 @@ export const createSyncRepository = ({
       const nextLoadingKeys = new Set(
         nextSnapshot.conversations.map((conversation) => buildLoadingStorageKey(conversation.normalizedUrl, conversation.promptTabId)),
       );
+      // 首个流片段落库前也可能已有 loading；只要页面仍存在就保留活动请求。
+      for (const [key, value] of Object.entries(all)) {
+        if (!key.startsWith(LOADING_STORAGE_PREFIX)) continue;
+        const loading = loadingStateRecordSchema.parse(value);
+        if (hasActiveLoading(loading) && buildPageStorageKey(loading.normalizedUrl) in nextPageEntries) {
+          nextLoadingKeys.add(key);
+        }
+      }
       const removableKeys = Object.keys(all).filter((key) => {
         if (key.startsWith(PAGE_STORAGE_PREFIX)) {
           return !(key in nextPageEntries);
@@ -220,8 +311,9 @@ export const createSyncRepository = ({
       await writeSyncState({
         ...current,
         snapshotVersion: Math.max(current.snapshotVersion, input.snapshotVersion),
-        lastSyncAt: input.lastSyncAt,
+        lastSyncAt: Math.max(current.lastSyncAt ?? 0, input.lastSyncAt),
       });
     },
   };
-};
+  return repository;
+});

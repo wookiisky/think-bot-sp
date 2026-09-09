@@ -59,7 +59,8 @@ Provider 适配规则：
 - Google Gemini -> `@ai-sdk/google`
 - Anthropic -> `@ai-sdk/anthropic`
 - Amazon Bedrock -> `@ai-sdk/amazon-bedrock`
-- Google Vertex -> `@ai-sdk/google-vertex`
+- Google Vertex -> `@ai-sdk/google`，API Key 模式使用 Vertex Express 地址；用户自定义 Base URL 优先。此模式保持不使用 `project/location` 的行为。
+- 所有 Provider 必须提供 AI SDK 5 支持的 `v2` 模型协议，不能通过类型强转绕过兼容性检查。
 
 请求参数透传规则：
 
@@ -78,7 +79,7 @@ Provider 适配规则：
 5. 根据当前 `promptTab` 解析首轮执行计划：
    - `chat` 只跑当前主模型。
    - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
-6. 主分支与并行分支分别建立流式会话；每个 chunk 都先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
+6. 主分支与并行分支使用同一个流执行器；首个非空 chunk 立即保存，后续文本按 50ms 或 8192 字节上限合并。每个批次先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
 7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
 7.0. 每个已进入 `streamText` 的分支都会记录单请求 `startedAt`，STARTED 事件和 loading state 使用同一时间戳；UI 在 loader 右侧以 `mm:ss` 展示实时计时，并在 side panel 重开后延续真实已运行时间。
 7.0.1. 每个已进入 `streamText` 的分支都会记录从发起调用到本地消费完流的 `durationMs`；若在调用前失败则保持 `null`。终态事件携带同一 `durationMs`，UI 可在模型名右侧即时显示秒数。
@@ -153,6 +154,12 @@ Provider 适配规则：
   - 返回给 UI 的失败事件只用于当前会话展示，不再作为可恢复历史落库。
 - loading 清理失败：
   - 不改变已经收敛的 `done`、`error`、`cancelled` 结果。
+  - 一个分支清理失败不阻断其他分支及整轮收尾；定时器和活跃会话注册表仍需回收。
+- 结果持久化失败：
+  - 显式报告失败，不能发布成功终态。
+  - 不重试不确定是否已经成功的 chunk 写入，避免重复追加正文。
+- 取消或上游流失败：
+  - 先保存已经消费的缓冲文本，再收敛终态；结束后不得继续追加文本。
 - port 推送失败：
   - 只影响实时 UI 推送，不改变已落库消息与最终生命周期结果。
 - 编辑目标非法：
@@ -189,6 +196,8 @@ Provider 适配规则：
 - 错误流测试：Provider 返回错误、网络中断、setup 补偿失败保护。
 - 异常流测试：取消、side panel 关闭重开恢复、loading 清理失败不覆盖主结果。
 - 不变量测试：终态消息不可继续追加 chunk 或覆盖终态结果。
+- 三个入口共享生命周期测试：发送、编辑和用户重试在成功、取消、超时、存储失败时保持一致的收尾规则。
+- 批量流测试：首包不等待合并窗口，数千个小 chunk 的保存次数下降，最终文本完整；停止、错误和重连不重复拼接。
 - 不变量测试：`includePageContent=true/false`、页面正文缓存缺失时，实际发给模型的上下文与请求级开关一致。
 - 页面正文只能追加到最终 system prompt 末尾的 `# Page Content` 段，不能改写用户消息正文。
 - 编辑重发、用户重试、助手重试和继续新增分支，必须复用同一套页面正文拼装规则。

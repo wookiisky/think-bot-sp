@@ -12,6 +12,7 @@ import { createSyncRepository } from '../src/repositories/sync-repository';
 import { createBrowserEntryService } from '../src/services/browser-entry/browser-entry';
 import { createBrowserEntryPanelState } from '../src/services/browser-entry/browser-panel-state';
 import { createBlacklistService } from '../src/services/blacklist/blacklist-service';
+import type { PageSource } from '../src/services/extraction/page-source';
 import { createContentSource } from '../src/services/extraction/content-source';
 import { createExtractionService } from '../src/services/extraction/extraction-service';
 import { createJinaClient } from '../src/services/extraction/jina-client';
@@ -238,15 +239,7 @@ export default defineBackground(() => {
               return;
             }
 
-            resolve(response as {
-              url: string;
-              title: string;
-              html: string;
-              text: string;
-              faviconUrl: string;
-              readabilityContent?: string;
-              readabilityTitle?: string;
-            });
+            resolve(response as PageSource);
           });
         }),
       reload: (tabId) =>
@@ -258,28 +251,6 @@ export default defineBackground(() => {
   const extractionService = createExtractionService({
     logger,
     contentSource,
-    readabilityExtractor: {
-      extract: (html, pageUrl) => {
-        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-        const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-        const source = articleMatch?.[1] ?? html;
-        const content = source
-          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        if (!content) {
-          return null;
-        }
-
-        return {
-          content,
-          title: titleMatch?.[1]?.trim() || new URL(pageUrl).hostname,
-        };
-      },
-    },
     jinaClient: createJinaClient(),
     pageRepository,
   });

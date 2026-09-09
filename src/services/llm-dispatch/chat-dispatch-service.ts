@@ -4,6 +4,7 @@ import { createDefaultConfig, resolvePromptTabParallelModelIds } from '../../dom
 import type { ExtensionConfig, ModelConfig } from '../../domain/config/config-schema';
 import { createLoadingState } from '../../domain/loading/loading-state-schema';
 import type { ResolvedProviderModel } from './provider-registry';
+import { consumeBufferedTextStream } from './buffered-text-stream';
 
 type ChatDispatchInput = {
   /** 归一化页面 URL。 */
@@ -203,6 +204,9 @@ type ChatStreamEvent =
       errorMessage: string;
       /** 本次调用从发起到本地消费完流的耗时。 */
       durationMs: number | null;
+      /** 仅在本轮回滚成功后通知订阅方移除消息。 */
+      rollbackOnFailure?: boolean;
+      userMessageId?: string;
     }
   | {
       /** 事件类型。 */
@@ -951,209 +955,295 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     }
     return createDefaultConfig(await deps.configRepository.getConfig());
   };
-  /** 创建单个分支流会话，供并行首发、重试分支和新增分支复用。 */
-  const createBranchStreamSession = (input: {
-    /** 归一化页面 URL。 */
-    normalizedUrl: string;
-    /** promptTab 稳定 id。 */
-    promptTabId: string;
-    /** 助手消息 id。 */
-    messageId: string;
-    /** 分支 id。 */
-    branchId: string;
-    /** 分支模型配置。 */
-    model: ModelConfig;
-    /** 大模型调用超时秒数。 */
-    requestTimeoutSeconds: number;
-    /** 流式对话历史。 */
-    streamMessages: ConversationHistoryMessage[];
-    /** 可选的开始前准备。 */
-      prepare?: (sessionId: string, startedAt: number) => Promise<void>;
-  }): BranchStreamSession => {
-    const sessionId = createSessionId();
-    const abortScope = createModelAbortScope(input.requestTimeoutSeconds);
-    const resolvedModel = deps.providerRegistry.resolveProviderModel(input.model);
-      const done = (async (): Promise<ChatStreamResult> => {
-        let result: ChatStreamResult;
-        let hasLoggedFirstChunk = false;
-        let streamStartedAt: number | null = null;
-        try {
-          const startedAt = now();
-          await input.prepare?.(sessionId, startedAt);
-	        logger.info('branch.stream.started', {
-	          normalizedUrl: input.normalizedUrl,
-	          promptTab: input.promptTabId,
-	          sessionId,
-	          messageId: input.messageId,
-	          branchId: input.branchId,
-	          provider: resolvedModel.providerId,
-	          modelId: input.model.id,
-	        });
-	        publishToPromptTabSafely({
-	          type: 'BRANCH_STREAM_STARTED',
-	          normalizedUrl: input.normalizedUrl,
-	          promptTabId: input.promptTabId,
-	          sessionId,
-	          messageId: input.messageId,
-	          branchId: input.branchId,
-	          modelId: input.model.id,
-	          modelLabel: resolvedModel.modelLabel,
-	          startedAt,
-	        });
-	        streamStartedAt = startedAt;
-	        const response = await deps.streamText(
-	          buildModelInvocation({
-	            resolvedModel,
-	            messages: input.streamMessages,
-	            abortSignal: abortScope.signal,
-	          }),
-	        );
+  type StreamScope = { normalizedUrl: string; promptTabId: string; messageId: string; branchId: string };
 
-        for await (const chunk of response.textStream) {
-          if (!hasLoggedFirstChunk) {
-            hasLoggedFirstChunk = true;
-            logger.info('branch.stream.first_chunk', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: input.messageId,
-              branchId: input.branchId,
-            });
-          }
-          await deps.conversationRepository.appendAssistantBranchChunk({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: input.messageId,
-            branchId: input.branchId,
-            chunk,
-            now: now(),
-          });
-          publishToPromptTabSafely({
-            type: 'BRANCH_STREAM_CHUNK',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
-            chunk,
+  /** 一个执行器负责主回答和额外分支的消费、持久化与资源回收。 */
+  const createStreamSession = (input: StreamScope & {
+    model: ModelConfig;
+    resolvedModel: ResolvedProviderModel;
+    requestTimeoutSeconds: number;
+    streamMessages: ConversationHistoryMessage[];
+    sessionId?: string;
+    primary?: boolean;
+    siblings?: BranchStreamSession[];
+    rollbackUserMessageId?: string;
+  }): BranchStreamSession => {
+    const sessionId = input.sessionId ?? createSessionId();
+    const resolvedModel = input.resolvedModel;
+    const abortScope = createModelAbortScope(input.requestTimeoutSeconds);
+    const scope = {
+      normalizedUrl: input.normalizedUrl,
+      promptTabId: input.promptTabId,
+      messageId: input.messageId,
+      branchId: input.branchId,
+    };
+    const eventScope = { ...scope, sessionId };
+    const logScope = {
+      normalizedUrl: input.normalizedUrl,
+      promptTab: input.promptTabId,
+      sessionId,
+      messageId: input.messageId,
+      ...(!input.primary ? { branchId: input.branchId } : {}),
+    };
+    const prefix = input.primary ? 'chat' : 'branch';
+    const done = (async (): Promise<ChatStreamResult> => {
+      let streamStartedAt: number | null = null;
+      let persistenceFailed = false;
+      try {
+        const startedAt = now();
+        if (input.primary) {
+          await deps.conversationRepository.markLoadingStateStarted({ ...scope, startedAt, now: startedAt });
+        } else {
+          await deps.conversationRepository.upsertBranchLoadingState({
+            ...scope, sessionId, modelId: input.model.id, status: 'loading', startedAt, now: now(),
           });
         }
-
-        const finishedAt = now();
-        const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
-        await deps.conversationRepository.finishAssistantBranch({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: input.messageId,
-          branchId: input.branchId,
-          durationMs,
-          now: finishedAt,
+        logger.info(`${prefix}.stream.started`, {
+          ...logScope,
+          provider: resolvedModel.providerId,
+          ...(!input.primary ? { modelId: input.model.id } : {}),
         });
         publishToPromptTabSafely({
-          type: 'BRANCH_STREAM_FINISHED',
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          messageId: input.messageId,
-          branchId: input.branchId,
+          ...eventScope,
+          type: input.primary ? 'CHAT_STREAM_STARTED' : 'BRANCH_STREAM_STARTED',
+          modelId: input.model.id,
+          modelLabel: resolvedModel.modelLabel,
+          startedAt,
+        });
+        streamStartedAt = startedAt;
+        const response = await deps.streamText(buildModelInvocation({
+          resolvedModel,
+          messages: input.streamMessages,
+          abortSignal: abortScope.signal,
+        }));
+        await consumeBufferedTextStream(response.textStream, {
+          signal: abortScope.signal,
+          onFirstChunk: () => logger.info(`${prefix}.stream.first_chunk`, logScope),
+          write: async (chunk) => {
+            const update = { ...scope, chunk, now: now() };
+            try {
+              if (input.primary) {
+                await deps.conversationRepository.appendAssistantChunk(update);
+              } else {
+                await deps.conversationRepository.appendAssistantBranchChunk(update);
+              }
+            } catch (error) {
+              persistenceFailed = true;
+              throw error;
+            }
+            publishToPromptTabSafely({
+              ...eventScope,
+              type: input.primary ? 'CHAT_STREAM_CHUNK' : 'BRANCH_STREAM_CHUNK',
+              chunk,
+            });
+          },
+        });
+        const finishedAt = now();
+        const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
+        const finish = { ...scope, durationMs, now: finishedAt };
+        if (input.primary) {
+          await deps.conversationRepository.finishAssistantMessage(finish);
+        } else {
+          await deps.conversationRepository.finishAssistantBranch(finish);
+        }
+        publishToPromptTabSafely({
+          ...eventScope,
+          type: input.primary ? 'CHAT_STREAM_FINISHED' : 'BRANCH_STREAM_FINISHED',
           durationMs,
         });
-        logger.info('branch.stream.completed', {
-          normalizedUrl: input.normalizedUrl,
-          promptTab: input.promptTabId,
-          sessionId,
-          messageId: input.messageId,
-          branchId: input.branchId,
-        });
-        result = {
-          sessionId,
-          messageId: input.messageId,
-          status: 'done',
-          errorMessage: null,
-          persisted: true,
-        };
+        logger.info(`${prefix}.stream.completed`, logScope);
+        return { sessionId, messageId: input.messageId, status: 'done', errorMessage: null, persisted: true };
       } catch (error) {
-        const failure = resolveStreamFailure(error, abortScope, input.requestTimeoutSeconds);
-        const status = failure.status;
+        const failure = persistenceFailed
+          ? { status: 'error' as const, errorMessage: getErrorMessage(error, 'failed to persist stream text') }
+          : resolveStreamFailure(error, abortScope, input.requestTimeoutSeconds);
+        abortScope.cancel();
+        let status = failure.status;
+        let errorMessage = !input.primary && status === 'cancelled'
+          ? 'branch stream cancelled'
+          : !input.primary && failure.errorMessage === 'chat dispatch failed'
+            ? 'branch dispatch failed'
+            : failure.errorMessage;
         const failedAt = now();
         const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
-        const errorMessage =
-          status === 'cancelled'
-            ? 'branch stream cancelled'
-            : failure.errorMessage === 'chat dispatch failed'
-              ? 'branch dispatch failed'
-              : failure.errorMessage;
-        await deps.conversationRepository.failAssistantBranch({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: input.messageId,
-          branchId: input.branchId,
-          errorMessage: null,
-          status,
-          durationMs,
-          now: failedAt,
-        });
+        let persisted = true;
+        try {
+          const fail = { ...scope, errorMessage: null, status, durationMs, now: failedAt };
+          if (input.primary) {
+            await deps.conversationRepository.failAssistantMessage(fail);
+          } else {
+            await deps.conversationRepository.failAssistantBranch(fail);
+          }
+        } catch (persistenceError) {
+          // 结果未落库必须显式报告；仍继续清理资源和发布失败事件。
+          status = 'error';
+          errorMessage = getErrorMessage(persistenceError, 'failed to persist stream result');
+          persisted = false;
+        }
+        let rolledBack = false;
+        if (input.primary && input.rollbackUserMessageId && status === 'error') {
+          for (const sibling of input.siblings ?? []) sibling.cancel();
+          await Promise.allSettled((input.siblings ?? []).map((sibling) => sibling.done));
+          try {
+            await deps.conversationRepository.rollbackTurnMessages({
+              normalizedUrl: input.normalizedUrl,
+              promptTabId: input.promptTabId,
+              userMessageId: input.rollbackUserMessageId,
+              assistantMessageId: input.messageId,
+              now: now(),
+            });
+            rolledBack = true;
+            persisted = false;
+          } catch (rollbackError) {
+            logger.error('chat.rollback.failed', { ...logScope, reason: getErrorMessage(rollbackError, 'rollback failed') });
+          }
+        }
         if (status === 'cancelled') {
-          logger.info('branch.stream.cancelled', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
-            durationMs,
-          });
+          logger.info(`${prefix}.stream.cancelled`, { ...logScope, ...(!input.primary ? { durationMs } : {}) });
           publishToPromptTabSafely({
-            type: 'BRANCH_STREAM_CANCELLED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
+            ...eventScope,
+            type: input.primary ? 'CHAT_STREAM_CANCELLED' : 'BRANCH_STREAM_CANCELLED',
             durationMs,
           });
         } else {
-          logger.error('branch.stream.failed', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
-            reason: errorMessage,
-          });
+          logger.error(`${prefix}.stream.failed`, { ...logScope, reason: errorMessage });
           publishToPromptTabSafely({
-            type: 'BRANCH_STREAM_FAILED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
+            ...eventScope,
+            type: input.primary ? 'CHAT_STREAM_FAILED' : 'BRANCH_STREAM_FAILED',
             errorMessage,
             durationMs,
+            ...(rolledBack ? { rollbackOnFailure: true, userMessageId: input.rollbackUserMessageId } : {}),
           });
         }
-        result = {
-          sessionId,
-          messageId: input.messageId,
-          status,
-          errorMessage,
-          persisted: true,
-        };
+        return { sessionId, messageId: input.messageId, status, errorMessage, persisted };
+      } finally {
+        abortScope.clear();
+        if (!input.primary) {
+          try {
+            await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, input.branchId);
+          } catch (error) {
+            logger.warn('branch.loading.cleanup_failed', { ...logScope, reason: getErrorMessage(error, 'cleanup failed') });
+          }
+        }
       }
-
-      abortScope.clear();
-      await deps.conversationRepository.removeBranchLoadingState(input.normalizedUrl, input.promptTabId, input.branchId);
-      return result;
     })();
-
     return {
-      branchId: input.branchId,
-      sessionId,
+      sessionId, messageId: input.messageId, branchId: input.branchId,
+      modelId: input.model.id, modelLabel: resolvedModel.modelLabel,
+      cancel: () => abortScope.cancel(), done,
+    };
+  };
+
+  /** 消息占位已创建；启动失败时收敛所有分支，不留下无人消费的 loading。 */
+  const saveTurnLoading = async (input: {
+    normalizedUrl: string;
+    promptTabId: string;
+    messageId: string;
+    sessionId: string;
+    initialBranchPlans: InitialBranchPlan[];
+  }) => {
+    try {
+      await deps.conversationRepository.saveLoadingState(createLoadingState({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        sessionId: input.sessionId,
+        now: now(),
+      }));
+    } catch (error) {
+      const failure = {
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: input.messageId,
+        errorMessage: null,
+        status: 'error' as const,
+        durationMs: null,
+        now: now(),
+      };
+      await Promise.allSettled([
+        deps.conversationRepository.failAssistantMessage(failure),
+        ...input.initialBranchPlans.slice(1).map((plan) => deps.conversationRepository.failAssistantBranch({
+          ...failure, branchId: plan.branchId,
+        })),
+      ]);
+      try {
+        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
+      } catch {
+        // 保留最初的启动错误；此时尚未创建任何网络请求和定时器。
+      }
+      throw error;
+    }
+  };
+
+  /** 本轮协调器等待所有分支结束后清理主 loading；公开结果仍对应主回答。 */
+  const createTurnSession = (input: {
+    normalizedUrl: string;
+    promptTabId: string;
+    messageId: string;
+    sessionId: string;
+    userMessageId?: string;
+    rollbackOnFailure?: boolean;
+    initialBranchPlans: InitialBranchPlan[];
+    streamMessages: ConversationHistoryMessage[];
+    requestTimeoutSeconds: number;
+  }): MultiBranchStreamSession => {
+    const primaryPlan = input.initialBranchPlans[0];
+    if (!primaryPlan) throw new Error(`primary branch plan missing: ${input.promptTabId}`);
+    const branchSessions = input.initialBranchPlans.slice(1).map((plan) => createStreamSession({
+      normalizedUrl: input.normalizedUrl,
+      promptTabId: input.promptTabId,
       messageId: input.messageId,
-      modelId: input.model.id,
-      modelLabel: resolvedModel.modelLabel,
-      cancel: () => {
-        abortScope.cancel();
-      },
+      branchId: plan.branchId,
+      model: plan.model,
+      resolvedModel: plan.resolvedModel,
+      streamMessages: input.streamMessages,
+      requestTimeoutSeconds: input.requestTimeoutSeconds,
+    }));
+    const primary = createStreamSession({
+      normalizedUrl: input.normalizedUrl,
+      promptTabId: input.promptTabId,
+      messageId: input.messageId,
+      branchId: primaryPlan.branchId,
+      sessionId: input.sessionId,
+      model: primaryPlan.model,
+      resolvedModel: primaryPlan.resolvedModel,
+      streamMessages: input.streamMessages,
+      requestTimeoutSeconds: input.requestTimeoutSeconds,
+      primary: true,
+      siblings: branchSessions,
+      ...(input.rollbackOnFailure && input.userMessageId ? { rollbackUserMessageId: input.userMessageId } : {}),
+    });
+    const sessions = [primary, ...branchSessions];
+    const done = (async () => {
+      const outcomes = await Promise.allSettled(sessions.map((session) => session.done));
+      const results = outcomes.map((outcome, index): ChatStreamResult => outcome.status === 'fulfilled'
+        ? outcome.value
+        : {
+          sessionId: sessions[index]!.sessionId,
+          messageId: input.messageId,
+          status: 'error',
+          errorMessage: getErrorMessage(outcome.reason, 'stream lifecycle failed'),
+          persisted: false,
+        });
+      try {
+        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
+      } catch (error) {
+        logger.warn('chat.loading.cleanup_failed', { reason: getErrorMessage(error, 'cleanup failed') });
+      }
+      publishToPromptTabSafely({
+        type: 'LOADING_STATE_UPDATE',
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        sessionId: input.sessionId,
+        status: resolveAggregateStatus(results),
+      });
+      return results[0]!;
+    })();
+    return {
+      ...primary,
+      ...(input.userMessageId ? { userMessageId: input.userMessageId } : {}),
+      branches: input.initialBranchPlans.map(({ branchId, modelId, modelLabel }) => ({ branchId, modelId, modelLabel })),
+      branchSessions,
+      cancel: () => { for (const session of sessions) session.cancel(); },
       done,
     };
   };
@@ -1170,11 +1260,6 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         throw new Error(`model not found: ${input.modelId}`);
       }
 
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
-      if (input.images.length > 0 && !resolvedModel.supportsImages) {
-        throw new Error('model does not support images');
-      }
-
       const sessionId = createSessionId();
       const userMessageId = createMessageId();
       const assistantMessageId = createMessageId();
@@ -1189,6 +1274,11 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       if (!primaryBranch) {
         throw new Error(`primary branch plan missing: ${input.promptTabId}`);
       }
+      const resolvedModel = primaryBranch.resolvedModel;
+      if (input.images.length > 0 && !resolvedModel.supportsImages) {
+        throw new Error('model does not support images');
+      }
+
       const streamMessages = buildModelMessages({
         conversationMessages: [
           ...toConversationHistory(conversation?.messages ?? []),
@@ -1203,328 +1293,50 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
-      const shouldRollbackOnFailure = input.rollbackOnFailure ?? false;
-      const getLifecycleScope = () => ({
+      const userMessageInput: Parameters<ChatDispatchServiceDeps['conversationRepository']['appendUserMessage']>[0] = {
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: userMessageId,
+        content: input.content,
+        images: input.images,
+        now: now(),
+      };
+      if (input.displayText !== undefined) {
+        userMessageInput.displayContent = input.displayText;
+      }
+      await deps.conversationRepository.appendUserMessage(userMessageInput);
+      await deps.conversationRepository.appendAssistantMessage({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         messageId: assistantMessageId,
-      });
-      /** setup 失败后，尽力把 assistant 从 loading 收敛到 error。 */
-      const compensateSetupFailure = async (_error: unknown) => {
-        try {
-          await deps.conversationRepository.failAssistantMessage({
-            ...getLifecycleScope(),
-            errorMessage: null,
-            status: 'error',
-            durationMs: null,
-            now: now(),
-          });
-        } catch {
-          // 补偿失败时保留原始 setup 错误，避免二次覆盖。
-        }
-      };
-      /** loading 清理是边缘副作用，失败不能覆盖主生命周期结果。 */
-      const removeLoadingStateSafely = async () => {
-        try {
-          await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
-        } catch {
-          // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
-        }
-      };
-      /** 首轮快捷输入失败后回滚本轮，避免把错误态持久化成历史。 */
-      const rollbackTurnMessagesSafely = async () => {
-        try {
-          await deps.conversationRepository.rollbackTurnMessages({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            userMessageId,
-            assistantMessageId,
-            now: now(),
-          });
-        } catch {
-          // 回滚失败时保留原始失败态，避免把主错误覆盖成新的异常。
-        }
-      };
-
-      let assistantMessageCreated = false;
-      try {
-        const userMessageInput: Parameters<ChatDispatchServiceDeps['conversationRepository']['appendUserMessage']>[0] = {
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: userMessageId,
-          content: input.content,
-          images: input.images,
-          now: now(),
-        };
-        if (input.displayText !== undefined) {
-          userMessageInput.displayContent = input.displayText;
-        }
-        await deps.conversationRepository.appendUserMessage(userMessageInput);
-        await deps.conversationRepository.appendAssistantMessage({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: assistantMessageId,
-          initialBranches: initialBranchPlans.map((plan) => ({
-            id: plan.branchId,
-            modelId: plan.modelId,
-            modelLabel: plan.modelLabel,
-            isPrimary: plan.isPrimary,
-          })),
-          selectedBranchId: primaryBranch.branchId,
-          now: now(),
-        });
-        assistantMessageCreated = true;
-        await deps.conversationRepository.saveLoadingState(
-          createLoadingState({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            now: now(),
-          }),
-        );
-      } catch (error) {
-        if (assistantMessageCreated) {
-          await compensateSetupFailure(error);
-        }
-        await removeLoadingStateSafely();
-        throw error;
-      }
-
-      const branchSessions = initialBranchPlans.slice(1).map((plan) =>
-        createBranchStreamSession({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: assistantMessageId,
-          branchId: plan.branchId,
-          model: plan.model,
-          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
-          streamMessages,
-            prepare: async (branchSessionId, startedAt) => {
-              await deps.conversationRepository.upsertBranchLoadingState({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId: branchSessionId,
-              messageId: assistantMessageId,
-              branchId: plan.branchId,
-                modelId: plan.modelId,
-                status: 'loading',
-                startedAt,
-                now: now(),
-              });
-          },
-        }),
-      );
-      const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
-
-        const done = (async (): Promise<ChatStreamResult> => {
-          let result: ChatStreamResult;
-          let hasLoggedFirstChunk = false;
-          let streamStartedAt: number | null = null;
-          try {
-            const startedAt = now();
-            await deps.conversationRepository.markLoadingStateStarted({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              startedAt,
-              now: startedAt,
-            });
-            logger.info('chat.stream.started', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              provider: resolvedModel.providerId,
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_STARTED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              modelId: model.id,
-              modelLabel: resolvedModel.modelLabel,
-              startedAt,
-            });
-
-            streamStartedAt = startedAt;
-            const response = await deps.streamText(
-            buildModelInvocation({
-              resolvedModel,
-              messages: streamMessages,
-              abortSignal: abortScope.signal,
-            }),
-          );
-
-          for await (const chunk of response.textStream) {
-            if (!hasLoggedFirstChunk) {
-              hasLoggedFirstChunk = true;
-              logger.info('chat.stream.first_chunk', {
-                normalizedUrl: input.normalizedUrl,
-                promptTab: input.promptTabId,
-                sessionId,
-                messageId: assistantMessageId,
-              });
-            }
-            await deps.conversationRepository.appendAssistantChunk({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              messageId: assistantMessageId,
-              chunk,
-              now: now(),
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CHUNK',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              chunk,
-            });
-          }
-
-          const finishedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
-          await deps.conversationRepository.finishAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            durationMs,
-            now: finishedAt,
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_FINISHED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            durationMs,
-          });
-          logger.info('chat.stream.completed', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status: 'done',
-            errorMessage: null,
-            persisted: true,
-          };
-        } catch (error) {
-          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
-          const failedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
-
-          await deps.conversationRepository.failAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            errorMessage: null,
-            status,
-            durationMs,
-            now: failedAt,
-          });
-          if (shouldRollbackOnFailure && status === 'error') {
-            await rollbackTurnMessagesSafely();
-          }
-
-          if (status === 'cancelled') {
-            logger.info('chat.stream.cancelled', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CANCELLED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              durationMs,
-            });
-          } else {
-            logger.error('chat.stream.failed', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              reason: errorMessage,
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_FAILED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              errorMessage,
-              durationMs,
-              ...(shouldRollbackOnFailure
-                ? {
-                    rollbackOnFailure: true,
-                    userMessageId,
-                  }
-                : {}),
-            });
-          }
-          if (shouldRollbackOnFailure && status === 'error') {
-            for (const branchSession of branchSessions) {
-              branchSession.cancel();
-            }
-            await branchResultsPromise;
-            await rollbackTurnMessagesSafely();
-          }
-
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status,
-            errorMessage,
-            persisted: !(shouldRollbackOnFailure && status === 'error'),
-          };
-        }
-        abortScope.clear();
-        const branchResults = await branchResultsPromise;
-        await removeLoadingStateSafely();
-        publishToPromptTabSafely({
-          type: 'LOADING_STATE_UPDATE',
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          status: resolveAggregateStatus([result, ...branchResults]),
-        });
-        return result;
-      })();
-
-      return {
-        sessionId,
-        userMessageId,
-        messageId: assistantMessageId,
-        branchId: primaryBranch.branchId,
-        modelId: model.id,
-        modelLabel: resolvedModel.modelLabel,
-        branches: initialBranchPlans.map(({ branchId, modelId, modelLabel }) => ({
-          branchId,
-          modelId,
-          modelLabel,
+        initialBranches: initialBranchPlans.map((plan) => ({
+          id: plan.branchId,
+          modelId: plan.modelId,
+          modelLabel: plan.modelLabel,
+          isPrimary: plan.isPrimary,
         })),
-        branchSessions,
-        cancel: () => {
-          abortScope.cancel();
-          for (const branchSession of branchSessions) {
-            branchSession.cancel();
-          }
-        },
-        done,
-      };
+        selectedBranchId: primaryBranch.branchId,
+        now: now(),
+      });
+      await saveTurnLoading({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: assistantMessageId,
+        sessionId,
+        initialBranchPlans,
+      });
+
+      return createTurnSession({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: assistantMessageId,
+        sessionId,
+        initialBranchPlans,
+        streamMessages,
+        requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
+        userMessageId,
+        rollbackOnFailure: input.rollbackOnFailure ?? false,
+      });
     },
 
     /** 编辑用户消息并裁剪其后结果，再重新生成主回答。 */
@@ -1568,7 +1380,6 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
 
       const sessionId = createSessionId();
       const assistantMessageId = createMessageId();
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       const initialBranchPlans = await resolveInitialBranchPlans({
         deps,
         config,
@@ -1587,15 +1398,6 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
-      const removeLoadingStateSafely = async () => {
-        try {
-          await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
-        } catch {
-          // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
-        }
-      };
-
       await deps.conversationRepository.editUserMessage({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -1611,232 +1413,23 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         selectedBranchId: primaryBranch.branchId,
         now: now(),
       });
-      await deps.conversationRepository.saveLoadingState(
-        createLoadingState({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          now: now(),
-        }),
-      );
-
-      const branchSessions = initialBranchPlans.slice(1).map((plan) =>
-        createBranchStreamSession({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: assistantMessageId,
-          branchId: plan.branchId,
-          model: plan.model,
-          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
-          streamMessages,
-            prepare: async (branchSessionId, startedAt) => {
-              await deps.conversationRepository.upsertBranchLoadingState({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId: branchSessionId,
-              messageId: assistantMessageId,
-              branchId: plan.branchId,
-                modelId: plan.modelId,
-                status: 'loading',
-                startedAt,
-                now: now(),
-              });
-          },
-        }),
-      );
-      const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
-
-        const done = (async (): Promise<ChatStreamResult> => {
-          let result: ChatStreamResult;
-          let hasLoggedFirstChunk = false;
-          let streamStartedAt: number | null = null;
-          try {
-            const startedAt = now();
-            await deps.conversationRepository.markLoadingStateStarted({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              startedAt,
-              now: startedAt,
-            });
-            logger.info('chat.stream.started', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              provider: resolvedModel.providerId,
-            });
-            publishToPromptTabSafely({
-            type: 'CHAT_STREAM_STARTED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              modelId: model.id,
-              modelLabel: resolvedModel.modelLabel,
-              startedAt,
-            });
-            streamStartedAt = startedAt;
-            const response = await deps.streamText(
-            buildModelInvocation({
-              resolvedModel,
-              messages: streamMessages,
-              abortSignal: abortScope.signal,
-            }),
-          );
-
-          for await (const chunk of response.textStream) {
-            if (!hasLoggedFirstChunk) {
-              hasLoggedFirstChunk = true;
-              logger.info('chat.stream.first_chunk', {
-                normalizedUrl: input.normalizedUrl,
-                promptTab: input.promptTabId,
-                sessionId,
-                messageId: assistantMessageId,
-              });
-            }
-            await deps.conversationRepository.appendAssistantChunk({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              messageId: assistantMessageId,
-              chunk,
-              now: now(),
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CHUNK',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              chunk,
-            });
-          }
-
-          const finishedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
-          await deps.conversationRepository.finishAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            durationMs,
-            now: finishedAt,
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_FINISHED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            durationMs,
-          });
-          logger.info('chat.stream.completed', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status: 'done',
-            errorMessage: null,
-            persisted: true,
-          };
-        } catch (error) {
-          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
-          const failedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
-          await deps.conversationRepository.failAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            errorMessage: null,
-            status,
-            durationMs,
-            now: failedAt,
-          });
-          if (status === 'cancelled') {
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CANCELLED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              durationMs,
-            });
-          } else {
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_FAILED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              errorMessage,
-              durationMs,
-            });
-          }
-          if (status === 'cancelled') {
-            logger.info('chat.stream.cancelled', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-            });
-          } else {
-            logger.error('chat.stream.failed', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              reason: errorMessage,
-            });
-          }
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status,
-            errorMessage,
-            persisted: true,
-          };
-        }
-
-        abortScope.clear();
-        const branchResults = await branchResultsPromise;
-        await removeLoadingStateSafely();
-        publishToPromptTabSafely({
-          type: 'LOADING_STATE_UPDATE',
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          status: resolveAggregateStatus([result, ...branchResults]),
-        });
-        return result;
-      })();
-
-      return {
-        sessionId,
+      await saveTurnLoading({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
         messageId: assistantMessageId,
-        branchId: primaryBranch.branchId,
-        modelId: model.id,
-        modelLabel: resolvedModel.modelLabel,
-        branches: initialBranchPlans.map(({ branchId, modelId, modelLabel }) => ({
-          branchId,
-          modelId,
-          modelLabel,
-        })),
-        branchSessions,
-        cancel: () => {
-          abortScope.cancel();
-          for (const branchSession of branchSessions) {
-            branchSession.cancel();
-          }
-        },
-        done,
-      };
+        sessionId,
+        initialBranchPlans,
+      });
+
+      return createTurnSession({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: assistantMessageId,
+        sessionId,
+        initialBranchPlans,
+        streamMessages,
+        requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
+      });
     },
 
     /** 重试目标用户消息，裁剪其后的结果并重新生成当前轮。 */
@@ -1893,7 +1486,6 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       const initialBranchPlans = await resolveInitialBranchPlans({
         deps,
         config,
@@ -1905,15 +1497,6 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       if (!primaryBranch) {
         throw new Error(`primary branch plan missing: ${input.promptTabId}`);
       }
-      const abortScope = createModelAbortScope(config.basic.llmRequestTimeoutSeconds);
-      const removeLoadingStateSafely = async () => {
-        try {
-          await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
-        } catch {
-          // 清理失败只允许留下残留状态，不允许把主结果改成 reject。
-        }
-      };
-
       await deps.conversationRepository.truncateMessagesAfter({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -1933,232 +1516,23 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         selectedBranchId: primaryBranch.branchId,
         now: now(),
       });
-      await deps.conversationRepository.saveLoadingState(
-        createLoadingState({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          now: now(),
-        }),
-      );
-
-      const branchSessions = initialBranchPlans.slice(1).map((plan) =>
-        createBranchStreamSession({
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          messageId: assistantMessageId,
-          branchId: plan.branchId,
-          model: plan.model,
-          requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
-          streamMessages,
-            prepare: async (branchSessionId, startedAt) => {
-              await deps.conversationRepository.upsertBranchLoadingState({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId: branchSessionId,
-              messageId: assistantMessageId,
-              branchId: plan.branchId,
-                modelId: plan.modelId,
-                status: 'loading',
-                startedAt,
-                now: now(),
-              });
-          },
-        }),
-      );
-      const branchResultsPromise = Promise.all(branchSessions.map((session) => session.done));
-
-        const done = (async (): Promise<ChatStreamResult> => {
-          let result: ChatStreamResult;
-          let hasLoggedFirstChunk = false;
-          let streamStartedAt: number | null = null;
-          try {
-            const startedAt = now();
-            await deps.conversationRepository.markLoadingStateStarted({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              startedAt,
-              now: startedAt,
-            });
-            logger.info('chat.stream.started', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              provider: resolvedModel.providerId,
-            });
-            publishToPromptTabSafely({
-            type: 'CHAT_STREAM_STARTED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              modelId: model.id,
-              modelLabel: resolvedModel.modelLabel,
-              startedAt,
-            });
-            streamStartedAt = startedAt;
-          const response = await deps.streamText(
-            buildModelInvocation({
-              resolvedModel,
-              messages: streamMessages,
-              abortSignal: abortScope.signal,
-            }),
-          );
-
-          for await (const chunk of response.textStream) {
-            if (!hasLoggedFirstChunk) {
-              hasLoggedFirstChunk = true;
-              logger.info('chat.stream.first_chunk', {
-                normalizedUrl: input.normalizedUrl,
-                promptTab: input.promptTabId,
-                sessionId,
-                messageId: assistantMessageId,
-              });
-            }
-            await deps.conversationRepository.appendAssistantChunk({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              messageId: assistantMessageId,
-              chunk,
-              now: now(),
-            });
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CHUNK',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              chunk,
-            });
-          }
-
-          const finishedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, finishedAt);
-          await deps.conversationRepository.finishAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            durationMs,
-            now: finishedAt,
-          });
-          publishToPromptTabSafely({
-            type: 'CHAT_STREAM_FINISHED',
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-            branchId: primaryBranch.branchId,
-            durationMs,
-          });
-          logger.info('chat.stream.completed', {
-            normalizedUrl: input.normalizedUrl,
-            promptTab: input.promptTabId,
-            sessionId,
-            messageId: assistantMessageId,
-          });
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status: 'done',
-            errorMessage: null,
-            persisted: true,
-          };
-        } catch (error) {
-          const { status, errorMessage } = resolveStreamFailure(error, abortScope, config.basic.llmRequestTimeoutSeconds);
-          const failedAt = now();
-          const durationMs = resolveInvocationDurationMs(streamStartedAt, failedAt);
-          await deps.conversationRepository.failAssistantMessage({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            messageId: assistantMessageId,
-            errorMessage: null,
-            status,
-            durationMs,
-            now: failedAt,
-          });
-          if (status === 'cancelled') {
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_CANCELLED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              durationMs,
-            });
-          } else {
-            publishToPromptTabSafely({
-              type: 'CHAT_STREAM_FAILED',
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              branchId: primaryBranch.branchId,
-              errorMessage,
-              durationMs,
-            });
-          }
-          if (status === 'cancelled') {
-            logger.info('chat.stream.cancelled', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-            });
-          } else {
-            logger.error('chat.stream.failed', {
-              normalizedUrl: input.normalizedUrl,
-              promptTab: input.promptTabId,
-              sessionId,
-              messageId: assistantMessageId,
-              reason: errorMessage,
-            });
-          }
-          result = {
-            sessionId,
-            messageId: assistantMessageId,
-            status,
-            errorMessage,
-            persisted: true,
-          };
-        }
-
-        abortScope.clear();
-        const branchResults = await branchResultsPromise;
-        await removeLoadingStateSafely();
-        publishToPromptTabSafely({
-          type: 'LOADING_STATE_UPDATE',
-          normalizedUrl: input.normalizedUrl,
-          promptTabId: input.promptTabId,
-          sessionId,
-          status: resolveAggregateStatus([result, ...branchResults]),
-        });
-        return result;
-      })();
-
-      return {
-        sessionId,
+      await saveTurnLoading({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
         messageId: assistantMessageId,
-        branchId: primaryBranch.branchId,
-        modelId: model.id,
-        modelLabel: resolvedModel.modelLabel,
-        branches: initialBranchPlans.map(({ branchId, modelId, modelLabel }) => ({
-          branchId,
-          modelId,
-          modelLabel,
-        })),
-        branchSessions,
-        cancel: () => {
-          abortScope.cancel();
-          for (const branchSession of branchSessions) {
-            branchSession.cancel();
-          }
-        },
-        done,
-      };
+        sessionId,
+        initialBranchPlans,
+      });
+
+      return createTurnSession({
+        normalizedUrl: input.normalizedUrl,
+        promptTabId: input.promptTabId,
+        messageId: assistantMessageId,
+        sessionId,
+        initialBranchPlans,
+        streamMessages,
+        requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
+      });
     },
 
     /** 重试目标助手分支，裁剪其后的结果并仅重跑该分支。 */
@@ -2202,6 +1576,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
+      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
       await deps.conversationRepository.truncateMessagesAfter({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -2215,27 +1590,15 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         branchId: input.branchId,
         now: now(),
       });
-      return createBranchStreamSession({
+      return createStreamSession({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         messageId: input.messageId,
         branchId: input.branchId,
         model,
+        resolvedModel,
         requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
         streamMessages,
-          prepare: async (sessionId, startedAt) => {
-            await deps.conversationRepository.upsertBranchLoadingState({
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: input.promptTabId,
-            sessionId,
-            messageId: input.messageId,
-            branchId: input.branchId,
-              modelId: model.id,
-              status: 'loading',
-              startedAt,
-              now: now(),
-            });
-        },
       });
     },
 
@@ -2292,27 +1655,15 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       });
 
       return [
-        createBranchStreamSession({
+        createStreamSession({
           normalizedUrl: input.normalizedUrl,
           promptTabId: input.promptTabId,
           messageId: input.messageId,
           branchId,
           model,
+          resolvedModel,
           requestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
           streamMessages: branchMessages,
-            prepare: async (sessionId, startedAt) => {
-              await deps.conversationRepository.upsertBranchLoadingState({
-              normalizedUrl: input.normalizedUrl,
-              promptTabId: input.promptTabId,
-              sessionId,
-              messageId: input.messageId,
-              branchId,
-                modelId: model.id,
-                status: 'loading',
-                startedAt,
-                now: now(),
-              });
-          },
         }),
       ];
     },

@@ -1,3 +1,4 @@
+import { createStorageRepository } from './chrome-local-adapter';
 import {
   applySystemConfigSeeds,
   createDefaultConfig,
@@ -12,7 +13,7 @@ import { CONFIG_STORAGE_KEY } from '../shared/storage-keys';
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 
 /** 配置仓储，统一收口读取、写入和导入校验。 */
-export const createConfigRepository = (storage: ChromeLocalAdapter) => {
+export const createConfigRepository = (storage: ChromeLocalAdapter) => createStorageRepository(storage, (storage) => {
   const readConfig = async () => {
     const result = await storage.get<Record<string, unknown>>([CONFIG_STORAGE_KEY]);
     const saved = result[CONFIG_STORAGE_KEY];
@@ -91,4 +92,4 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => {
       return config.models.find((model) => model.id === modelId) ?? null;
     },
   };
-};
+});

@@ -1,23 +1,6 @@
+import type { ExtractionMethod } from '../../domain/page/page-schema';
 import { normalizePageUrl } from '../../domain/page/page-schema';
-
-type ExtractionMethod = 'readability' | 'jina';
-
-type PageSource = {
-  /** 页面 URL。 */
-  url: string;
-  /** 页面标题。 */
-  title: string;
-  /** 页面 HTML。 */
-  html: string;
-  /** 页面纯文本。 */
-  text: string;
-  /** 页面 favicon。 */
-  faviconUrl: string;
-  /** content script 内预提取的 Readability Markdown。 */
-  readabilityContent?: string;
-  /** content script 内预提取的 Readability 标题。 */
-  readabilityTitle?: string;
-};
+import type { CollectPageSourceInput, PageSource } from './page-source';
 
 type ExtractionLogger = {
   /** 记录信息日志。 */
@@ -29,13 +12,6 @@ type ExtractionLogger = {
 };
 
 type LoggerMethod = (...args: [string, (Record<string, unknown> | undefined)?]) => void;
-
-type ReadabilityResult = {
-  /** 提取后的正文。 */
-  content: string;
-  /** 提取后的标题。 */
-  title: string;
-};
 
 type ExtractionInput = {
   /** 浏览器标签页 id。 */
@@ -70,11 +46,7 @@ type ExtractionDependencies = {
   logger: ExtractionLogger;
   /** 页面源采集器。 */
   contentSource: {
-    collect: (...args: [{ tabId: number }]) => Promise<PageSource>;
-  };
-  /** Readability 提取器。 */
-  readabilityExtractor: {
-    extract: (...args: [string, string]) => ReadabilityResult | null;
+    collect: (...args: [CollectPageSourceInput]) => Promise<PageSource>;
   };
   /** Jina 客户端。 */
   jinaClient: {
@@ -88,17 +60,13 @@ type ExtractionDependencies = {
 
 /** 创建提取服务，按指定方法提取并写回对应方法缓存。 */
 export const createExtractionService = (dependencies: ExtractionDependencies) => {
-  const { logger, contentSource, readabilityExtractor, jinaClient, pageRepository } = dependencies;
+  const { logger, contentSource, jinaClient, pageRepository } = dependencies;
 
   return {
     /** 采集页面内容并写回页面仓储。 */
     async extractPage(input: ExtractionInput): Promise<SavedExtractionResult> {
-      const pageSource = await contentSource.collect({ tabId: input.tabId });
+      const pageSource = await contentSource.collect({ tabId: input.tabId, method: input.method });
       const normalizedUrl = normalizePageUrl(pageSource.url);
-
-      if (!pageSource.html.trim()) {
-        throw new Error('empty html');
-      }
 
       logger.info('extraction.started', {
         tabId: input.tabId,
@@ -106,19 +74,8 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
         method: input.method,
       });
 
-      if (input.method === 'readability' && pageSource.readabilityContent?.trim()) {
-        return pageRepository.saveExtractionResult({
-          normalizedUrl,
-          url: pageSource.url,
-          title: pageSource.readabilityTitle?.trim() || pageSource.title,
-          faviconUrl: pageSource.faviconUrl,
-          content: pageSource.readabilityContent,
-          extractionMethod: 'readability',
-        });
-      }
-
       if (input.method === 'readability') {
-        const parsed = readabilityExtractor.extract(pageSource.html, pageSource.url);
+        const parsed = pageSource.readability;
         if (!parsed?.content.trim()) {
           logger.warn('extraction.readability_failed', {
             tabId: input.tabId,
@@ -130,7 +87,7 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
         return pageRepository.saveExtractionResult({
           normalizedUrl,
           url: pageSource.url,
-          title: parsed.title || pageSource.title,
+          title: parsed.title.trim() || pageSource.title,
           faviconUrl: pageSource.faviconUrl,
           content: parsed.content,
           extractionMethod: 'readability',

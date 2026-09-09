@@ -15,8 +15,8 @@
 
 负责：
 
-- 通过 content script 获取 HTML 和页面元数据。
-- 使用 Readability 提取正文。
+- 通过 content script 按提取方法获取正文和页面元数据。
+- 在 content script 中使用 Readability 提取正文并转换成 Markdown。
 - 使用 Jina 提取正文。
 - 消费基础设置中的 Jina API Key、Jina 响应模板和默认提取方法。
 - 更新页面记录中对应方法的正文缓存、当前正文镜像、方法和时间戳。
@@ -48,6 +48,7 @@
 - 手动重新提取时只刷新当前方法缓存。
 - 页面级清空后点击快捷 `promptTab` 且缺少页面正文时，side panel 以 `prompt_tab_click` 来源触发一次 Readability 提取，成功后只继续发送当前快捷 `promptTab`。
 - Readability 失败时直接失败并保留旧 Readability 缓存，不回退 Jina。
+- Readability 请求只返回 Markdown 正文和元数据；Jina 请求只返回 URL、标题和图标，不执行本地 Readability，也不传输完整 HTML 或纯文本副本。
 - 调用 Jina 时会带上用户配置的可选 API Key。
 - Jina 返回正文后会按 `jinaResponseTemplate` 生成最终文本：
   - 模板包含 `{{content}}` 时做占位替换。
@@ -61,10 +62,9 @@
   - 先尝试一次按需注入 content script。
   - 注入后仍不可用，再执行一次自动刷新重试。
   - 自动刷新后仍失败时返回连接错误并允许上层手动重试。
-- HTML 为空：
-  - 直接失败，不发送空内容到 Jina。
 - Readability 失败：
   - 保留旧 Readability 缓存并上报错误。
+  - 不在 background 使用正则表达式去标签来伪装 Readability 成功。
 - Jina 失败：
   - 保留旧缓存并上报错误。
 - Jina 模板为空：
@@ -102,6 +102,7 @@
 
 - 职责测试：Readability 提取、Readability 失败不回退、Jina 提取、方法切换读缓存、Jina API Key 与响应模板生效。
 - 边界测试：空正文、极短正文、复杂 DOM。
+- 消息契约测试：Jina 不触发 DOM 正文提取，Readability/Jina 响应均不包含 HTML 和纯文本副本。
 - 错误流测试：content script 未连接、Jina 失败。
 - 异常流测试：自动刷新重试、手动重试提取、切换方法后刷新。
 - 不变量测试：页面级状态不串页。

@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,6 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG } from '../../../src/domain/config/assistant-markdown-display-config';
 import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../../src/domain/config/config-schema';
 import { ChatThread } from '../../../src/features/sidebar/chat-thread';
+import { ChatMarkdown } from '../../../src/features/workspace/chat-markdown';
+
+vi.mock('../../../src/features/workspace/chat-markdown', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/features/workspace/chat-markdown')>();
+  return {
+    ...original,
+    ChatMarkdown: vi.fn((props: ComponentProps<typeof original.ChatMarkdown>) => <original.ChatMarkdown {...props} />),
+  };
+});
 
 const translations: Record<string, string> = {
   'common.cancel': '取消',
@@ -106,6 +116,33 @@ beforeEach(() => {
 });
 
 describe('ChatThread', () => {
+  it('父级只替换事件闭包时复用消息渲染，并转发到最新回调', () => {
+    const props = createBaseProps();
+    const messages: ComponentProps<typeof ChatThread>['messages'] = [{
+      id: 'user-1',
+      role: 'user',
+      content: '原始问题',
+      status: 'done',
+      errorMessage: null,
+      branches: [],
+      selectedBranchId: null,
+    }];
+    const { rerender } = render(<ChatThread {...props} messages={messages} />);
+    const initialMarkdownRenderCount = vi.mocked(ChatMarkdown).mock.calls.length;
+    const onStartEdit = vi.fn();
+
+    rerender(<ChatThread {...props} messages={messages} onStartEdit={onStartEdit} />);
+
+    expect(vi.mocked(ChatMarkdown).mock.calls.length).toBe(initialMarkdownRenderCount);
+    fireEvent.mouseEnter(screen.getByTestId('chat-message-user-1'));
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(props.onStartEdit).not.toHaveBeenCalled();
+    expect(onStartEdit).toHaveBeenCalledWith('user-1', '原始问题');
+
+    rerender(<ChatThread {...props} messages={[{ ...messages[0]!, content: '更新的问题' }]} onStartEdit={onStartEdit} />);
+    expect(screen.getByText('更新的问题')).toBeVisible();
+  });
+
   it('助手分支按 Markdown 渲染，头部模型名和预览按钮作为整体居中显示', () => {
     const onOpenBranchPreview = vi.fn();
 

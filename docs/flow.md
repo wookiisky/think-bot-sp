@@ -142,7 +142,7 @@
 1. side panel 在初始化时先发起 `GET_SIDEBAR_BOOTSTRAP`，需要提取时再发起带来源标记的 `RE_EXTRACT_CONTENT`；只有“打开侧边栏流程”里的提取会继续进入自动触发编排。
 2. background 先返回缓存、页面状态、`promptTab` 会话摘要、loading 状态和黑名单判定结果。
 3. 若页面已有有效缓存，则不重复提取。
-4. 若页面无缓存且当前打开流程已通过黑名单校验，background 请求 content script 提供页面 HTML 和元数据。
+4. 若页面无缓存且当前打开流程已通过黑名单校验，background 请求 content script 按提取方法提供正文和元数据；Readability 在 content script 完成，Jina 只采集元数据。
 5. 若 content script 未连上，background 先尝试按需注入 content script，再进入一次自动刷新重连。
 6. 提取服务优先使用 Readability。
 7. Readability 成功则保存页面内容、提取方式、更新时间。

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import {
   CheckIcon,
   ChevronsDownIcon,
@@ -168,8 +168,55 @@ type AssistantBranchRailProps = {
   onDeleteBranch: ChatThreadProps['onDeleteBranch'];
 };
 
+/** 保持回调引用稳定，同时在提交后转发给最新闭包。 */
+const useStableCallback = <Args extends unknown[], Result>(callback: (...args: Args) => Result) => {
+  const callbackRef = useRef(callback);
+  useLayoutEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+  return useCallback((...args: Args) => callbackRef.current(...args), []);
+};
+
+const ignoreBranchPreview = () => {};
+
+/** Shell 的内联回调不影响消息区复用，显示数据仍由默认浅比较检查。 */
+export const ChatThread = (props: ChatThreadProps) => {
+  const onStartEdit = useStableCallback(props.onStartEdit);
+  const onEditingTextChange = useStableCallback(props.onEditingTextChange);
+  const onCancelEdit = useStableCallback(props.onCancelEdit);
+  const onSubmitEdit = useStableCallback(props.onSubmitEdit);
+  const onRetryUserMessage = useStableCallback(props.onRetryUserMessage);
+  const onRetryAssistantMessage = useStableCallback(props.onRetryAssistantMessage);
+  const onSelectAssistantBranch = useStableCallback(props.onSelectAssistantBranch);
+  const onExpandBranches = useStableCallback(props.onExpandBranches);
+  const onStop = useStableCallback(props.onStop);
+  const onStopBranch = useStableCallback(props.onStopBranch);
+  const onDeleteBranch = useStableCallback(props.onDeleteBranch);
+  const onOpenBranchPreview = useStableCallback(props.onOpenBranchPreview ?? ignoreBranchPreview);
+  const onToast = useStableCallback(props.onToast);
+
+  return (
+    <ChatThreadContent
+      {...props}
+      onStartEdit={onStartEdit}
+      onEditingTextChange={onEditingTextChange}
+      onCancelEdit={onCancelEdit}
+      onSubmitEdit={onSubmitEdit}
+      onRetryUserMessage={onRetryUserMessage}
+      onRetryAssistantMessage={onRetryAssistantMessage}
+      onSelectAssistantBranch={onSelectAssistantBranch}
+      onExpandBranches={onExpandBranches}
+      onStop={onStop}
+      onStopBranch={onStopBranch}
+      onDeleteBranch={onDeleteBranch}
+      onOpenBranchPreview={onOpenBranchPreview}
+      onToast={onToast}
+    />
+  );
+};
+
 /** 侧边栏聊天消息区。 */
-export const ChatThread = ({
+const ChatThreadContent = memo(function ChatThreadContent({
   messages,
   restoreMessageId: _restoreMessageId,
   availableBranchModels,
@@ -190,7 +237,7 @@ export const ChatThread = ({
   onDeleteBranch,
   onOpenBranchPreview,
   onToast,
-}: ChatThreadProps) => {
+}: ChatThreadProps) {
   const branchRefs = useRef<Record<string, HTMLElement | null>>({});
   const threadViewportRef = useRef<HTMLElement | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
@@ -236,13 +283,12 @@ export const ChatThread = ({
     >
       <div className="min-w-0 w-full divide-y divide-border/70">
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
-        {messages.map((message) => {
-          const messageIndex = messages.findIndex((current) => current.id === message.id);
+        {messages.map((message, messageIndex) => {
           const isEditing = message.role === 'user' && editingMessageId === message.id;
           const visibleContent = message.displayContent ?? message.content;
           const displayBranches = resolveDisplayBranches(message, t('workspace.status.primaryBranch'));
           const hasAssistantBranches = message.role === 'assistant' && displayBranches.length > 0;
-          const canSelectAssistantBranch = message.role === 'assistant' && messages.slice(messageIndex + 1).length === 0;
+          const canSelectAssistantBranch = message.role === 'assistant' && messageIndex === messages.length - 1;
 
           return (
             <div
@@ -393,7 +439,7 @@ export const ChatThread = ({
       </div>
     </section>
   );
-};
+});
 
 /** 助手分支阅读区，包含上下同步滚动条和固定定位按钮栏。 */
 const AssistantBranchRail = ({

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -859,4 +859,156 @@ describe('ConversationsShell', () => {
     expect(loadingQuickTab.className).toContain('border-transparent');
     expect(loadingQuickTab.className).not.toContain('bg-background');
   });
+});
+
+
+/** 用可手动完成的请求覆盖页面切换期间的真实异步顺序。 */
+const deferred = <T,>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+};
+
+const createTwoPageApi = async () => {
+  const api = createConversationsApi();
+  const pageA = await api.getPageDetail();
+  const pageB = {
+    ...pageA,
+    page: {
+      ...pageA.page,
+      id: 'https://example.com/article-b',
+      url: 'https://example.com/article-b',
+      normalizedUrl: 'https://example.com/article-b',
+      title: '页面 B',
+      content: '正文 B',
+    },
+    conversations: [{
+      ...pageA.conversations[0],
+      id: 'page-b:chat',
+      normalizedUrl: 'https://example.com/article-b',
+      promptTabId: 'chat',
+      messages: [{ id: 'b-user', role: 'user', content: 'B 的既有消息', status: 'done', errorMessage: null, branches: [], selectedBranchId: null }],
+    }],
+  };
+  api.getPageDetail.mockImplementation((url: string) => Promise.resolve(url.endsWith('article-b') ? pageB : pageA));
+  return { api, pageA, pageB };
+};
+
+const selectPageB = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(within(screen.getByTestId('conversations-page-list')).getByRole('button', { name: '页面 B' }));
+};
+
+describe('ConversationsShell 页面命令归属', () => {
+  it.each(['success', 'failure'] as const)('切页后忽略旧页面发送的 %s 响应', async (outcome) => {
+    const user = userEvent.setup();
+    const { api } = await createTwoPageApi();
+    const sendResponse = await api.sendChat();
+    const send = deferred<typeof sendResponse>();
+    api.sendChat.mockImplementation(() => send.promise);
+    render(<ConversationsShell api={api} />);
+    await screen.findByText('正文 A');
+    await user.type(screen.getByLabelText('聊天输入'), 'A 页面消息');
+    await user.click(screen.getByRole('button', { name: '发送' }));
+    await selectPageB(user);
+    await screen.findByText('正文 B');
+    await act(async () => {
+      if (outcome === 'success') send.resolve(sendResponse);
+      else send.reject(new Error('A 请求失败'));
+    });
+    expect(screen.queryByTestId('chat-message-assistant-1')).toBeNull();
+    expect(screen.queryByText('A 请求失败')).toBeNull();
+    expect(screen.getByText('B 的既有消息')).toBeVisible();
+    expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+  });
+
+  it('切页后完成旧页面清空不清除当前页消息', async () => {
+    const user = userEvent.setup();
+    const { api } = await createTwoPageApi();
+    const clear = deferred<unknown>();
+    api.clearTabConversation.mockImplementation(() => clear.promise);
+    render(<ConversationsShell api={api} />);
+    await screen.findByText('正文 A');
+    await user.click(screen.getByRole('button', { name: '清空当前标签' }));
+    await user.click(within(screen.getByTestId('clear-tab-confirm')).getByRole('button', { name: '清空当前标签' }));
+    await selectPageB(user);
+    await screen.findByText('正文 B');
+    await act(async () => { clear.resolve({}); });
+    expect(screen.getByText('B 的既有消息')).toBeVisible();
+  });
+
+  it('新页面详情完成前禁用发送，不能将旧草稿发到新页面', async () => {
+    const user = userEvent.setup();
+    const { api, pageA, pageB } = await createTwoPageApi();
+    const detail = deferred<typeof pageB>();
+    api.getPageDetail.mockImplementation((url: string) => url.endsWith('article-b') ? detail.promise : Promise.resolve(pageA));
+    render(<ConversationsShell api={api} />);
+    await screen.findByText('正文 A');
+    await user.type(screen.getByLabelText('聊天输入'), 'A 的草稿');
+    await selectPageB(user);
+    expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
+    expect(api.sendChat).not.toHaveBeenCalled();
+    await act(async () => { detail.resolve(pageB); });
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('');
+    expect(screen.getByText('正文 B')).toBeVisible();
+  });
+});
+
+it('切换标签后继续消费原标签的流，切回时展示完整终态', async () => {
+  const user = userEvent.setup();
+  const listeners = new Map<string, PortMessageListener>();
+  const api = createConversationsApi({
+    connectStream: vi.fn(({ promptTabId }: { promptTabId: string }) => ({
+      disconnect: vi.fn(() => listeners.delete(promptTabId)),
+      onMessage: {
+        addListener: vi.fn((listener: PortMessageListener) => listeners.set(promptTabId, listener)),
+        removeListener: vi.fn(() => listeners.delete(promptTabId)),
+      },
+    })),
+  });
+  const config = await api.getConfig();
+  api.getConfig.mockResolvedValue({ ...config, config: { ...config.config, quickInputs: [quickInputConfig] } });
+  const detail = await api.getPageDetail();
+  api.getPageDetail.mockResolvedValue({
+    ...detail,
+    conversations: [...detail.conversations, {
+      ...detail.conversations[0],
+      id: 'article-a:quick-review',
+      promptTabId: 'quick-review',
+      messages: [{ id: 'review-user', role: 'user', content: '既有审阅', status: 'done', errorMessage: null, branches: [], selectedBranchId: null }],
+    }],
+  });
+  render(<ConversationsShell api={api} />);
+  await screen.findByText('正文 A');
+  await user.type(screen.getByLabelText('聊天输入'), '开始聊天');
+  await user.click(screen.getByRole('button', { name: '发送' }));
+  const eventIdentity = {
+    normalizedUrl: 'https://example.com/article-a',
+    promptTabId: 'chat',
+    sessionId: 'session-1',
+    messageId: 'assistant-1',
+    branchId: 'branch-1',
+  };
+  await act(async () => {
+    emitPortMessage(listeners.get('chat') ?? null, {
+      ...eventIdentity, type: 'CHAT_STREAM_STARTED', modelId: 'model-1', modelLabel: '模型一', startedAt: Date.now(),
+    });
+    emitPortMessage(listeners.get('chat') ?? null, { ...eventIdentity, type: 'CHAT_STREAM_CHUNK', chunk: '完整' });
+  });
+  await user.click(screen.getByRole('tab', { name: /快速审阅/ }));
+  expect(listeners.has('chat')).toBe(true);
+  expect(api.connectStream).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    emitPortMessage(listeners.get('chat') ?? null, { ...eventIdentity, type: 'CHAT_STREAM_CHUNK', chunk: '回复' });
+    emitPortMessage(listeners.get('chat') ?? null, { ...eventIdentity, type: 'CHAT_STREAM_FINISHED', durationMs: 500 });
+    emitPortMessage(listeners.get('chat') ?? null, { ...eventIdentity, type: 'LOADING_STATE_UPDATE', status: 'done' });
+  });
+  await user.click(screen.getByRole('tab', { name: '聊天' }));
+  expect(within(screen.getByRole('tabpanel')).getByText('完整回复')).toBeVisible();
+  expect(screen.queryByTestId('prompt-tab-loading-chat')).toBeNull();
+  expect(screen.queryByTestId('branch-loading-elapsed-branch-1')).toBeNull();
+  expect(api.connectStream).toHaveBeenCalledTimes(2);
 });

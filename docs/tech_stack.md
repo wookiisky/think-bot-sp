@@ -6,6 +6,7 @@
 - 构建框架：WXT
 - UI 框架：React 18
 - 语言：TypeScript Strict Mode
+- JavaScript 发布脚本通过 JSDoc 与 TypeScript 一起检查，保留 Node.js 直接执行能力。
 - 构建工具：Vite
 - 包管理：pnpm
 - Node.js：LTS 版本线，默认按 20+ 执行
@@ -67,10 +68,12 @@
 
 - `ai`（Vercel AI SDK Core）
   - 统一文本生成、流式输出、Provider 适配。
-- `@ai-sdk/openai`
+  - 使用 v5，与 Provider 的 `v2` 模型协议保持一致。
 - `@ai-sdk/openai-compatible`
 - `@ai-sdk/google`
+  - 同时用于 Gemini 与采用 API Key 的 Vertex Express 请求。
 - `@ai-sdk/anthropic`
+- `@ai-sdk/amazon-bedrock` v3
 
 选型原因：
 
@@ -114,6 +117,8 @@
 测试基线要求：
 
 - 自动化用例必须覆盖 side panel 两阶段 bootstrap、黑名单先确认后提取、`browserTab` 切换后不自动恢复、空导出失败。
+- `pnpm typecheck` 检查应用、测试和带 `@ts-check` 的发布脚本；构建成功不能替代类型检查。
+- Provider 契约测试使用真实 SDK 工厂和本地请求替身，验证模型协议与请求映射，不调用付费模型。
 
 ## 8. 调试与可观测性
 

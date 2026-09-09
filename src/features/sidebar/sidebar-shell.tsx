@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -55,11 +55,12 @@ import {
   type EditingState,
   type ModelOption,
   type PromptTabDefinition,
-  upsertAssistantFailure,
   syncAssistantMessageState,
-  upsertAssistantBranch,
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
+import { usePageScope } from '../workspace/use-page-scope';
+import { reduceWorkspaceEvent } from '../workspace/workspace-stream-state';
+import { getWorkspaceSessionUpdate } from '../workspace/workspace-session-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
 import {
   createWorkspaceTranslator,
@@ -130,12 +131,15 @@ const EXTRACTION_METHOD_OPTION_ACTIVE_CLASS = 'bg-primary text-primary-foregroun
 const getDefaultChatTabLabel = (resources: ReturnType<typeof loadWorkspaceLocaleResources> | null, locale: WorkspaceLocaleCode) =>
   resources?.t('workspace.chatTab', locale) ?? 'Chat';
 
+const EMPTY_MESSAGES: ChatMessageState[] = [];
+
 /** 把未知错误收敛为当前回复可展示文案。 */
 const getReplyErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
 
 /** 渲染阶段 5 的多 promptTab 侧边栏工作台。 */
 export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
+  const isCurrentPage = usePageScope(`${tabId}:${pageUrl}`);
   const [localeResources, setLocaleResources] = useState<ReturnType<typeof loadWorkspaceLocaleResources>>(loadWorkspaceLocaleResources());
   const [localeCode, setLocaleCode] = useState<WorkspaceLocaleCode>('zh-CN');
   const [state, setState] = useState<SidebarState>('bootstrapping');
@@ -177,7 +181,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const themeRootAttributes = useDocumentTheme(themePreference);
   const terminalSessionIdsRef = useRef<Set<string>>(new Set());
-  const t = createWorkspaceTranslator(localeResources, localeCode);
+  const t = useMemo(() => createWorkspaceTranslator(localeResources, localeCode), [localeResources, localeCode]);
   const promptTabSubscriptionKey = JSON.stringify(promptTabs.map((promptTab) => promptTab.id));
 
   const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? promptTabs[0] ?? null;
@@ -245,10 +249,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 更新单个标签的消息列表。 */
   const setPromptTabMessages = (promptTabId: string, update: (_current: ChatMessageState[]) => ChatMessageState[]) => {
-    setMessageMap((current) => ({
-      ...current,
-      [promptTabId]: update(current[promptTabId] ?? []),
-    }));
+    setMessageMap((current) => {
+      const messages = current[promptTabId] ?? EMPTY_MESSAGES;
+      const nextMessages = update(messages);
+      return nextMessages === messages ? current : { ...current, [promptTabId]: nextMessages };
+    });
   };
 
   /** 标记会话重新进入活动态。 */
@@ -311,14 +316,17 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       method: nextMethod,
       source,
     });
-    setContent(extraction.payload.content);
-    setMethod(extraction.payload.extractionMethod);
-    setState('ready');
+    if (isCurrentPage()) {
+      setContent(extraction.payload.content);
+      setMethod(extraction.payload.extractionMethod);
+      setState('ready');
+    }
     return extraction.payload;
   };
 
   /** 复制当前提取内容。 */
   const handleCopyExtraction = async () => {
+    if (!isCurrentPage()) return;
     if (!normalizedExtractionContent) {
       pushToast('error', t('sidebar.notice.emptyExtraction'));
       return;
@@ -326,25 +334,30 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
     try {
       await navigator.clipboard.writeText(normalizedExtractionContent);
+      if (!isCurrentPage()) return;
       pushToast('success', t('sidebar.notice.copySuccess'));
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('sidebar.notice.copyFailed'));
     }
   };
 
   /** 按当前方法重新提取。 */
   const handleReExtract = async () => {
+    if (!isCurrentPage()) return;
     if (!canTriggerExtractionAction) {
       return;
     }
 
     try {
       await runExtraction(method, 'manual_reextract');
+      if (!isCurrentPage()) return;
       pushToast(
         'success',
         method === 'readability' ? t('sidebar.notice.switchMethodReadability') : t('sidebar.notice.switchMethodJina'),
       );
     } catch {
+      if (!isCurrentPage()) return;
       setState('error');
       pushToast('error', t('sidebar.notice.reExtractFailed'));
     }
@@ -352,8 +365,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 清空当前页面缓存与会话，但保留各标签本地草稿。 */
   const handleClearPageContext = async () => {
+    if (!isCurrentPage()) return;
     try {
       await api.clearPageContext({ tabId, pageUrl });
+      if (!isCurrentPage()) return;
       setContent('');
       setMessageMap(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, []])));
       setRestoreMessageIds(Object.fromEntries(promptTabs.map((promptTab) => [promptTab.id, null])));
@@ -370,33 +385,43 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setState('ready');
       }
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('sidebar.notice.clearPageFailed'));
     }
   };
 
   /** 打开历史页。 */
   const handleOpenHistoryPage = async () => {
+    if (!isCurrentPage()) return;
     try {
       await api.openHistoryPage();
+      if (!isCurrentPage()) return;
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('sidebar.notice.openHistoryFailed'));
     }
   };
 
   /** 打开设置页。 */
   const handleOpenSettingsPage = async () => {
+    if (!isCurrentPage()) return;
     try {
       await api.openSettingsPage();
+      if (!isCurrentPage()) return;
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('sidebar.notice.openSettingsFailed'));
     }
   };
 
   /** 打开 GitHub 仓库。 */
   const handleOpenGithubProject = async () => {
+    if (!isCurrentPage()) return;
     try {
       await api.openGithubProject();
+      if (!isCurrentPage()) return;
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('sidebar.notice.openGithubFailed'));
     }
   };
@@ -415,6 +440,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       });
 
       const handlePortMessage = (event: unknown) => {
+        if (!isCurrentPage()) return;
         const parsed = sidebarPortEventSchema.safeParse(event);
         if (!parsed.success) {
           return;
@@ -426,346 +452,23 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }
         const promptTabId = payload.promptTabId;
 
-        switch (payload.type) {
-          case 'CHAT_STREAM_STARTED':
-            if (typeof payload.sessionId === 'string') {
-              markSessionActive(payload.sessionId as string);
-              setActiveSessionIds((current) => ({
-                ...current,
-                [promptTabId]: payload.sessionId as string,
-              }));
-            }
-            if (typeof payload.messageId === 'string') {
-              setRestoreMessageIds((current) => ({
-                ...current,
-                [promptTabId]: payload.messageId as string,
-              }));
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content: message?.content ?? '',
-                  status: 'loading',
-                  errorMessage: null,
-                  branches:
-                    typeof payload.branchId === 'string' && typeof payload.modelId === 'string' && typeof payload.modelLabel === 'string'
-                      ? [
-                          ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
-                          {
-                            id: payload.branchId,
-                            modelId: payload.modelId,
-                            modelLabel: payload.modelLabel,
-                            isPrimary: true,
-                            content: message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? '',
-                            status: 'loading',
-                            errorMessage: null,
-                            durationMs: null,
-                            startedAt: payload.startedAt,
-                          },
-                        ]
-                      : message?.branches ?? [],
-                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
-                })),
-              );
-            }
-            return;
-          case 'CHAT_STREAM_CHUNK':
-            if (typeof payload.sessionId === 'string') {
-              setActiveSessionIds((current) => ({
-                ...current,
-                [promptTabId]: payload.sessionId as string,
-              }));
-            }
-            if (typeof payload.messageId === 'string' && typeof payload.chunk === 'string') {
-              setRestoreMessageIds((current) => ({
-                ...current,
-                [promptTabId]: payload.messageId as string,
-              }));
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content:
-                    typeof payload.branchId === 'string' && (message?.selectedBranchId === payload.branchId || (!message?.selectedBranchId && message?.branches[0]?.id === payload.branchId))
-                      ? `${message?.content ?? ''}${payload.chunk as string}`
-                      : message?.content ?? '',
-                  status: 'loading',
-                  errorMessage: null,
-                  branches:
-                    typeof payload.branchId === 'string'
-                      ? [
-                          ...(message?.branches.filter((branch) => branch.id !== payload.branchId) ?? []),
-                          {
-                            id: payload.branchId,
-                            modelId: message?.branches.find((branch) => branch.id === payload.branchId)?.modelId ?? '',
-                            modelLabel: message?.branches.find((branch) => branch.id === payload.branchId)?.modelLabel ?? t('workspace.status.primaryBranch'),
-                            isPrimary: message?.branches.find((branch) => branch.id === payload.branchId)?.isPrimary ?? true,
-                            content: `${message?.branches.find((branch) => branch.id === payload.branchId)?.content ?? ''}${payload.chunk as string}`,
-                            status: 'loading',
-                            errorMessage: null,
-                            durationMs: message?.branches.find((branch) => branch.id === payload.branchId)?.durationMs ?? null,
-                            startedAt: message?.branches.find((branch) => branch.id === payload.branchId)?.startedAt ?? null,
-                          },
-                        ]
-                      : message?.branches ?? [],
-                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
-                })),
-              );
-            }
-            return;
-          case 'CHAT_STREAM_FINISHED':
-            if (typeof payload.sessionId === 'string') {
-              markSessionTerminal(payload.sessionId as string);
-            }
-            if (typeof payload.messageId === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content: message?.content ?? '',
-                  status: 'done',
-                  errorMessage: null,
-                  branches:
-                    typeof payload.branchId === 'string'
-                      ? (message?.branches ?? []).map((branch) =>
-                          branch.id === payload.branchId
-                            ? {
-                                ...branch,
-                                status: 'done',
-                                errorMessage: null,
-                                durationMs: payload.durationMs,
-                                startedAt: null,
-                              }
-                            : branch,
-                        )
-                      : message?.branches ?? [],
-                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
-                })),
-              );
-            }
-            return;
-          case 'CHAT_STREAM_FAILED': {
-            const chatFailureMessage =
-              typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error');
-            if (typeof payload.sessionId === 'string') {
-              markSessionTerminal(payload.sessionId as string);
-            }
-            setActiveSessionIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            setRestoreMessageIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            if (typeof payload.messageId === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantFailure(current, {
-                  messageId: payload.messageId as string,
-                  branchId: typeof payload.branchId === 'string' ? (payload.branchId as string) : `${payload.messageId as string}:primary`,
-                  errorMessage: chatFailureMessage,
-                  modelId: '',
-                  modelLabel: t('workspace.status.primaryBranch'),
-                  isPrimary: true,
-                  durationMs: payload.durationMs,
-                  startedAt: null,
-                }),
-              );
-            }
-            return;
-          }
-          case 'CHAT_STREAM_CANCELLED':
-            if (typeof payload.sessionId === 'string') {
-              markSessionTerminal(payload.sessionId as string);
-            }
-            setActiveSessionIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            setRestoreMessageIds((current) => ({
-              ...current,
-              [promptTabId]: null,
-            }));
-            if (typeof payload.messageId === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => ({
-                  id: payload.messageId as string,
-                  role: 'assistant',
-                  content: message?.content ?? '',
-                  status: 'cancelled',
-                  errorMessage: t('workspace.status.cancelled'),
-                  branches:
-                    typeof payload.branchId === 'string'
-                      ? (message?.branches ?? []).map((branch) =>
-                          branch.id === payload.branchId
-                            ? {
-                                ...branch,
-                                status: 'cancelled',
-                                errorMessage: t('workspace.status.cancelled'),
-                                durationMs: payload.durationMs,
-                                startedAt: null,
-                              }
-                            : branch,
-                        )
-                      : message?.branches ?? [],
-                  selectedBranchId: message?.selectedBranchId ?? (typeof payload.branchId === 'string' ? payload.branchId : null),
-                })),
-              );
-            }
-            return;
-          case 'BRANCH_STREAM_STARTED':
-            if (
-              typeof payload.messageId === 'string' &&
-              typeof payload.branchId === 'string' &&
-              typeof payload.modelId === 'string' &&
-              typeof payload.modelLabel === 'string'
-            ) {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantBranch(current, payload.messageId as string, payload.branchId as string, (branch) => ({
-                  id: payload.branchId as string,
-                  modelId: payload.modelId as string,
-                  modelLabel: payload.modelLabel as string,
-                  isPrimary: branch?.isPrimary ?? false,
-                  content: branch?.content ?? '',
-                  status: 'loading',
-                  errorMessage: null,
-                  durationMs: null,
-                  startedAt: payload.startedAt,
-                })),
-              );
-            }
-            return;
-          case 'BRANCH_STREAM_CHUNK':
-            if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string' && typeof payload.chunk === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantBranch(current, payload.messageId as string, payload.branchId as string, (branch) => ({
-                  id: payload.branchId as string,
-                  modelId: branch?.modelId ?? '',
-                  modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
-                  isPrimary: branch?.isPrimary ?? false,
-                  content: `${branch?.content ?? ''}${payload.chunk as string}`,
-                  status: 'loading',
-                  errorMessage: null,
-                  durationMs: branch?.durationMs ?? null,
-                  startedAt: branch?.startedAt ?? null,
-                })),
-              );
-            }
-            return;
-          case 'BRANCH_STREAM_FINISHED':
-            if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantBranch(current, payload.messageId as string, payload.branchId as string, (branch) => ({
-                  id: payload.branchId as string,
-                  modelId: branch?.modelId ?? '',
-                  modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
-                  isPrimary: branch?.isPrimary ?? false,
-                  content: branch?.content ?? '',
-                  status: 'done',
-                  errorMessage: null,
-                  durationMs: payload.durationMs,
-                  startedAt: null,
-                })),
-              );
-            }
-            return;
-          case 'BRANCH_STREAM_FAILED':
-            if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string') {
-              const branchFailureMessage =
-                typeof payload.errorMessage === 'string' ? (payload.errorMessage as string) : t('workspace.status.error');
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantFailure(current, {
-                  messageId: payload.messageId as string,
-                  branchId: payload.branchId as string,
-                  errorMessage: branchFailureMessage,
-                  modelId: '',
-                  modelLabel: t('workspace.status.branch'),
-                  isPrimary: false,
-                  durationMs: payload.durationMs,
-                  startedAt: null,
-                }),
-              );
-            }
-            return;
-          case 'BRANCH_STREAM_CANCELLED':
-            if (typeof payload.messageId === 'string' && typeof payload.branchId === 'string') {
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantBranch(current, payload.messageId as string, payload.branchId as string, (branch) => ({
-                  id: payload.branchId as string,
-                  modelId: branch?.modelId ?? '',
-                  modelLabel: branch?.modelLabel ?? t('workspace.status.branch'),
-                  isPrimary: branch?.isPrimary ?? false,
-                  content: branch?.content ?? '',
-                  status: 'cancelled',
-                  errorMessage: t('workspace.status.cancelled'),
-                  durationMs: payload.durationMs,
-                  startedAt: null,
-                })),
-              );
-            }
-            return;
-          case 'RESTORE_LOADING':
-            if (typeof payload.sessionId === 'string') {
-              setActiveSessionIds((current) => ({
-                ...current,
-                [promptTabId]: payload.sessionId as string,
-              }));
-            }
-            if (typeof payload.messageId === 'string' && typeof payload.content === 'string') {
-              setRestoreMessageIds((current) => ({
-                ...current,
-                [promptTabId]: payload.messageId as string,
-              }));
-              setPromptTabMessages(promptTabId, (current) =>
-                upsertAssistantMessage(current, payload.messageId as string, (message) => {
-                  const branchStartedAtMap = new Map(payload.branchStates.map((branchState) => [branchState.branchId, branchState.startedAt]));
-                  const selectedBranchId = message?.selectedBranchId ?? null;
-                  const nextBranches =
-                    message?.branches.map((branch) => {
-                      const branchStartedAt = branchStartedAtMap.get(branch.id);
-                      return {
-                        ...branch,
-                        startedAt:
-                          branch.status === 'loading'
-                            ? branchStartedAt !== undefined
-                              ? branchStartedAt
-                              : branch.isPrimary
-                                ? payload.startedAt
-                                : branch.startedAt
-                            : null,
-                      };
-                    }) ?? [];
-                  return {
-                    id: payload.messageId as string,
-                    role: 'assistant',
-                    content: payload.content as string,
-                    status: payload.startedAt !== null ? 'loading' : message?.status ?? 'loading',
-                    errorMessage: payload.startedAt !== null ? null : message?.errorMessage ?? null,
-                    branches: nextBranches,
-                    selectedBranchId,
-                  };
-                }),
-              );
-            }
-            return;
-          case 'LOADING_STATE_UPDATE':
-            if (typeof payload.status === 'string' && payload.status !== 'loading') {
-              if (typeof payload.sessionId === 'string') {
-                markSessionTerminal(payload.sessionId as string);
-              }
-              setActiveSessionIds((current) => ({
-                ...current,
-                [promptTabId]: null,
-              }));
-              setRestoreMessageIds((current) => ({
-                ...current,
-                [promptTabId]: null,
-              }));
-            }
-            return;
-          default:
-            return;
+        const sessionUpdate = getWorkspaceSessionUpdate(payload);
+        if (sessionUpdate?.terminalSessionId) markSessionTerminal(sessionUpdate.terminalSessionId);
+        if (sessionUpdate?.startedSessionId) markSessionActive(sessionUpdate.startedSessionId);
+        if (sessionUpdate && 'activeSessionId' in sessionUpdate) {
+          setActiveSessionIds((current) => current[promptTabId] === sessionUpdate.activeSessionId
+            ? current : { ...current, [promptTabId]: sessionUpdate.activeSessionId ?? null });
         }
+        if (sessionUpdate && 'restoreMessageId' in sessionUpdate) {
+          setRestoreMessageIds((current) => current[promptTabId] === sessionUpdate.restoreMessageId
+            ? current : { ...current, [promptTabId]: sessionUpdate.restoreMessageId ?? null });
+        }
+        setPromptTabMessages(promptTabId, (current) => reduceWorkspaceEvent(current, payload, {
+          primaryBranch: t('workspace.status.primaryBranch'),
+          branch: t('workspace.status.branch'),
+          error: t('workspace.status.error'),
+          cancelled: t('workspace.status.cancelled'),
+        }));
       };
 
       port.onMessage?.addListener?.(handlePortMessage as never);
@@ -903,16 +606,21 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 黑名单放行后继续当前页面提取。 */
   const handleConfirmContinue = async () => {
+    if (!isCurrentPage()) return;
     await api.confirmBlacklistContinue({ tabId, pageUrl });
+    if (!isCurrentPage()) return;
     try {
       await runExtraction(method, 'blacklist_continue');
+      if (!isCurrentPage()) return;
     } catch {
+      if (!isCurrentPage()) return;
       setState('error');
     }
   };
 
   /** 切换提取方式，只读取对应方法的已有缓存。 */
   const handleSwitchMethod = async (nextMethod: ExtractionMethod) => {
+    if (!isCurrentPage()) return;
     if (nextMethod === method || state === 'bootstrapping' || state === 'blocked' || isExtracting) {
       return;
     }
@@ -923,10 +631,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     setState('extracting');
     try {
       const response = await api.switchExtractionMethod({ tabId, pageUrl, method: nextMethod });
+      if (!isCurrentPage()) return;
       setContent(response.payload.hasCachedContent ? response.payload.content : '');
       setMethod(response.payload.hasCachedContent ? response.payload.extractionMethod : response.payload.method);
       setState('ready');
     } catch {
+      if (!isCurrentPage()) return;
       setMethod(previousMethod);
       setContent(previousContent);
       setState('error');
@@ -946,6 +656,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       rollbackOnFailure?: boolean;
     },
   ) => {
+    if (!isCurrentPage()) return;
     const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
     const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
     setPromptTabMessages(promptTabId, (current) => [
@@ -989,6 +700,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         request.rollbackOnFailure = input.rollbackOnFailure;
       }
       const response = await api.sendChat(request);
+      if (!isCurrentPage()) return;
       const sessionAlreadyTerminal = hasTerminalSession(response.payload.sessionId);
       if (!sessionAlreadyTerminal) {
         setActiveSessionIds((current) => ({
@@ -1043,6 +755,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         );
       });
     } catch (error) {
+      if (!isCurrentPage()) return;
       const errorMessage = getReplyErrorMessage(error, t('workspace.notice.sendFailed'));
       const assistantMessageId = `local-assistant:${promptTabId}:${Date.now()}`;
       const branchId = `${assistantMessageId}:primary`;
@@ -1087,6 +800,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
 
   /** 直接发送快捷输入提示词，并把消息展示为快捷输入名称。 */
   const handleTriggerPromptTab = async (promptTab: PromptTabDefinition, pageContent = content) => {
+    if (!isCurrentPage()) return;
     if (!promptTab.triggerPrompt) {
       return;
     }
@@ -1095,8 +809,10 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     if (!normalizeExtractionText(requestPageContent)) {
       try {
         const extraction = await runExtraction('readability', 'prompt_tab_click');
+        if (!isCurrentPage()) return;
         requestPageContent = extraction.content;
       } catch {
+        if (!isCurrentPage()) return;
         setState('error');
         pushToast('error', t('sidebar.notice.reExtractFailed'));
         return;
@@ -1116,10 +832,12 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       includePageContent: true,
       rollbackOnFailure: true,
     });
+    if (!isCurrentPage()) return;
   };
 
   /** 编辑用户消息后，裁剪其后的结果并立刻重发。 */
   const handleEditUserMessage = async (promptTabId: string, messageId: string, text: string) => {
+    if (!isCurrentPage()) return;
     try {
       const response = await api.editUserMessage({
         tabId,
@@ -1128,6 +846,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         messageId,
         text,
       });
+      if (!isCurrentPage()) return;
       setPromptTabEditing(promptTabId, null);
       setActiveSessionIds((current) => ({
         ...current,
@@ -1178,12 +897,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         );
       });
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.editFailed'));
     }
   };
 
   /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
   const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
+    if (!isCurrentPage()) return;
     try {
       const response = await api.retryUserMessage({
         tabId,
@@ -1191,6 +912,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         promptTabId,
         messageId,
       });
+      if (!isCurrentPage()) return;
       setActiveSessionIds((current) => ({
         ...current,
         [promptTabId]: response.payload.sessionId,
@@ -1233,12 +955,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         );
       });
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
   /** 重试目标助手分支。 */
   const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
+    if (!isCurrentPage()) return;
     try {
       const response = await api.retryMessage({
         tabId,
@@ -1247,6 +971,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         messageId,
         branchId,
       });
+      if (!isCurrentPage()) return;
       setActiveSessionIds((current) => ({
         ...current,
         [promptTabId]: response.payload.sessionId,
@@ -1283,12 +1008,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           );
       });
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.retryFailed'));
     }
   };
 
   /** 切换当前轮继续对话使用的主分支。 */
   const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
+    if (!isCurrentPage()) return;
     try {
       await api.selectAssistantBranch({
         tabId,
@@ -1297,6 +1024,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         messageId,
         branchId,
       });
+      if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         current.map((message) =>
           message.id === messageId && message.role === 'assistant'
@@ -1308,12 +1036,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.selectPrimaryBranchFailed'));
     }
   };
 
   /** 停止当前标签会话。 */
   const handleStop = async (promptTabId: string, sessionId: string | null) => {
+    if (!isCurrentPage()) return;
     if (!sessionId) {
       return;
     }
@@ -1324,16 +1054,19 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       promptTabId,
       sessionId,
     });
+    if (!isCurrentPage()) return;
   };
 
   /** 清空当前标签会话，不影响页面提取内容与其他标签。 */
   const handleClearTabConversation = async (promptTabId: string) => {
+    if (!isCurrentPage()) return;
     try {
       await api.clearTabConversation({
         tabId,
         pageUrl,
         promptTabId,
       });
+      if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, () => []);
       setRestoreMessageIds((current) => ({
         ...current,
@@ -1364,12 +1097,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.clearTabFailed'));
     }
   };
 
   /** 导出当前标签会话，空会话时直接拦截。 */
   const handleExport = async (promptTabId: string) => {
+    if (!isCurrentPage()) return;
     const messages = messageMap[promptTabId] ?? [];
     const hasExportableMessage = messages.some((message) => message.content.trim().length > 0);
     if (!hasExportableMessage) {
@@ -1383,18 +1118,21 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         pageUrl,
         promptTabId,
       });
+      if (!isCurrentPage()) return;
       downloadTextFile({
         filename: exported.payload.filename,
         content: exported.payload.content,
         mimeType: exported.payload.mimeType,
       });
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.exportFailed'));
     }
   };
 
   /** 针对既有助手消息继续新增分支。 */
   const handleExpandBranches = async (promptTabId: string, messageId: string, modelId: string) => {
+    if (!isCurrentPage()) return;
     try {
       const response = await api.expandMessageBranches({
         tabId,
@@ -1403,6 +1141,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         messageId,
         modelId,
       });
+      if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         appendAssistantBranches(
           current,
@@ -1415,12 +1154,14 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         ),
       );
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.expandBranchFailed'));
     }
   };
 
   /** 停止单个分支流。 */
   const handleStopBranch = async (promptTabId: string, branchId: string) => {
+    if (!isCurrentPage()) return;
     try {
       await api.stopBranch({
         tabId,
@@ -1428,13 +1169,16 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         promptTabId,
         branchId,
       });
+      if (!isCurrentPage()) return;
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.stopBranchFailed'));
     }
   };
 
   /** 删除单个分支，并同时移除本地显示。 */
   const handleDeleteBranch = async (promptTabId: string, messageId: string, branchId: string) => {
+    if (!isCurrentPage()) return;
     try {
       await api.deleteBranch({
         tabId,
@@ -1443,6 +1187,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         messageId,
         branchId,
       });
+      if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         current.flatMap((message) => {
           if (message.id !== messageId || message.role !== 'assistant') {
@@ -1460,6 +1205,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         }),
       );
     } catch {
+      if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.deleteBranchFailed'));
     }
   };
@@ -1717,11 +1463,11 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
             className={promptTab.id === activePromptTabId ? 'flex h-full min-h-0 min-w-0 flex-col' : 'hidden'}
           >
             <ChatThread
-              messages={messageMap[promptTab.id] ?? []}
+              messages={messageMap[promptTab.id] ?? EMPTY_MESSAGES}
               restoreMessageId={restoreMessageIds[promptTab.id] ?? null}
               editingMessageId={editingMap[promptTab.id]?.messageId ?? null}
               editingText={editingMap[promptTab.id]?.text ?? ''}
-              availableBranchModels={models.map((model) => ({ id: model.id, name: model.name }))}
+              availableBranchModels={models}
               t={t}
               assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
               onStartEdit={(messageId, content) => setPromptTabEditing(promptTab.id, { messageId, text: content })}

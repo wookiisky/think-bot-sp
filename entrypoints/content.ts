@@ -2,6 +2,7 @@
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
 
+import type { PageSource } from '../src/services/extraction/page-source';
 import { extractReadabilityMarkdown } from '../src/services/extraction/readability-markdown';
 
 export default defineContentScript({
@@ -12,18 +13,26 @@ export default defineContentScript({
         return false;
       }
 
-      const faviconUrl = document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href ?? '';
-      const readability = extractReadabilityMarkdown(document.cloneNode(true) as Document);
+      const method = (message as { method?: unknown }).method;
+      if (method !== 'readability' && method !== 'jina') {
+        return false;
+      }
 
-      sendResponse({
+      const source: PageSource = {
         url: location.href,
         title: document.title,
-        html: document.documentElement.outerHTML,
-        text: document.body?.innerText ?? '',
-        faviconUrl,
-        readabilityContent: readability?.content ?? '',
-        readabilityTitle: readability?.title ?? '',
-      });
+        faviconUrl: document.querySelector<HTMLLinkElement>('link[rel~="icon"]')?.href ?? '',
+      };
+      if (method === 'readability') {
+        try {
+          source.readability = extractReadabilityMarkdown(document.cloneNode(true) as Document);
+        } catch {
+          // 正文提取失败也返回元数据，由后台统一报告提取失败。
+          source.readability = null;
+        }
+      }
+
+      sendResponse(source);
       return true;
     });
   },

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { tool, type LanguageModel, type ToolSet } from 'ai';
+import { generateText, tool, type LanguageModel, type ToolSet } from 'ai';
 import type { ModelConfig } from '../../../../src/domain/config/config-schema';
 
 /** 构造测试模型，避免每个用例重复铺开完整配置。 */
@@ -83,6 +83,7 @@ const createCallableFactory = (factoryName: string) => {
 };
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.resetModules();
   vi.doUnmock('@ai-sdk/openai-compatible');
   vi.doUnmock('@ai-sdk/google');
@@ -95,20 +96,17 @@ const createRegistryDeps = () => {
   const googleFactory = createCallableFactory('google');
   const anthropicFactory = createCallableFactory('anthropic');
   const bedrockFactory = createCallableFactory('bedrock');
-  const vertexFactory = createCallableFactory('vertex');
 
   return {
     openAICompatible,
     googleFactory,
     anthropicFactory,
     bedrockFactory,
-    vertexFactory,
     deps: {
       createOpenAICompatible: openAICompatible.providerFactory,
       createGoogleGenerativeAI: googleFactory.providerFactory,
       createAnthropic: anthropicFactory.providerFactory,
       createAmazonBedrock: bedrockFactory.providerFactory,
-      createVertex: vertexFactory.providerFactory,
     },
   };
 };
@@ -258,5 +256,77 @@ describe('provider-registry', () => {
     expect(resolved.supportsImages).toBe(false);
     expect(openAICompatible.providerFactory).not.toHaveBeenCalled();
     expect(googleFactory.providerFactory).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('official provider contracts (offline)', () => {
+  it.each<ModelConfig['provider']>([
+    'openai-compatible', 'azure-openai', 'gemini', 'anthropic', 'amazon-bedrock', 'google-vertex',
+  ])('%s returns the model protocol accepted by AI SDK 5', async (provider) => {
+    const fetchStub = vi.fn(() => { throw new Error('Unexpected network request'); });
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({ provider, deployment: 'deployment' }));
+    expect(typeof resolved.sdkModel).toBe('object');
+    if (typeof resolved.sdkModel === 'string') throw new Error('Expected a provider model');
+    expect(resolved.sdkModel.specificationVersion).toBe('v2');
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
+  it.each(['', 'https://proxy.example.com/vertex/'])('Vertex Express preserves API-key auth, tools and reasoning with baseUrl=%s', async (baseUrl) => {
+    const fetchStub = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => Response.json({
+      candidates: [{ content: { role: 'model', parts: [{ text: 'offline answer' }] }, finishReason: 'STOP' }],
+      usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 2, totalTokenCount: 3 },
+    }));
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({
+      provider: 'google-vertex', model: 'gemini-3-flash-preview', baseUrl,
+      project: 'ignored-in-express-mode', location: 'us-central1',
+      reasoningEffort: 'max', tools: ['url_context', 'google_search'],
+    }));
+    if (!resolved.tools || !resolved.providerOptions) throw new Error('Expected Google tools and reasoning');
+    const result = await generateText({
+      model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
+      tools: resolved.tools, providerOptions: resolved.providerOptions,
+    });
+    expect(result.text).toBe('offline answer');
+    expect(resolved.providerId).toBe('google-vertex');
+    expect(fetchStub).toHaveBeenCalledOnce();
+    const request = fetchStub.mock.calls[0];
+    if (!request?.[1]) throw new Error('Expected a fetch request');
+    expect(request[0]).toBe(`${baseUrl ? baseUrl.replace(/\/$/, '') : 'https://aiplatform.googleapis.com/v1/publishers/google'}/models/gemini-3-flash-preview:generateContent`);
+    expect(new Headers(request[1].headers).get('x-goog-api-key')).toBe('test-key');
+    const body = JSON.parse(String(request[1].body));
+    expect(body.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'high' });
+    expect(body.tools).toEqual(expect.arrayContaining([{ urlContext: {} }, { googleSearch: {} }]));
+  });
+
+  it('Bedrock bearer token and Nova reasoning survive a real SDK generation', async () => {
+    const fetchStub = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => Response.json({
+      output: { message: { role: 'assistant', content: [{ text: 'offline answer' }] } },
+      stopReason: 'end_turn', usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+      metrics: { latencyMs: 1 },
+    }));
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({
+      provider: 'amazon-bedrock', model: 'us.amazon.nova-2-lite-v1:0',
+      region: 'us-east-1', baseUrl: '', reasoningEffort: 'medium',
+    }));
+    if (!resolved.providerOptions) throw new Error('Expected Bedrock reasoning');
+    const result = await generateText({
+      model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
+      providerOptions: resolved.providerOptions,
+    });
+    expect(result.text).toBe('offline answer');
+    expect(fetchStub).toHaveBeenCalledOnce();
+    const request = fetchStub.mock.calls[0];
+    if (!request?.[1]) throw new Error('Expected a fetch request');
+    expect(request[0]).toContain('bedrock-runtime.us-east-1.amazonaws.com');
+    expect(new Headers(request[1].headers).get('authorization')).toBe('Bearer test-key');
+    const body = JSON.parse(String(request[1].body));
+    expect(body.additionalModelRequestFields.reasoningConfig).toEqual({ type: 'enabled', maxReasoningEffort: 'medium' });
   });
 });

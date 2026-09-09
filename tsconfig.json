@@ -4,6 +4,7 @@
     "target": "ES2022",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",
+    "allowJs": true,
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
     "paths": {

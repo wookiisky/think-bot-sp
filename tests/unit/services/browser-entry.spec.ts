@@ -166,7 +166,7 @@ describe('browser-entry service', () => {
     expect(sidePanel.setPanelBehavior).toHaveBeenCalledWith({
       openPanelOnActionClick: false,
     });
-    expect(sidePanel.setPanelBehavior?.mock.invocationCallOrder[0]).toBeLessThan(sidePanel.setOptions.mock.invocationCallOrder[0]);
+    expect(sidePanel.setPanelBehavior).toHaveBeenCalledBefore(sidePanel.setOptions);
     await expect(panelState.getEnabledTabIds()).resolves.toEqual([]);
   });
 
@@ -208,7 +208,7 @@ describe('browser-entry service', () => {
     expect(sidePanel.setPanelBehavior).toHaveBeenCalledWith({
       openPanelOnActionClick: false,
     });
-    expect(sidePanel.setPanelBehavior?.mock.invocationCallOrder[0]).toBeLessThan(sidePanel.setOptions.mock.invocationCallOrder[0]);
+    expect(sidePanel.setPanelBehavior).toHaveBeenCalledBefore(sidePanel.setOptions);
     expect(logger.warn).toHaveBeenCalledWith('当前标签页侧边栏禁用失败', {
       browserTabId: 9,
       reason: 'disable failed',
@@ -277,8 +277,8 @@ describe('browser-entry service', () => {
     expect(sidePanel.open).toHaveBeenCalledWith({
       tabId: 7,
     });
-    expect(sidePanel.setOptions.mock.invocationCallOrder[0]).toBeLessThan(sidePanel.open.mock.invocationCallOrder[0]);
-    expect(sidePanel.setPanelBehavior?.mock.invocationCallOrder[0]).toBeLessThan(sidePanel.open.mock.invocationCallOrder[0]);
+    expect(sidePanel.setOptions).toHaveBeenCalledBefore(sidePanel.open);
+    expect(sidePanel.setPanelBehavior).toHaveBeenCalledBefore(sidePanel.open);
   });
 
   it('真实扩展按钮兜底打开失败时会向调用方暴露错误', async () => {
@@ -342,7 +342,7 @@ describe('browser-entry service', () => {
     expect(sidePanel.setPanelBehavior).toHaveBeenCalledWith({
       openPanelOnActionClick: false,
     });
-    expect(sidePanel.setPanelBehavior?.mock.invocationCallOrder[0]).toBeLessThan(sidePanel.setOptions.mock.invocationCallOrder[0]);
+    expect(sidePanel.setPanelBehavior).toHaveBeenCalledBefore(sidePanel.setOptions);
     expect(sidePanel.open).not.toHaveBeenCalled();
     expect(tabs.create).toHaveBeenCalledWith({
       url: 'chrome-extension://ext-id/conversations.html',

@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
 
 /**
- * @typedef {{ status: number | null, error?: Error }} CommandResult
+ * @typedef {{ status: number | null, error?: Error | undefined }} CommandResult
  * @typedef {(command: string, args: string[], options: { cwd: string, stdio: 'inherit' }) => CommandResult} CommandRunner
  * @typedef {(filePath: string, encoding: BufferEncoding) => string} ReadTextFile
  * @typedef {(filePath: string, content: string, encoding: BufferEncoding) => void} WriteTextFile
@@ -22,7 +22,9 @@ const VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)$/;
  * @typedef {{ previousVersion: string, nextVersion: string }} PackageChromeStoreResult
  */
 
-/** 根据 Chrome 商店发布规则递增版本号。 */
+/** 根据 Chrome 商店发布规则递增版本号。
+ * @param {unknown} version
+ */
 export const getNextStoreVersion = (version) => {
   if (typeof version !== 'string') {
     throw new Error('package.json version must be a string');
@@ -45,7 +47,9 @@ export const getNextStoreVersion = (version) => {
   return `${major}.${minor + 1}.0`;
 };
 
-/** 解析 package.json，并在进入核心流程前校验必要字段。 */
+/** 解析 package.json，并在进入核心流程前校验必要字段。
+ * @param {string} packageJsonText
+ */
 const parsePackageJson = (packageJsonText) => {
   /** @type {unknown} */
   const parsed = JSON.parse(packageJsonText);
@@ -58,17 +62,21 @@ const parsePackageJson = (packageJsonText) => {
     throw new Error('package.json must contain a string version');
   }
 
-  return parsed;
+  return { ...parsed, version: parsed.version };
 };
 
-/** 获取当前平台可执行的本地 WXT 命令路径。 */
+/** 获取当前平台可执行的本地 WXT 命令路径。
+ * @param {string} cwd
+ */
 const resolveLocalWxtCommand = (cwd) => {
   const executable = process.platform === 'win32' ? 'wxt.cmd' : 'wxt';
 
   return path.join(cwd, 'node_modules', '.bin', executable);
 };
 
-/** 执行命令并返回进程结果，便于单测替换。 */
+/** 执行命令并返回进程结果，便于单测替换。
+ * @type {CommandRunner}
+ */
 const runLocalCommand = (command, args, options) => {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
@@ -81,7 +89,10 @@ const runLocalCommand = (command, args, options) => {
   };
 };
 
-/** 将 WXT 失败和回滚失败合并成一个可读错误。 */
+/** 将 WXT 失败和回滚失败合并成一个可读错误。
+ * @param {Error} wxtError
+ * @param {Error} rollbackError
+ */
 const buildRollbackFailureError = (wxtError, rollbackError) => {
   return new Error(
     [
@@ -92,7 +103,13 @@ const buildRollbackFailureError = (wxtError, rollbackError) => {
   );
 };
 
-/** 恢复原始 package.json；若恢复失败，保留两个错误上下文。 */
+/** 恢复原始 package.json；若恢复失败，保留两个错误上下文。
+ * @param {string} packageJsonPath
+ * @param {string} originalPackageJsonText
+ * @param {WriteTextFile} writeFile
+ * @param {Error} wxtError
+ * @returns {never}
+ */
 const rollbackPackageJsonAndThrow = (packageJsonPath, originalPackageJsonText, writeFile, wxtError) => {
   try {
     writeFile(packageJsonPath, originalPackageJsonText, 'utf8');
@@ -103,7 +120,10 @@ const rollbackPackageJsonAndThrow = (packageJsonPath, originalPackageJsonText, w
   throw wxtError;
 };
 
-/** 调用 WXT 生成 Chrome 商店 zip，并确保失败时不消费版本号。 */
+/** 调用 WXT 生成 Chrome 商店 zip，并确保失败时不消费版本号。
+ * @param {PackageChromeStoreOptions} options
+ * @returns {PackageChromeStoreResult}
+ */
 export const packageChromeStore = (options = {}) => {
   const cwd = options.cwd ?? process.cwd();
   const packageJsonPath = options.packageJsonPath ?? path.join(cwd, 'package.json');

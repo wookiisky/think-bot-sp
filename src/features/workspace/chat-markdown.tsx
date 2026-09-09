@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { createContext, memo, useContext, type CSSProperties } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
@@ -176,57 +176,86 @@ const createBodyInlineStyle = (styleConfig: AssistantMarkdownDisplayConfig['body
   lineHeight: `${resolveBodyLineHeightPx(styleConfig.fontSizePx)}px`,
 });
 
+const AssistantDisplayContext = createContext<AssistantMarkdownDisplayConfig | undefined>(undefined);
+
+/** 元素类型保持稳定，展示设置通过 context 更新，不重新解析正文。 */
+const markdownComponents: Components = {
+  h1: function MarkdownH1({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <h1
+        {...props}
+        className={config ? 'mb-1.5 mt-3 leading-tight first:mt-0' : undefined}
+        style={config ? createInlineStyle(config.h1, 700) : undefined}
+      >
+        {children}
+      </h1>
+    );
+  },
+  h2: function MarkdownH2({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <h2
+        {...props}
+        className={config ? 'mb-1.5 mt-3 leading-tight first:mt-0' : undefined}
+        style={config ? createInlineStyle(config.h2, 700) : undefined}
+      >
+        {children}
+      </h2>
+    );
+  },
+  h3: function MarkdownH3({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <h3
+        {...props}
+        className={config ? 'mb-1 mt-2.5 leading-tight first:mt-0' : undefined}
+        style={config ? createInlineStyle(config.h3, 600) : undefined}
+      >
+        {children}
+      </h3>
+    );
+  },
+  h4: function MarkdownH4({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <h4
+        {...props}
+        className={config ? 'mb-1 mt-2.5 leading-tight first:mt-0' : undefined}
+        style={config ? createInlineStyle(config.h4, 600) : undefined}
+      >
+        {children}
+      </h4>
+    );
+  },
+  p: function MarkdownParagraph({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <p
+        {...props}
+        className={config ? 'whitespace-pre-wrap' : undefined}
+        style={config ? createBodyInlineStyle(config.body) : undefined}
+      >
+        {children}
+      </p>
+    );
+  },
+};
+
+/** 只有正文变化时才重新执行 Markdown 解析和清理。 */
+const MarkdownContent = memo(function MarkdownContent({ content }: { content: string }) {
+  return (
+    <ReactMarkdown rehypePlugins={[rehypeSanitize]} remarkPlugins={[remarkGfm, remarkCjkQuotedStrong]} components={markdownComponents}>
+      {content}
+    </ReactMarkdown>
+  );
+});
+
 /** 聊天消息 Markdown 渲染器。 */
-export const ChatMarkdown = ({ content, className, assistantDisplayConfig }: ChatMarkdownProps) => {
+export const ChatMarkdown = memo(function ChatMarkdown({ content, className, assistantDisplayConfig }: ChatMarkdownProps) {
   if (!content.trim()) {
     return null;
   }
-
-  const components: Components | undefined = assistantDisplayConfig
-    ? {
-        h1: ({ children, ...props }) => (
-          <h1
-            {...props}
-            className="mb-1.5 mt-3 leading-tight first:mt-0"
-            style={createInlineStyle(assistantDisplayConfig.h1, 700)}
-          >
-            {children}
-          </h1>
-        ),
-        h2: ({ children, ...props }) => (
-          <h2
-            {...props}
-            className="mb-1.5 mt-3 leading-tight first:mt-0"
-            style={createInlineStyle(assistantDisplayConfig.h2, 700)}
-          >
-            {children}
-          </h2>
-        ),
-        h3: ({ children, ...props }) => (
-          <h3
-            {...props}
-            className="mb-1 mt-2.5 leading-tight first:mt-0"
-            style={createInlineStyle(assistantDisplayConfig.h3, 600)}
-          >
-            {children}
-          </h3>
-        ),
-        h4: ({ children, ...props }) => (
-          <h4
-            {...props}
-            className="mb-1 mt-2.5 leading-tight first:mt-0"
-            style={createInlineStyle(assistantDisplayConfig.h4, 600)}
-          >
-            {children}
-          </h4>
-        ),
-        p: ({ children, ...props }) => (
-          <p {...props} className="whitespace-pre-wrap" style={createBodyInlineStyle(assistantDisplayConfig.body)}>
-            {children}
-          </p>
-        ),
-      }
-    : undefined;
 
   return (
     <div
@@ -235,9 +264,9 @@ export const ChatMarkdown = ({ content, className, assistantDisplayConfig }: Cha
         className,
       )}
     >
-      <ReactMarkdown rehypePlugins={[rehypeSanitize]} remarkPlugins={[remarkGfm, remarkCjkQuotedStrong]} components={components}>
-        {content}
-      </ReactMarkdown>
+      <AssistantDisplayContext.Provider value={assistantDisplayConfig}>
+        <MarkdownContent content={content} />
+      </AssistantDisplayContext.Provider>
     </div>
   );
-};
+});

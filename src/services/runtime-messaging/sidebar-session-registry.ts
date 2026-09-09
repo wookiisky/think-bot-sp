@@ -36,9 +36,13 @@ export const createSidebarSessionRegistry = () => {
         record.branchId = scope.branchId;
       }
       activeSessions.set(session.sessionId, record);
-      void session.done.finally(() => {
-        activeSessions.delete(session.sessionId);
-      });
+      const release = () => {
+        if (activeSessions.get(session.sessionId) === record) {
+          activeSessions.delete(session.sessionId);
+        }
+      };
+      // 同时消费成功与失败，避免 finally 产生无人处理的 rejected promise。
+      void session.done.then(release, release);
     },
 
     /** 精确取消某个会话，只接受 scope 一致的会话。 */

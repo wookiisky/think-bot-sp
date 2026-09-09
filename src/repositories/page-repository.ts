@@ -1,3 +1,4 @@
+import { createStorageRepository } from './chrome-local-adapter';
 import {
   buildPageRecord,
   hasUsableExtractionCache,
@@ -41,10 +42,10 @@ const matchesExactLoadingKey = (key: string, normalizedUrl: string): boolean => 
 };
 
 /** 页面仓储，负责页面缓存、统计和级联清理。 */
-export const createPageRepository = (storage: ChromeLocalAdapter) => {
+export const createPageRepository = (storage: ChromeLocalAdapter) => createStorageRepository(storage, (storage) => {
   const readAll = async () => storage.get<Record<string, unknown>>(null);
   const getAllPages = async () => {
-    const all = await readAll();
+    const all = await storage.getByPrefix(PAGE_STORAGE_PREFIX);
     return Object.entries(all)
       .filter(([key]) => key.startsWith(PAGE_STORAGE_PREFIX))
       .map(([, value]) => pageRecordSchema.parse(value));
@@ -324,4 +325,4 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => {
       }
     },
   };
-};
+});

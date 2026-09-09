@@ -23,6 +23,8 @@ const createDeferred = (): Deferred => {
     resolve = innerResolve;
     reject = innerReject;
   });
+  // 取消可以在下一次 next() 前关闭生成器，此时它不再等待这个测试门闩。
+  void promise.catch(() => undefined);
   return { promise, resolve, reject };
 };
 

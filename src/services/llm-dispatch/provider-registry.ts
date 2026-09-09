@@ -3,7 +3,6 @@ import type { LanguageModel, ToolSet } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createVertex } from '@ai-sdk/google-vertex/edge';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import { getResolvedReasoningEffort, type ModelConfig } from '../../domain/config/config-schema';
@@ -57,17 +56,6 @@ type BedrockFactory = (settings: {
   baseURL?: string;
 }) => CallableProvider;
 
-type VertexFactory = (settings: {
-  /** Vertex API Key。 */
-  apiKey?: string;
-  /** Vertex Project。 */
-  project?: string;
-  /** Vertex Location。 */
-  location?: string;
-  /** Vertex Base URL。 */
-  baseURL?: string;
-}) => GoogleToolProvider;
-
 type GenerateTextRequest = Parameters<typeof Ai.generateText>[0];
 type ProviderOptions = GenerateTextRequest extends { providerOptions?: infer Value } ? Value : never;
 
@@ -80,8 +68,6 @@ type ProviderRegistryDeps = {
   createAnthropic: AnthropicFactory;
   /** Bedrock provider 工厂。 */
   createAmazonBedrock: BedrockFactory;
-  /** Vertex provider 工厂。 */
-  createVertex: VertexFactory;
 };
 
 /** Provider 解析后的统一句柄。 */
@@ -164,13 +150,19 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           maxOutputTokens: model.maxOutputTokens,
         };
       }
-      case 'gemini': {
+      case 'gemini':
+      case 'google-vertex': {
         const settings: Parameters<GoogleFactory>[0] = {
           apiKey: model.apiKey,
         };
         const baseURL = toOptionalString(model.baseUrl);
         if (baseURL !== undefined) {
           settings.baseURL = baseURL;
+        }
+        // 当前 Vertex 配置使用 API key，与官方 Vertex Express 路径一致。
+        // Express 模式不使用 project/location；自定义 baseURL 仍优先。
+        if (model.provider === 'google-vertex' && baseURL === undefined) {
+          settings.baseURL = 'https://aiplatform.googleapis.com/v1/publishers/google';
         }
         const provider = deps.createGoogleGenerativeAI(settings);
         const resolved: ResolvedProviderModel = {
@@ -258,48 +250,6 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
 
         return resolved;
       }
-      case 'google-vertex': {
-        const settings: Parameters<VertexFactory>[0] = {};
-        const apiKey = toOptionalString(model.apiKey);
-        const project = toOptionalString(model.project);
-        const location = toOptionalString(model.location);
-        const baseURL = toOptionalString(model.baseUrl);
-        if (apiKey !== undefined) {
-          settings.apiKey = apiKey;
-        }
-        if (project !== undefined) {
-          settings.project = project;
-        }
-        if (location !== undefined) {
-          settings.location = location;
-        }
-        if (baseURL !== undefined) {
-          settings.baseURL = baseURL;
-        }
-        const provider = deps.createVertex(settings);
-        const resolved: ResolvedProviderModel = {
-          providerId: model.provider,
-          modelId: resolvedModelId,
-          modelLabel: model.name,
-          supportsImages: model.supportsImages,
-          sdkModel: provider(resolvedModelId),
-          temperature: model.temperature,
-          maxOutputTokens: model.maxOutputTokens,
-          providerOptions: {
-            vertex: {
-              thinkingConfig: {
-                thinkingLevel: toGoogleThinkingLevel(getResolvedReasoningEffort(model)),
-              },
-            },
-          },
-        };
-        const tools = buildGoogleTools(provider, model.tools);
-        if (tools) {
-          resolved.tools = tools;
-        }
-
-        return resolved;
-      }
       default:
         return assertNever(model.provider);
     }
@@ -310,8 +260,7 @@ const defaultRegistry = createProviderRegistry({
   createOpenAICompatible,
   createGoogleGenerativeAI,
   createAnthropic,
-  createAmazonBedrock: createAmazonBedrock as unknown as BedrockFactory,
-  createVertex: createVertex as unknown as VertexFactory,
+  createAmazonBedrock,
 });
 
 /** 默认 registry，直接绑定官方 provider 工厂。 */
