@@ -96,6 +96,24 @@ describe('ChatMarkdown', () => {
     expect(container.textContent).not.toContain('**“隐形的基础设施”**');
   });
 
+  it('会渲染以中文标点结尾且紧贴正文的加粗内容', () => {
+    const { container } = render(
+      <ChatMarkdown content={'**逆向路径：**与其先提高智能，不如先降低成本。\n\n**结尾。**下一句\n\n**（注意）**括号结尾'} />,
+    );
+
+    expect(screen.getByText('逆向路径：').tagName).toBe('STRONG');
+    expect(screen.getByText('结尾。').tagName).toBe('STRONG');
+    expect(screen.getByText('（注意）').tagName).toBe('STRONG');
+    expect(container.textContent).not.toContain('**');
+  });
+
+  it('普通英文和数字上下文保持 CommonMark 默认加粗规则', () => {
+    render(<ChatMarkdown content={'2**3**4 and english **bold** text'} />);
+
+    expect(screen.getByText('3').tagName).toBe('STRONG');
+    expect(screen.getByText('bold').tagName).toBe('STRONG');
+  });
+
   it('会保留转义后的中文引号加粗字面量', () => {
     const { container } = render(<ChatMarkdown content={'* \\*\\*“隐形的基础设施”\\*\\*'} />);
 
