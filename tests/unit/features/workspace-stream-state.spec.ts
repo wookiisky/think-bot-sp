@@ -122,3 +122,46 @@ describe('workspace stream state', () => {
     expect(reduce(messages, { ...branchStarted, messageId: 'missing' })).toBe(messages);
   });
 });
+
+describe('workspace stream state restore expiry', () => {
+  const restoreLabels = { ...labels, timeout: '请求超时' };
+
+  it('恢复的主分支 startedAt 已超过超时阈值时直接标记为失败', () => {
+    const initial = sequence([started, branchStarted]);
+    const [restored] = reduceWorkspaceEvent(
+      initial,
+      { ...target, type: 'RESTORE_LOADING', content: '', startedAt: 1000, branchStates: [{ branchId: 'parallel', status: 'loading', modelId: 'model-2', startedAt: 2000 }] },
+      restoreLabels,
+      { now: 70_000, timeoutMs: 60_000 },
+    );
+    expect(restored).toMatchObject({ status: 'error', errorMessage: '请求超时', selectedBranchId: 'primary' });
+    expect(restored!.branches).toMatchObject([
+      { id: 'primary', status: 'error', errorMessage: '请求超时', startedAt: null },
+      { id: 'parallel', status: 'error', errorMessage: '请求超时', startedAt: null },
+    ]);
+  });
+
+  it('未超时或未提供阈值时仍按 loading 恢复', () => {
+    const initial = sequence([started]);
+    const [fresh] = reduceWorkspaceEvent(
+      initial,
+      { ...target, type: 'RESTORE_LOADING', content: '', startedAt: 1000, branchStates: [] },
+      restoreLabels,
+      { now: 30_000, timeoutMs: 60_000 },
+    );
+    expect(fresh).toMatchObject({ status: 'loading' });
+    const [noThreshold] = reduce(initial, { ...target, type: 'RESTORE_LOADING', content: '', startedAt: 1000, branchStates: [] });
+    expect(noThreshold).toMatchObject({ status: 'loading' });
+  });
+
+  it('本地没有该消息时按超时创建失败占位', () => {
+    const [created] = reduceWorkspaceEvent(
+      [],
+      { ...target, type: 'RESTORE_LOADING', content: '落库正文', startedAt: 1000, branchStates: [] },
+      restoreLabels,
+      { now: 70_000, timeoutMs: 60_000 },
+    );
+    expect(created).toMatchObject({ id: 'assistant-1', status: 'error', errorMessage: '请求超时' });
+    expect(created!.branches).toHaveLength(1);
+  });
+});

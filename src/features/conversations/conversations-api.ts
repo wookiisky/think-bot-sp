@@ -85,6 +85,13 @@ type ConversationsStreamPort = {
   disconnect: () => void;
   /** 流式消息事件。 */
   onMessage: ConversationsStreamMessageEvent;
+  /** 对端断开事件；worker 被回收时触发，用于自动重连。 */
+  onDisconnect?: {
+    /** 监听断开。 */
+    addListener: (_listener: () => void) => void;
+    /** 移除断开监听。 */
+    removeListener: (_listener: () => void) => void;
+  };
 };
 
 type ConversationsApi = {

@@ -45,6 +45,13 @@ export const createSidebarSessionRegistry = () => {
       void session.done.then(release, release);
     },
 
+    /** 当前 worker 内该 promptTab 是否仍有活跃会话；worker 重启后注册表为空，持久化 loading 即为孤儿。 */
+    hasPromptTabSessions(input: { normalizedUrl: string; promptTabId: string }) {
+      return Array.from(activeSessions.values()).some(
+        (session) => session.normalizedUrl === input.normalizedUrl && session.promptTabId === input.promptTabId,
+      );
+    },
+
     /** 精确取消某个会话，只接受 scope 一致的会话。 */
     cancelSession(input: {
       /** 会话 id。 */

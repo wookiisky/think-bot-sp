@@ -188,6 +188,7 @@ workspace.status.done: Done
 workspace.status.error: Failed
 workspace.status.cancelled: Stopped
 workspace.status.restore: Restoring Stream
+workspace.status.timeout: Request timed out before the background responded
 workspace.status.branch: Branch
 workspace.status.primaryBranch: Primary Branch
 workspace.promptStatus.loading: Loading

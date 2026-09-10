@@ -22,6 +22,7 @@ import {
 import {
   DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
   type ExtractionTextFontSize,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
@@ -59,6 +60,7 @@ import {
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
 import { usePageScope } from '../workspace/use-page-scope';
+import { subscribeStreamPort } from '../workspace/stream-port-subscription';
 import { reduceWorkspaceEvent } from '../workspace/workspace-stream-state';
 import { getWorkspaceSessionUpdate } from '../workspace/workspace-session-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
@@ -181,6 +183,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
   const themeRootAttributes = useDocumentTheme(themePreference);
   const terminalSessionIdsRef = useRef<Set<string>>(new Set());
+  /** 恢复 loading 时判断是否已超过请求超时；后台的定时器可能随 worker 一起消失过。 */
+  const llmRequestTimeoutSecondsRef = useRef(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
   const t = useMemo(() => createWorkspaceTranslator(localeResources, localeCode), [localeResources, localeCode]);
   const promptTabSubscriptionKey = JSON.stringify(promptTabs.map((promptTab) => promptTab.id));
 
@@ -433,12 +437,6 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
     }
 
     const subscriptions = promptTabSubscriptionIds.map((promptTabId) => {
-      const port = api.connectStream({
-        tabId,
-        pageUrl,
-        promptTabId,
-      });
-
       const handlePortMessage = (event: unknown) => {
         if (!isCurrentPage()) return;
         const parsed = sidebarPortEventSchema.safeParse(event);
@@ -468,20 +466,20 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
           branch: t('workspace.status.branch'),
           error: t('workspace.status.error'),
           cancelled: t('workspace.status.cancelled'),
-        }));
+          timeout: t('workspace.status.timeout'),
+        }, { now: Date.now(), timeoutMs: llmRequestTimeoutSecondsRef.current * 1000 }));
       };
 
-      port.onMessage?.addListener?.(handlePortMessage as never);
-      return {
-        port,
-        handlePortMessage,
-      };
+      // worker 被回收会让 port 从后台侧断开；自动重连会唤醒 worker，由它决定恢复还是收敛。
+      return subscribeStreamPort({
+        connect: () => api.connectStream({ tabId, pageUrl, promptTabId }),
+        onEvent: handlePortMessage,
+      });
     });
 
     return () => {
-      for (const subscription of subscriptions) {
-        subscription.port.onMessage?.removeListener?.(subscription.handlePortMessage as never);
-        subscription.port.disconnect();
+      for (const unsubscribe of subscriptions) {
+        unsubscribe();
       }
     };
   }, [api, pageUrl, promptTabSubscriptionKey, tabId]);
@@ -538,6 +536,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
         setThemePreference(configResponse.config.basic.theme);
+        llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
 
         if (bootstrap.blockedByBlacklist) {
           setState('blocked');

@@ -2,7 +2,7 @@ import { EXTENSION_PAGES } from '../../src/shared/extension-pages';
 import { buildLoadingStorageKey, buildPageStorageKey, CONFIG_STORAGE_KEY } from '../../src/shared/storage-keys';
 import { expect, test } from './helpers/extension-fixture';
 
-test('worker 重启后仍能恢复持久化 loading', async ({ context, extensionId }) => {
+test('worker 重启后遗留的 loading 会被收敛为失败而不是永远生成中', async ({ context, extensionId }) => {
   const serviceWorker = context.serviceWorkers()[0];
   if (!serviceWorker) {
     throw new Error('未找到扩展 service worker');
@@ -137,7 +137,27 @@ test('worker 重启后仍能恢复持久化 loading', async ({ context, extensio
   await expect(sidepanel.getByTestId('sidebar-extraction-panel')).toContainText('恢复测试正文');
   const branchCard = sidepanel.getByTestId('branch-branch-1');
   await expect(branchCard).toContainText('恢复测试模型');
+  // 重启后的 worker 里没有对应会话，持久化 loading 是孤儿：必须收敛为失败并告知用户，而不是恢复成无人收尾的“生成中”。
+  await expect(branchCard).toContainText('后台服务已重启');
   await branchCard.hover();
-  await expect(branchCard.getByRole('button', { name: '停止' })).toBeVisible();
+  await expect(branchCard.getByRole('button', { name: '停止' })).toHaveCount(0);
   await expect(sidepanel.getByText('恢复生成中…')).toHaveCount(0);
+
+  const persisted = await serviceWorker.evaluate(async ({ loadingKey, conversationKey }) => {
+    const stored = await chrome.storage.local.get([loadingKey, conversationKey]);
+    const conversation = stored[conversationKey] as {
+      messages: Array<{ id: string; status: string; branches: Array<{ id: string; status: string; errorMessage: string | null }> }>;
+    };
+    return {
+      hasLoading: loadingKey in stored,
+      assistant: conversation.messages.find((message) => message.id === 'assistant-1') ?? null,
+    };
+  }, {
+    loadingKey: buildLoadingStorageKey(normalizedUrl, 'chat'),
+    conversationKey: 'conversation:https://example.com/article:chat',
+  });
+  expect(persisted.hasLoading).toBe(false);
+  expect(persisted.assistant?.status).toBe('error');
+  expect(persisted.assistant?.branches[0]).toMatchObject({ id: 'branch-1', status: 'error' });
+  expect(persisted.assistant?.branches[0]?.errorMessage).toContain('后台服务已重启');
 });

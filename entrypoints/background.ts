@@ -18,12 +18,15 @@ import { createExtractionService } from '../src/services/extraction/extraction-s
 import { createJinaClient } from '../src/services/extraction/jina-client';
 import { createConversationExporter } from '../src/services/export/conversation-exporter';
 import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dispatch-service';
+import { toModelMessages } from '../src/services/llm-dispatch/model-messages';
 import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
 import { bridgeStreamError, type StreamErrorBox } from '../src/services/llm-dispatch/stream-error-bridge';
 import { createLogger } from '../src/services/logger/logger';
 import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
 import { createConversationsCommandHandler, isConversationsCommandMessage } from '../src/services/runtime-messaging/conversations-commands';
+import { createLoadingStateReconciler } from '../src/services/runtime-messaging/loading-state-reconciler';
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
+import { createServiceWorkerKeepalive } from '../src/services/runtime-messaging/service-worker-keepalive';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
 import {
   sidebarConfirmBlacklistContinueCommandSchema,
@@ -65,6 +68,40 @@ export default defineBackground(() => {
   });
   const portBus = createPortBus();
   const sessionRegistry = createSidebarSessionRegistry();
+  // 模型思考阶段没有 chunk 落库和 port 消息，worker 会因 30 秒空闲被回收；请求期间定时调用扩展 API 续命。
+  const keepalive = createServiceWorkerKeepalive({
+    logger,
+    ping: () => chrome.runtime.getPlatformInfo(),
+  });
+  const loadingStateReconciler = createLoadingStateReconciler({
+    logger,
+    conversationRepository,
+    sessionRegistry,
+    portBus: {
+      publishToPromptTab(event) {
+        portBus.publishToPromptTab(
+          {
+            normalizedUrl: event.normalizedUrl,
+            promptTabId: event.promptTabId,
+          },
+          sidebarPortEventSchema.parse(event),
+        );
+      },
+    },
+  });
+  // worker 重启后内存里的会话已不存在，先把 storage 中遗留的 loading 收敛为失败态。
+  const startupReconciliation = loadingStateReconciler
+    .reconcileAll()
+    .then((reconciled) => {
+      if (reconciled > 0) {
+        logger.warn('loading.reconcile.startup', { reconciled });
+      }
+    })
+    .catch((error: unknown) => {
+      logger.warn('loading.reconcile.startup_failed', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
   const chatDispatchService = createChatDispatchService({
     logger,
     configRepository,
@@ -109,11 +146,14 @@ export default defineBackground(() => {
         const errorBox: StreamErrorBox = { error: null };
         const result = streamText({
           ...input,
+          // 图片必须展开成 image part，直接透传的 images 字段会被 SDK 的 zod 校验剥掉。
+          messages: toModelMessages(input.messages),
           onError({ error }: { error: unknown }) {
             errorBox.error = error;
           },
         });
-        return bridgeStreamError({ result, errorBox });
+        const bridged = bridgeStreamError({ result, errorBox });
+        return { textStream: keepalive.wrapIterable(bridged.textStream) };
       }
 
       return {
@@ -160,7 +200,8 @@ export default defineBackground(() => {
         if (resolvedModel.providerOptions) {
           request.providerOptions = resolvedModel.providerOptions;
         }
-        const response = await generateText(request)
+        const response = await keepalive
+          .run(() => generateText(request))
           .catch((error: unknown) => {
             if (timedOut) {
               throw new Error(`大模型调用超时（${llmRequestTimeoutSeconds} 秒）`);
@@ -343,11 +384,23 @@ export default defineBackground(() => {
         promptTab: parsed.data.promptTabId,
       });
 
-      void Promise.all([
-        conversationRepository.getLoadingState(normalizedUrl, parsed.data.promptTabId),
-        conversationRepository.getConversation(normalizedUrl, parsed.data.promptTabId),
-      ])
-        .then(([loadingState, conversation]) => {
+      void startupReconciliation
+        .then(() => loadingStateReconciler.reconcilePromptTab(normalizedUrl, parsed.data.promptTabId))
+        .then(async (outcome) => {
+          // 只有当前 worker 里仍在跑的会话才值得恢复 loading；孤儿已在 reconcile 中收敛并推送失败事件。
+          if (outcome !== 'active') {
+            logger.info('port.restore_skipped', {
+              browserTabId: parsed.data.tabId,
+              normalizedUrl,
+              promptTab: parsed.data.promptTabId,
+              outcome,
+            });
+            return;
+          }
+          const [loadingState, conversation] = await Promise.all([
+            conversationRepository.getLoadingState(normalizedUrl, parsed.data.promptTabId),
+            conversationRepository.getConversation(normalizedUrl, parsed.data.promptTabId),
+          ]);
           if (!loadingState || !conversation) {
             return;
           }

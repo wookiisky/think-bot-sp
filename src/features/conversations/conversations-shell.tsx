@@ -19,6 +19,7 @@ import {
 import {
   DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
+  DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
   type ExtractionTextFontSize,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
@@ -56,6 +57,7 @@ import {
   upsertAssistantMessage,
 } from '../workspace/workspace-state';
 import { usePageScope } from '../workspace/use-page-scope';
+import { subscribeStreamPort } from '../workspace/stream-port-subscription';
 import { reduceWorkspaceEvent } from '../workspace/workspace-stream-state';
 import { getWorkspaceSessionUpdate } from '../workspace/workspace-session-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
@@ -183,6 +185,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [configLoaded, setConfigLoaded] = useState(false);
   const themeRootAttributes = useDocumentTheme(themePreference);
   const terminalSessionIdsRef = useRef<Set<string>>(new Set());
+  /** 恢复 loading 时判断是否已超过请求超时；后台的定时器可能随 worker 一起消失过。 */
+  const llmRequestTimeoutSecondsRef = useRef(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
   const t = useMemo(() => createWorkspaceTranslator(localeResources, localeCode), [localeResources, localeCode]);
 
   const selectedPage = detail.page?.normalizedUrl === selectedPageUrl && detailStatus === 'ready' ? detail.page : null;
@@ -394,6 +398,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
       setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
       setThemePreference(configResponse.config.basic.theme);
+      llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
       setConfigLoaded(true);
 
       const initialPage = pagesResponse.pages[0] ?? null;
@@ -486,6 +491,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
         setThemePreference(configResponse.config.basic.theme);
+        llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
         applyDetailState({
           detail: {
             page: detailResponse.page,
@@ -548,18 +554,18 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         branch: t('workspace.status.branch'),
         error: t('workspace.status.error'),
         cancelled: t('workspace.status.cancelled'),
-      }));
+        timeout: t('workspace.status.timeout'),
+      }, { now: Date.now(), timeoutMs: llmRequestTimeoutSecondsRef.current * 1000 }));
     };
 
-    const ports = subscriptionIds.map((promptTabId) => {
-      const port = api.connectStream({ pageUrl: selectedPage.url, promptTabId });
-      port.onMessage?.addListener?.(handlePortMessage as never);
-      return port;
-    });
+    // worker 被回收会让 port 从后台侧断开；自动重连会唤醒 worker，由它决定恢复还是收敛。
+    const subscriptions = subscriptionIds.map((promptTabId) => subscribeStreamPort({
+      connect: () => api.connectStream({ pageUrl: selectedPage.url, promptTabId }),
+      onEvent: handlePortMessage,
+    }));
     return () => {
-      for (const port of ports) {
-        port.onMessage?.removeListener?.(handlePortMessage as never);
-        port.disconnect();
+      for (const unsubscribe of subscriptions) {
+        unsubscribe();
       }
     };
   }, [api, promptTabSubscriptionKey, selectedPage?.url, selectedPageUrl]);

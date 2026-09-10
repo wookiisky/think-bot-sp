@@ -188,6 +188,7 @@ workspace.status.done: 已完成
 workspace.status.error: 失败
 workspace.status.cancelled: 已停止
 workspace.status.restore: 恢复生成中
+workspace.status.timeout: 请求超时，后台未在限定时间内返回
 workspace.status.branch: 分支
 workspace.status.primaryBranch: 主分支
 workspace.promptStatus.loading: 生成中
