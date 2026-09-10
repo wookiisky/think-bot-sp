@@ -89,6 +89,11 @@
       - 默认值：`60`
       - 含义：所有大模型调用共用的请求超时秒数。
       - 约束：范围固定在 `1 ~ 600`。
+    - `reasoningEffort`
+      - 类型：`"low" | "medium" | "high" | "max"`
+      - 必填：否
+      - 默认值：`medium`
+      - 含义：全局默认思考强度；模型未单独覆盖时统一使用该值，运行时再按 provider / 模型映射为底层 SDK 参数。
 - `models`
   - 类型：`ModelConfig[]`
   - 必填：是
@@ -104,7 +109,7 @@
       - 必填：是
       - 含义：设置页与其他入口展示的模型名称。
     - `provider`
-      - 类型：`"openai-compatible" | "gemini" | "azure-openai" | "anthropic" | "amazon-bedrock" | "google-vertex"`
+      - 类型：`"openai-compatible" | "openrouter" | "gemini" | "azure-openai" | "anthropic" | "amazon-bedrock" | "google-vertex"`
       - 必填：是
       - 含义：Provider 类型，决定字段显隐、校验和调度适配器。
     - `enabled`
@@ -139,10 +144,6 @@
       - 类型：`string | undefined`
       - 必填：否
       - 含义：Google Vertex location；配合 express mode 或代理时可为空。
-    - `temperature`
-      - 类型：`number`
-      - 必填：否
-      - 含义：采样温度。
     - `tools`
       - 类型：`string[]`
       - 必填：否
@@ -150,15 +151,11 @@
     - `reasoningEffort`
       - 类型：`"low" | "medium" | "high" | "max" | undefined`
       - 必填：否
-      - 含义：统一 reasoning 强度配置；仅在支持的 provider 上透传到底层 SDK。
+      - 含义：模型级思考强度覆盖；缺省表示跟随 `basic.reasoningEffort`。所有 provider 都可配置，是否真正发送以及发送何种参数由 `Services/llm-dispatch.md` 中的映射规则决定。
     - `thinkingBudget`
       - 类型：`number | null`
       - 必填：否
       - 含义：旧配置兼容字段，设置页已不再暴露，新实现不再消费。
-    - `maxOutputTokens`
-      - 类型：`number`
-      - 必填：否
-      - 含义：单次输出的 token 上限。
     - `supportsImages`
       - 类型：`boolean`
       - 必填：是
@@ -258,13 +255,14 @@
 - 模型、快捷输入、黑名单内部对象必须带稳定 `id`。
 - 删除模型和快捷输入采用软删除标记，不直接丢失历史引用。
 - 系统内置快捷输入和系统内置黑名单规则都使用稳定 id，迁移时只补缺失项，不覆盖已有同 id 项。
-- 兼容旧配置时，缺失的 `extractionPanelHeight / extractionTextFontSize / llmRequestTimeoutSeconds / jinaApiKey / jinaResponseTemplate / parallelModelIds / display` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
+- 兼容旧配置时，缺失的 `extractionPanelHeight / extractionTextFontSize / llmRequestTimeoutSeconds / reasoningEffort / jinaApiKey / jinaResponseTemplate / parallelModelIds / display` 会自动补默认值；旧字段 `branchModelIds` 会自动迁移到 `parallelModelIds`。
+- 模型配置不再持久化 `temperature` 与 `maxOutputTokens`；旧数据中的这两个字段在解析时被丢弃，采样温度交给 provider 默认值，输出 token 上限由代码按模型给定。
 - 设置页中的模型项采用“列表摘要 + 展开编辑”形态，但持久化仍以完整对象保存，不拆分多 key。
 - 设置页中的模型列表与快捷输入列表都支持拖拽排序，但持久化仍只写回 `order`，不引入额外排序元数据。
 - Provider 差异字段允许为空，但不允许被错误地作为其他 Provider 的必填项。
 - 图片输入能力必须显式写入 `supportsImages`，不能依赖模型名猜测。
 - 兼容旧配置时，如果 `supportsImages` 缺失，读取后默认补为 `false`。
-- 兼容旧配置时，如果 `reasoningEffort` 缺失，运行时按 `high` 处理。
+- 兼容旧配置时，如果模型级 `reasoningEffort` 缺失，运行时跟随 `basic.reasoningEffort`（默认 `medium`）；旧数据已显式写入的模型级值继续生效。
 - 黑名单中的 `regex` 规则必须在保存和导入阶段通过正则校验；非法规则不得持久化。
 
 ## 4. 读写路径
@@ -295,6 +293,7 @@
 - `provider` 合法
 - Provider 关键字段完整：
   - `openai-compatible`：`baseUrl`、`apiKey`、`model`
+  - `openrouter`：`apiKey`、`model`（`baseUrl` 留空时回退到 `https://openrouter.ai/api/v1`）
   - `gemini`：`apiKey`、`model`
   - `azure-openai`：`baseUrl`、`apiKey`、`deployment`
   - `anthropic`：`apiKey`、`model`

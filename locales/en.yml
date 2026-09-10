@@ -64,11 +64,9 @@ settings.displayDescription: Configure heading and body styles for assistant Mar
 settings.displayPreset1: Preset 1
 settings.displayPreset2: Preset 2
 settings.displayPreset3: Preset 3
-settings.displayFieldDescription: Adjust font size, color, and underline separately.
 settings.displayFontSize: Font Size
 settings.displayColor: Color
 settings.displayUnderline: Underline
-settings.displayPreview: Preview
 settings.displayPreviewBody: This is a sample paragraph for previewing the current style.
 settings.displaySampleTitle: Full Preview
 settings.displaySampleDescription: The sample below updates in real time with the current display settings.
@@ -87,6 +85,7 @@ settings.multiSelectPlaceholder: Please Select
 settings.multiSelectSummary: "{count} selected"
 settings.extractionMethod: Default Extraction Method
 settings.extractionPanelHeight: Default Extraction Panel Height
+settings.reasoningEffort: Default Reasoning Effort
 settings.llmRequestTimeoutSeconds: LLM Request Timeout (seconds)
 settings.extractionTextFontSize: Extraction Text Font Size
 settings.extractionTextFontSizePreview: Preview Text

@@ -14,10 +14,8 @@ const createModelConfig = (overrides: Partial<ModelConfig>): ModelConfig => ({
   baseUrl: 'https://api.example.com/v1',
   apiKey: 'test-key',
   deployment: '',
-  temperature: 1,
   tools: [],
   thinkingBudget: null,
-  maxOutputTokens: null,
   supportsImages: false,
   order: 0,
   deletedAt: null,
@@ -135,6 +133,7 @@ describe('provider-registry', () => {
         model: 'gpt-4.1-mini',
         supportsImages: true,
       }),
+      { reasoningEffort: 'medium' },
     );
     const geminiResolved = resolveProviderModel(
       createModelConfig({
@@ -142,6 +141,7 @@ describe('provider-registry', () => {
         model: 'gemini-2.5-flash',
         baseUrl: '',
       }),
+      { reasoningEffort: 'medium' },
     );
     const anthropicResolved = resolveProviderModel(
       createModelConfig({
@@ -149,6 +149,7 @@ describe('provider-registry', () => {
         model: 'claude-3-7-sonnet-latest',
         baseUrl: '',
       }),
+      { reasoningEffort: 'medium' },
     );
 
     expect(openAICompatible.providerFactory).toHaveBeenCalledWith({
@@ -183,6 +184,7 @@ describe('provider-registry', () => {
         model: 'gpt-4.1-mini',
         supportsImages: true,
       }),
+      { reasoningEffort: 'medium' },
     );
     const azureResolved = registry.resolveProviderModel(
       createModelConfig({
@@ -192,6 +194,7 @@ describe('provider-registry', () => {
         baseUrl: 'https://resource.openai.azure.com/openai/deployments/my-deployment',
         deployment: 'my-deployment',
       }),
+      { reasoningEffort: 'medium' },
     );
 
     expect(openAICompatible.providerFactory).toHaveBeenCalledTimes(2);
@@ -219,6 +222,7 @@ describe('provider-registry', () => {
         model: 'gemini-2.5-flash',
         baseUrl: '',
       }),
+      { reasoningEffort: 'medium' },
     );
 
     expect(googleFactory.providerFactory).toHaveBeenCalledWith({
@@ -245,6 +249,7 @@ describe('provider-registry', () => {
         model: 'claude-3-7-sonnet-latest',
         baseUrl: '',
       }),
+      { reasoningEffort: 'medium' },
     );
 
     expect(anthropicFactory.providerFactory).toHaveBeenCalledWith({
@@ -262,12 +267,12 @@ describe('provider-registry', () => {
 
 describe('official provider contracts (offline)', () => {
   it.each<ModelConfig['provider']>([
-    'openai-compatible', 'azure-openai', 'gemini', 'anthropic', 'amazon-bedrock', 'google-vertex',
+    'openai-compatible', 'openrouter', 'azure-openai', 'gemini', 'anthropic', 'amazon-bedrock', 'google-vertex',
   ])('%s returns the model protocol accepted by AI SDK 5', async (provider) => {
     const fetchStub = vi.fn(() => { throw new Error('Unexpected network request'); });
     vi.stubGlobal('fetch', fetchStub);
     const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
-    const resolved = resolveProviderModel(createModelConfig({ provider, deployment: 'deployment' }));
+    const resolved = resolveProviderModel(createModelConfig({ provider, deployment: 'deployment' }), { reasoningEffort: 'medium' });
     expect(typeof resolved.sdkModel).toBe('object');
     if (typeof resolved.sdkModel === 'string') throw new Error('Expected a provider model');
     expect(resolved.sdkModel.specificationVersion).toBe('v2');
@@ -284,8 +289,8 @@ describe('official provider contracts (offline)', () => {
     const resolved = resolveProviderModel(createModelConfig({
       provider: 'google-vertex', model: 'gemini-3-flash-preview', baseUrl,
       project: 'ignored-in-express-mode', location: 'us-central1',
-      reasoningEffort: 'max', tools: ['url_context', 'google_search'],
-    }));
+      tools: ['url_context', 'google_search'],
+    }), { reasoningEffort: 'max' });
     if (!resolved.tools || !resolved.providerOptions) throw new Error('Expected Google tools and reasoning');
     const result = await generateText({
       model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
@@ -313,8 +318,7 @@ describe('official provider contracts (offline)', () => {
     const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
     const resolved = resolveProviderModel(createModelConfig({
       provider: 'amazon-bedrock', model: 'us.amazon.nova-2-lite-v1:0',
-      region: 'us-east-1', baseUrl: '', reasoningEffort: 'medium',
-    }));
+      region: 'us-east-1', baseUrl: '', }), { reasoningEffort: 'medium' });
     if (!resolved.providerOptions) throw new Error('Expected Bedrock reasoning');
     const result = await generateText({
       model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
@@ -328,5 +332,94 @@ describe('official provider contracts (offline)', () => {
     expect(new Headers(request[1].headers).get('authorization')).toBe('Bearer test-key');
     const body = JSON.parse(String(request[1].body));
     expect(body.additionalModelRequestFields.reasoningConfig).toEqual({ type: 'enabled', maxReasoningEffort: 'medium' });
+  });
+
+  it.each([
+    ['gpt-5.4', 'max', 'xhigh'],
+    ['gpt-4.1-mini', 'high', undefined],
+  ])('openai-compatible %s with effort=%s sends reasoning_effort=%s and no sampling params', async (modelId, effort, expected) => {
+    const fetchStub = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => Response.json({
+      id: 'chatcmpl-1', object: 'chat.completion', created: 1, model: modelId,
+      choices: [{ index: 0, message: { role: 'assistant', content: 'offline answer' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }));
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({ provider: 'openai-compatible', model: modelId }), {
+      reasoningEffort: effort as ModelConfig['reasoningEffort'] & string,
+    });
+    const result = await generateText({
+      model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
+      ...(resolved.providerOptions ? { providerOptions: resolved.providerOptions } : {}),
+    });
+    expect(result.text).toBe('offline answer');
+    expect(resolved.maxOutputTokens).toBeNull();
+    const request = fetchStub.mock.calls[0];
+    if (!request?.[1]) throw new Error('Expected a fetch request');
+    const body = JSON.parse(String(request[1].body));
+    expect(body.reasoning_effort).toBe(expected);
+    expect(body.temperature).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it.each([
+    ['claude-opus-4-6', 'max', 'max', 128_000],
+    ['claude-3-7-sonnet-latest', 'high', undefined, 64_000],
+  ])('anthropic %s with effort=%s sends output_config.effort=%s and max_tokens=%s', async (modelId, effort, expectedEffort, expectedMaxTokens) => {
+    const fetchStub = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => Response.json({
+      id: 'msg_1', type: 'message', role: 'assistant', model: modelId,
+      content: [{ type: 'text', text: 'offline answer' }],
+      stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 1, output_tokens: 2 },
+    }));
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({ provider: 'anthropic', model: modelId, baseUrl: '' }), {
+      reasoningEffort: effort as ModelConfig['reasoningEffort'] & string,
+    });
+    const result = await generateText({
+      model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
+      ...(resolved.maxOutputTokens !== null ? { maxOutputTokens: resolved.maxOutputTokens } : {}),
+      ...(resolved.providerOptions ? { providerOptions: resolved.providerOptions } : {}),
+    });
+    expect(result.text).toBe('offline answer');
+    const request = fetchStub.mock.calls[0];
+    if (!request?.[1]) throw new Error('Expected a fetch request');
+    const body = JSON.parse(String(request[1].body));
+    expect(body.output_config?.effort).toBe(expectedEffort);
+    expect(body.max_tokens).toBe(expectedMaxTokens);
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it.each([
+    ['anthropic/claude-fable-5.1', 'max', { enabled: true, effort: 'max' }, 'max'],
+    ['openai/gpt-6-astra', 'low', { effort: 'low' }, undefined],
+    ['openai/gpt-4.1', 'high', undefined, undefined],
+  ])('openrouter %s with effort=%s sends reasoning=%j verbosity=%s to the default base URL', async (modelId, effort, expectedReasoning, expectedVerbosity) => {
+    const fetchStub = vi.fn(async (_url: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => Response.json({
+      id: 'gen-1', object: 'chat.completion', created: 1, model: modelId,
+      choices: [{ index: 0, message: { role: 'assistant', content: 'offline answer' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    }));
+    vi.stubGlobal('fetch', fetchStub);
+    const { resolveProviderModel } = await import('../../../../src/services/llm-dispatch/provider-registry');
+    const resolved = resolveProviderModel(createModelConfig({ provider: 'openrouter', model: modelId, baseUrl: '' }), {
+      reasoningEffort: effort as ModelConfig['reasoningEffort'] & string,
+    });
+    const result = await generateText({
+      model: resolved.sdkModel, prompt: 'hello', maxRetries: 0,
+      ...(resolved.providerOptions ? { providerOptions: resolved.providerOptions } : {}),
+    });
+    expect(result.text).toBe('offline answer');
+    expect(resolved.providerId).toBe('openrouter');
+    const request = fetchStub.mock.calls[0];
+    if (!request?.[1]) throw new Error('Expected a fetch request');
+    expect(request[0]).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(new Headers(request[1].headers).get('authorization')).toBe('Bearer test-key');
+    const body = JSON.parse(String(request[1].body));
+    expect(body.reasoning).toEqual(expectedReasoning);
+    expect(body.verbosity).toBe(expectedVerbosity);
+    expect(body.reasoning_effort).toBeUndefined();
+    expect(body.temperature).toBeUndefined();
+    expect(body.max_tokens).toBeUndefined();
   });
 });

@@ -55,7 +55,7 @@
 
 Provider 适配规则：
 
-- OpenAI Compatible、Azure OpenAI -> `@ai-sdk/openai-compatible`
+- OpenAI Compatible、OpenRouter、Azure OpenAI -> `@ai-sdk/openai-compatible`；OpenRouter 以 `openrouter` 作为 provider name，`providerOptions.openrouter` 下的键会原样进入请求体
 - Google Gemini -> `@ai-sdk/google`
 - Anthropic -> `@ai-sdk/anthropic`
 - Amazon Bedrock -> `@ai-sdk/amazon-bedrock`
@@ -64,10 +64,16 @@ Provider 适配规则：
 
 请求参数透传规则：
 
-- `temperature`、`maxOutputTokens` 会进入所有真实 `streamText / generateText` 调用。
+- 不再向任何 provider 发送 `temperature`：Claude 4.7 及之后、OpenAI reasoning 模型都会拒绝该参数，统一交给 provider 默认值。
+- `maxOutputTokens` 由 `model-request-options.ts` 按 provider / 模型给定，不再来自用户配置：Anthropic 及 Bedrock 上的 Claude 按系列与版本映射（4.6+ 为 128K，4.5 为 64K，4.0 / 4.1 为 32K，3.5 为 8192，3.0 为 4096，无法识别时 64K，避免 SDK 对未知模型兜底到 4096）；其他 provider 不传，交给 provider 默认值。
 - `basic.llmRequestTimeoutSeconds` 是全局大模型调用超时，默认 `60` 秒；真实聊天流和设置页测试模型都会通过 `AbortSignal` 按该值中止请求。
 - `gemini / google-vertex` 的 `url_context / google_search` 通过 provider tools 透传。
-- `anthropic / gemini / google-vertex / amazon-bedrock` 的 `reasoningEffort` 会映射到各自 SDK 的 providerOptions。
+- 思考强度统一来自配置层：模型级 `reasoningEffort` 覆盖优先，否则跟随 `basic.reasoningEffort`（默认 `medium`）。调用方先用 `resolveModelReasoningEffort` 解析，再传给 `resolveProviderModel`，由 `model-request-options.ts` 按 provider 与模型 id 映射为底层参数：
+  - `openai-compatible / azure-openai`：仅对 `o 系列 / gpt-5 及之后 / codex` 命名的模型发送 `reasoning_effort`（Azure 按 deployment 名称判断）；`max` 在 GPT-5.2+ 或 codex-max 上映射为 `xhigh`，其余退到 `high`；非 reasoning 模型不发送，避免 400。
+  - `openrouter`：不发 `reasoning_effort`，改发 OpenRouter 统一的 `reasoning` 对象，`max` 原样透传由网关映射到最近档位。`anthropic/claude-*` 3.7 起发 `reasoning: { enabled: true, effort }`（OpenRouter 对 Claude 默认不开启 reasoning），4.6+ / Fable 额外发 `verbosity`（映射到 `output_config.effort`，优先级高于 `reasoning.effort`）；`openai/` 下的 reasoning 家族只发 `reasoning: { effort }`；`google/gemini-2.5 / 3+` 发 `reasoning: { enabled: true, effort }`；其他模型不发。
+  - `anthropic`：Opus 4.5 起支持 `effort`（Opus 4.5 无 `max`，退到 `high`）；Sonnet / Haiku 4.5 及更早版本不发送。
+  - `gemini / google-vertex`：Gemini 3 及之后使用 `thinkingLevel`（`max` 退到 `high`）；Gemini 2.5 换算为 `thinkingBudget`（1024 / 8192 / 16384 / 24576）；Gemini 1.x / 2.0 与 Gemma 不发送。
+  - `amazon-bedrock`：Claude 模型走 `reasoningConfig.maxReasoningEffort`（SDK 转为 `output_config.effort`，版本规则同 anthropic）；Nova 2+ 与 gpt-oss 走 `maxReasoningEffort`（`max` 退到 `high`）；Nova 1.x 与其他家族不发送。
 - 设置页“测试模型”走 background 命令链路，并统一发送 `hi` 做最小连通性校验；命令会携带当前草稿中的全局超时值。
 
 ## 5. 关键流程

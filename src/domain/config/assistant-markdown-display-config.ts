@@ -35,28 +35,28 @@ export type AssistantMarkdownDisplayConfig = z.infer<typeof assistantMarkdownDis
 /** 深蓝到浅蓝的默认展示方案。 */
 const assistantMarkdownBluePreset = {
   h1: { fontSizePx: 18, color: '#1d4ed8', underline: false },
-  h2: { fontSizePx: 18, color: '#2563eb', underline: false },
+  h2: { fontSizePx: 17, color: '#2563eb', underline: false },
   h3: { fontSizePx: 16, color: '#3b82f6', underline: false },
-  h4: { fontSizePx: 14, color: '#60a5fa', underline: false },
-  body: { fontSizePx: 14, color: '#111827', underline: false },
+  h4: { fontSizePx: 16, color: '#60a5fa', underline: false },
+  body: { fontSizePx: 16, color: '#111827', underline: false },
 } satisfies z.input<typeof assistantMarkdownDisplayConfigSchema>;
 
 /** 深橙到浅橙的默认展示方案。 */
 const assistantMarkdownOrangePreset = {
   h1: { fontSizePx: 18, color: '#c2410c', underline: false },
-  h2: { fontSizePx: 18, color: '#ea580c', underline: false },
+  h2: { fontSizePx: 17, color: '#ea580c', underline: false },
   h3: { fontSizePx: 16, color: '#f97316', underline: false },
-  h4: { fontSizePx: 14, color: '#fb923c', underline: false },
-  body: { fontSizePx: 14, color: '#111827', underline: false },
+  h4: { fontSizePx: 16, color: '#fb923c', underline: false },
+  body: { fontSizePx: 16, color: '#111827', underline: false },
 } satisfies z.input<typeof assistantMarkdownDisplayConfigSchema>;
 
 /** 多彩分级的默认展示方案。 */
 const assistantMarkdownRainbowPreset = {
   h1: { fontSizePx: 18, color: '#dc2626', underline: false },
-  h2: { fontSizePx: 18, color: '#ea580c', underline: false },
+  h2: { fontSizePx: 17, color: '#ea580c', underline: false },
   h3: { fontSizePx: 16, color: '#16a34a', underline: false },
-  h4: { fontSizePx: 14, color: '#2563eb', underline: false },
-  body: { fontSizePx: 14, color: '#111827', underline: false },
+  h4: { fontSizePx: 16, color: '#2563eb', underline: false },
+  body: { fontSizePx: 16, color: '#111827', underline: false },
 } satisfies z.input<typeof assistantMarkdownDisplayConfigSchema>;
 
 /** 默认助手 Markdown 展示配置，直接复用预设 1。 */

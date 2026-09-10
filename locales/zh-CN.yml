@@ -64,11 +64,9 @@ settings.displayDescription: 配置助手消息 Markdown 的标题和正文样�
 settings.displayPreset1: 默认配置 1
 settings.displayPreset2: 默认配置 2
 settings.displayPreset3: 默认配置 3
-settings.displayFieldDescription: 可分别调整字号、颜色和下划线。
 settings.displayFontSize: 字号
 settings.displayColor: 颜色
 settings.displayUnderline: 下划线
-settings.displayPreview: 预览
 settings.displayPreviewBody: 这是一段正文示例，用来预览当前样式。
 settings.displaySampleTitle: 整体示例
 settings.displaySampleDescription: 下面的示例会按当前展示配置实时更新。
@@ -87,6 +85,7 @@ settings.multiSelectPlaceholder: 请选择
 settings.multiSelectSummary: "已选 {count} 项"
 settings.extractionMethod: 默认提取方式
 settings.extractionPanelHeight: 默认提取区高度
+settings.reasoningEffort: 默认思考强度
 settings.llmRequestTimeoutSeconds: 大模型调用超时（秒）
 settings.extractionTextFontSize: 提取区文本字体大小
 settings.extractionTextFontSizePreview: 示例文本

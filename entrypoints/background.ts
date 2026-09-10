@@ -85,7 +85,6 @@ export default defineBackground(() => {
     },
     streamText: async (input: {
       model: LanguageModel;
-      temperature?: number;
       maxOutputTokens?: number;
       tools?: ToolSet;
       providerOptions?: ProviderOptions;
@@ -132,8 +131,8 @@ export default defineBackground(() => {
     recentErrorRepository,
     syncService,
     modelTestService: {
-      async testModel(model, llmRequestTimeoutSeconds) {
-        const resolvedModel = resolveProviderModel(model);
+      async testModel(model, llmRequestTimeoutSeconds, reasoningEffort) {
+        const resolvedModel = resolveProviderModel(model, { reasoningEffort });
         const abortController = new AbortController();
         let timedOut = false;
         const timeoutId = setTimeout(() => {
@@ -143,12 +142,10 @@ export default defineBackground(() => {
         const request = {
           model: resolvedModel.sdkModel,
           prompt: 'hi',
-          temperature: resolvedModel.temperature,
           abortSignal: abortController.signal,
         } as {
           model: LanguageModel;
           prompt: string;
-          temperature: number;
           abortSignal: AbortSignal;
           maxOutputTokens?: number;
           tools?: ToolSet;

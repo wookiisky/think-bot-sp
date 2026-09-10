@@ -1,5 +1,27 @@
 # 决策记录
 
+## 2026-09-10：思考强度统一到配置层并在基础设置给默认值，移除 Temperature 与 Max Output Tokens
+
+- 背景：
+  - 原 `reasoningEffort` 仅对部分 provider 暴露，缺省按 `high` 处理，OpenAI 系列完全没有思考强度控制。
+  - Claude 4.7 及之后与 OpenAI reasoning 模型会拒绝 `temperature`；用户手填的 `maxOutputTokens` 容易超出模型上限或留空后被 SDK 兜底到 4096。
+- 决策：
+  - `basic.reasoningEffort` 作为全局默认（`medium`），模型级 `reasoningEffort` 变为可选覆盖，所有 provider 都可配置。
+  - 新增 `services/llm-dispatch/model-request-options.ts`，按 provider 与模型 id 把统一档位映射为各 SDK 实际接受的参数，不支持的模型不发送。
+  - 删除模型配置中的 `temperature` 与 `maxOutputTokens`；输出 token 上限改由代码按 Claude 系列 / 版本给定，其他 provider 交给默认值。
+  - 新增独立的 `openrouter` provider（复用 `@ai-sdk/openai-compatible`，不引入官方 `@openrouter/ai-sdk-provider`，其 ai v5 兼容线已停留在 1.5.x）：OpenRouter 的 reasoning 契约与 OpenAI 顶层 `reasoning_effort` 不同，按 provider id 分支比在 openai-compatible 里嗅探 URL 更明确。
+- 原因：
+  - 配置层只保留一个语义清晰的档位，模型差异收敛到一处映射表，便于新增模型时维护。
+  - 避免向不支持的模型发送采样或 reasoning 参数导致 400。
+- 影响范围：
+  - `DataSchema/config.md`
+  - `Services/llm-dispatch.md`
+  - `Workspace/settings.md`
+  - `test/settings-core.md`
+- 放弃方案：
+  - 保留 Temperature / Max Output Tokens 作为高级选项：会继续把模型兼容性问题暴露给用户。
+  - 只在 provider 层判断是否支持 reasoning：无法区分同一 provider 下不同模型家族。
+
 ## 2026-05-10：输入区改为 Textarea 横向布局，拖拽直接调整 textarea 高度
 
 - 背景：

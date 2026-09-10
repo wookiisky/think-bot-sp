@@ -15,10 +15,8 @@ const createModel = (overrides: Partial<ModelConfig> = {}): ModelConfig => ({
     baseUrl: 'https://api.example.com',
     apiKey: 'secret-key',
     deployment: '',
-    temperature: 0.2,
     tools: [],
     thinkingBudget: null,
-    maxOutputTokens: null,
     order: 0,
     deletedAt: null,
     supportsImages: false,
@@ -78,7 +76,7 @@ describe('ModelForm', () => {
     expect(screen.getByLabelText('Deployment')).toBeInTheDocument();
 
     await selectOption('Provider', 'Gemini');
-    expect(screen.getByLabelText('Reasoning Effort')).toBeInTheDocument();
+    expect(screen.getByLabelText('思考强度')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tools' })).toBeInTheDocument();
 
     await selectOption('Provider', 'Amazon Bedrock');
@@ -152,21 +150,46 @@ describe('ModelForm', () => {
     await user.clear(screen.getByLabelText('Model'));
     await user.type(screen.getByLabelText('Model'), 'gpt-5.4');
     await user.click(screen.getByRole('checkbox', { name: '启用模型' }));
-    await user.clear(screen.getByLabelText('Temperature'));
-    await user.type(screen.getByLabelText('Temperature'), '0.7');
-    await user.clear(screen.getByLabelText('Max Output Tokens'));
-    await user.type(screen.getByLabelText('Max Output Tokens'), '4096');
+    await selectOption('思考强度', 'High');
 
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
         name: '研究模型',
         model: 'gpt-5.4',
         enabled: false,
-        temperature: 0.7,
-        maxOutputTokens: 4096,
+        reasoningEffort: 'high',
       }),
     );
 
     expect(screen.queryByLabelText('Thinking Budget')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Temperature')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Max Output Tokens')).not.toBeInTheDocument();
+  });
+
+  it('思考强度默认跟随基础设置，且对所有 Provider 可见', async () => {
+    const onChange = vi.fn();
+    const Harness = () => {
+      const [model, setModel] = useState(createModel({ reasoningEffort: 'high' }));
+      return (
+        <ModelForm
+          model={model}
+          onChange={(nextModel) => {
+            onChange(nextModel);
+            setModel(nextModel);
+          }}
+        />
+      );
+    };
+
+    render(<Harness />);
+
+    expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('High');
+
+    await selectOption('思考强度', '跟随基础设置');
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ reasoningEffort: undefined }));
+    expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('跟随基础设置');
+
+    await selectOption('Provider', 'Anthropic');
+    expect(screen.getByRole('combobox', { name: '思考强度' })).toHaveTextContent('跟随基础设置');
   });
 });

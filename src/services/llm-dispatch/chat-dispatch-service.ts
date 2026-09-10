@@ -1,9 +1,9 @@
 import type * as Ai from 'ai';
 import type { LanguageModel, ToolSet } from 'ai';
-import { createDefaultConfig, resolvePromptTabParallelModelIds } from '../../domain/config/config-schema';
+import { createDefaultConfig, resolveModelReasoningEffort, resolvePromptTabParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig, ModelConfig } from '../../domain/config/config-schema';
 import { createLoadingState } from '../../domain/loading/loading-state-schema';
-import type { ResolvedProviderModel } from './provider-registry';
+import type { ResolvedProviderModel, ResolveProviderModelOptions } from './provider-registry';
 import { consumeBufferedTextStream } from './buffered-text-stream';
 
 type ChatDispatchInput = {
@@ -336,7 +336,7 @@ type ChatDispatchServiceDeps = {
   /** provider 解析器。 */
   providerRegistry: {
     /** 解析 provider 模型。 */
-    resolveProviderModel: (_model: ModelConfig) => ResolvedProviderModel;
+    resolveProviderModel: (_model: ModelConfig, _options: ResolveProviderModelOptions) => ResolvedProviderModel;
   };
   /** 会话仓储。 */
   conversationRepository: {
@@ -594,8 +594,6 @@ type ChatDispatchServiceDeps = {
   streamText: (_input: {
     /** AI SDK 模型对象。 */
     model: LanguageModel;
-    /** 采样温度。 */
-    temperature?: number;
     /** 单次输出 token 上限。 */
     maxOutputTokens?: number;
     /** provider tools。 */
@@ -761,12 +759,10 @@ const buildModelInvocation = (input: {
 }) => {
   const invocation = {
     model: input.resolvedModel.sdkModel,
-    temperature: input.resolvedModel.temperature,
     messages: input.messages,
     abortSignal: input.abortSignal,
   } as {
     model: LanguageModel;
-    temperature: number;
     messages: ConversationHistoryMessage[];
     abortSignal: AbortSignal;
     maxOutputTokens?: number;
@@ -827,7 +823,9 @@ const resolveInitialBranchPlans = async (input: {
         throw new Error(`model not found: ${modelId}`);
       }
 
-      const resolvedModel = input.deps.providerRegistry.resolveProviderModel(model);
+      const resolvedModel = input.deps.providerRegistry.resolveProviderModel(model, {
+        reasoningEffort: resolveModelReasoningEffort(input.config.basic, model),
+      });
       return {
         branchId: input.createMessageId(),
         modelId,
@@ -1576,7 +1574,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           pageContent: input.pageContent,
         },
       });
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
+      const resolvedModel = deps.providerRegistry.resolveProviderModel(model, {
+        reasoningEffort: resolveModelReasoningEffort(config.basic, model),
+      });
       await deps.conversationRepository.truncateMessagesAfter({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
@@ -1643,7 +1643,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         },
       });
       const branchId = createMessageId();
-      const resolvedModel = deps.providerRegistry.resolveProviderModel(model);
+      const resolvedModel = deps.providerRegistry.resolveProviderModel(model, {
+        reasoningEffort: resolveModelReasoningEffort(config.basic, model),
+      });
       await deps.conversationRepository.appendAssistantBranch({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,

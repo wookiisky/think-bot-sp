@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -35,6 +35,7 @@ const t = (key: string) =>
     'settings.cacheSize': '总大小',
     'settings.extractionMethod': '默认提取方式',
     'settings.extractionPanelHeight': '默认提取区高度',
+    'settings.reasoningEffort': '默认思考强度',
     'settings.llmRequestTimeoutSeconds': '大模型调用超时',
     'settings.extractionTextFontSize': '提取区文本字体大小',
     'settings.extractionTextFontSizePreview': '示例文本',
@@ -65,10 +66,8 @@ const ControlledBasicSettingsPanel = ({ config: initialConfig }: { config?: Retu
             baseUrl: 'https://api.example.com',
             apiKey: 'secret',
             deployment: '',
-            temperature: 0.2,
             tools: [],
             thinkingBudget: null,
-            maxOutputTokens: null,
             supportsImages: false,
             order: 0,
             deletedAt: null,
@@ -82,10 +81,8 @@ const ControlledBasicSettingsPanel = ({ config: initialConfig }: { config?: Retu
             baseUrl: '',
             apiKey: 'secret',
             deployment: '',
-            temperature: 0.2,
             tools: [],
             thinkingBudget: null,
-            maxOutputTokens: null,
             supportsImages: false,
             order: 1,
             deletedAt: null,
@@ -141,10 +138,8 @@ describe('BasicSettingsPanel', () => {
               baseUrl: 'https://api.example.com',
               apiKey: 'secret',
               deployment: '',
-              temperature: 0.2,
               tools: [],
               thinkingBudget: null,
-              maxOutputTokens: null,
               supportsImages: false,
               order: 0,
               deletedAt: null,
@@ -155,6 +150,20 @@ describe('BasicSettingsPanel', () => {
     );
 
     expect(screen.getByText('部分并行模型引用已失效，保存时会自动清理。')).toBeInTheDocument();
+  });
+
+  it('默认思考强度为 medium，可切换为其他档位', async () => {
+    render(<ControlledBasicSettingsPanel />);
+
+    const user = userEvent.setup();
+    const effortSelect = screen.getByRole('combobox', { name: '默认思考强度' });
+    expect(effortSelect).toHaveTextContent('Medium');
+
+    await user.click(effortSelect);
+    const listbox = await screen.findByRole('listbox');
+    await user.click(within(listbox).getByText('High'));
+
+    expect(screen.getByRole('combobox', { name: '默认思考强度' })).toHaveTextContent('High');
   });
 
   it('支持编辑提取和调用超时默认参数并限制范围', async () => {

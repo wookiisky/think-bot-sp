@@ -61,7 +61,8 @@
   - 当前已交付新增、复制、软删除、拖拽排序和顺序调整按钮；“新增模型”位于卡片标题栏右侧，“复制模型”位于单个模型标题栏中；拖拽与上下移动回退方案同时保留。
   - 模型列表允许全部收起，不强制保留一个常驻展开项。
   - 展开后的模型表单按两列排布，长字段跨整行展示。
-  - 展开后按 Provider 展示差异字段，覆盖 Name、Provider、Base URL、API Key、Model、Deployment、Temperature、Thinking Budget、最大输出 token、Tools、`supportsImages`。
+  - 展开后按 Provider 展示差异字段，覆盖 Name、Provider、Base URL、API Key、Model、Deployment、思考强度、Tools、`supportsImages`；Temperature 与最大输出 token 已从配置中移除。
+  - 思考强度对所有 Provider 可见，默认“跟随基础设置”，可按模型覆盖为 Low / Medium / High / Max。
   - API Key 默认掩码显示，允许用户临时查看明文。
 - 快捷输入区域当前交付列表编辑、内联折叠展开、消息预览、拖拽排序、软删除和顺序调整。
   - 快捷输入项标题栏单行展示名称，小字展示提示词预览。
@@ -76,7 +77,7 @@
   - 导入时为模板重建本地 ID。
   - 按 `name + prompt` 跳过已存在项，只追加新模板。
 - 失效 `modelId` 会降级成 `null`，失效 `parallelModelIds` 会在导入时过滤。
-- 基础设置当前交付默认提取方式、默认提取区高度、全局大模型调用超时、提取区文本字体大小（7 档滑块，右侧实时预览，滑块下方只显示最小/最大）、Jina API Key、Jina 响应模板和“默认附带页面正文”。
+- 基础设置当前交付默认提取方式、默认思考强度（默认 Medium）、默认提取区高度、全局大模型调用超时、提取区文本字体大小（7 档滑块，右侧实时预览，滑块下方只显示最小/最大）、Jina API Key、Jina 响应模板和“默认附带页面正文”。
 - 展示配置分栏当前交付助手消息 Markdown 的 `h1 / h2 / h3 / h4 / body` 样式编辑：
   - 每层都可配置 `字号 / 颜色 / 是否下划线`。
   - 分栏顶部提供 3 个内置默认配置按钮：蓝色渐浅、橙色渐浅、多彩分级。

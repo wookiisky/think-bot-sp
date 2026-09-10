@@ -58,11 +58,19 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
   };
 
   const applyPreset = (preset: AssistantMarkdownDisplayConfig) => {
+    const nextAssistantMarkdown = displayFields.reduce((acc, field) => {
+      acc[field.key] = {
+        ...assistantMarkdown[field.key],
+        color: preset[field.key].color,
+      };
+      return acc;
+    }, {} as AssistantMarkdownDisplayConfig);
+
     onChange({
       ...config,
       display: {
         ...config.display,
-        assistantMarkdown: preset,
+        assistantMarkdown: nextAssistantMarkdown,
       },
     });
   };
@@ -95,82 +103,64 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
             ))}
           </div>
 
-          <div className="grid gap-2">
+          <div className="grid gap-1.5">
             {displayFields.map((field) => {
               const styleConfig = assistantMarkdown[field.key];
               const label = t(field.labelKey);
 
               return (
-                <article key={field.key} className="grid gap-2 border border-border/70 p-2.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="grid gap-1">
-                      <h3 className="m-0 text-sm font-medium">{label}</h3>
-                      <p className="m-0 text-xs text-muted-foreground">{t('settings.displayFieldDescription')}</p>
-                    </div>
-                    <label className="flex items-center gap-2 text-sm text-foreground">
-                      <input
-                        aria-label={`${label}${t('settings.displayUnderline')}`}
-                        type="checkbox"
-                        checked={styleConfig.underline}
-                        disabled={disabled}
-                        onChange={(event) => updateAssistantMarkdown(field.key, { underline: event.target.checked })}
-                      />
-                      <span>{t('settings.displayUnderline')}</span>
-                    </label>
-                  </div>
+                <article
+                  key={field.key}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border border-border/70 px-2.5 py-1.5"
+                >
+                  <span className="w-16 shrink-0 text-sm font-medium">{label}</span>
 
-                  <div className="grid gap-2.5 md:grid-cols-[140px_140px_minmax(0,1fr)]">
-                    <label className="grid gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.displayFontSize')}</span>
-                      <Input
-                        aria-label={`${label}${t('settings.displayFontSize')}`}
-                        type="number"
-                        min={MIN_ASSISTANT_MARKDOWN_FONT_SIZE}
-                        max={MAX_ASSISTANT_MARKDOWN_FONT_SIZE}
-                        step={1}
-                        value={styleConfig.fontSizePx}
-                        disabled={disabled}
-                        onChange={(event) => {
-                          const value = Number.parseInt(event.target.value, 10);
-                          if (Number.isNaN(value)) {
-                            return;
-                          }
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">{t('settings.displayFontSize')}</span>
+                    <Input
+                      aria-label={`${label}${t('settings.displayFontSize')}`}
+                      type="number"
+                      min={MIN_ASSISTANT_MARKDOWN_FONT_SIZE}
+                      max={MAX_ASSISTANT_MARKDOWN_FONT_SIZE}
+                      step={1}
+                      value={styleConfig.fontSizePx}
+                      disabled={disabled}
+                      className="h-8 w-16"
+                      onChange={(event) => {
+                        const value = Number.parseInt(event.target.value, 10);
+                        if (Number.isNaN(value)) {
+                          return;
+                        }
 
-                          updateAssistantMarkdown(field.key, {
-                            fontSizePx: Math.min(MAX_ASSISTANT_MARKDOWN_FONT_SIZE, Math.max(MIN_ASSISTANT_MARKDOWN_FONT_SIZE, value)),
-                          });
-                        }}
-                      />
-                    </label>
+                        updateAssistantMarkdown(field.key, {
+                          fontSizePx: Math.min(MAX_ASSISTANT_MARKDOWN_FONT_SIZE, Math.max(MIN_ASSISTANT_MARKDOWN_FONT_SIZE, value)),
+                        });
+                      }}
+                    />
+                  </label>
 
-                    <label className="grid gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.displayColor')}</span>
-                      <Input
-                        aria-label={`${label}${t('settings.displayColor')}`}
-                        type="color"
-                        value={styleConfig.color}
-                        disabled={disabled}
-                        className="h-9"
-                        onChange={(event) => updateAssistantMarkdown(field.key, { color: event.target.value })}
-                      />
-                    </label>
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">{t('settings.displayColor')}</span>
+                    <Input
+                      aria-label={`${label}${t('settings.displayColor')}`}
+                      type="color"
+                      value={styleConfig.color}
+                      disabled={disabled}
+                      className="h-8 w-12"
+                      onChange={(event) => updateAssistantMarkdown(field.key, { color: event.target.value })}
+                    />
+                  </label>
 
-                    <div className="grid gap-1.5">
-                      <span className="text-sm font-medium">{t('settings.displayPreview')}</span>
-                      <div className="border border-border/70 px-2 py-1.5">
-                        <span
-                          style={{
-                            fontSize: `${styleConfig.fontSizePx}px`,
-                            color: styleConfig.color,
-                            textDecoration: resolveTextDecoration(styleConfig.underline),
-                            fontWeight: field.key === 'body' ? 400 : 600,
-                          }}
-                        >
-                          {field.key === 'body' ? t('settings.displayPreviewBody') : label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <label className="ml-auto flex items-center gap-1.5 text-sm text-foreground">
+                    <input
+                      aria-label={`${label}${t('settings.displayUnderline')}`}
+                      type="checkbox"
+                      checked={styleConfig.underline}
+                      disabled={disabled}
+                      onChange={(event) => updateAssistantMarkdown(field.key, { underline: event.target.checked })}
+                    />
+                    <span className="text-xs">{t('settings.displayUnderline')}</span>
+                  </label>
                 </article>
               );
             })}

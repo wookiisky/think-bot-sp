@@ -7,11 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import {
   getDefaultModelBaseUrl,
   getDefaultModelTools,
-  getResolvedReasoningEffort,
   providerSupportsGoogleTools,
-  providerSupportsReasoningEffort,
   type ModelConfig,
+  type ReasoningEffort,
 } from '../../domain/config/config-schema';
+
+/** 模型级思考强度下拉里“跟随基础设置”的哨兵值，Radix Select 不接受空字符串。 */
+const FOLLOW_DEFAULT_REASONING_EFFORT = 'default';
 
 type ModelFormProps = {
   /** 当前编辑的模型配置。 */
@@ -41,7 +43,6 @@ export const ModelForm = ({
   showEnabledField = true,
 }: ModelFormProps) => {
   const [showApiKey, setShowApiKey] = useState(false);
-  const showReasoningEffort = providerSupportsReasoningEffort(model.provider);
   const showGoogleTools = providerSupportsGoogleTools(model.provider);
   const showDeployment = model.provider === 'azure-openai';
   const showRegion = model.provider === 'amazon-bedrock';
@@ -94,7 +95,6 @@ export const ModelForm = ({
               provider,
               baseUrl: getDefaultModelBaseUrl(provider),
               tools: getDefaultModelTools(provider),
-              reasoningEffort: providerSupportsReasoningEffort(provider) ? getResolvedReasoningEffort(model) : undefined,
             });
           }}
         >
@@ -103,6 +103,7 @@ export const ModelForm = ({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="openai-compatible">OpenAI Compatible</SelectItem>
+            <SelectItem value="openrouter">OpenRouter</SelectItem>
             <SelectItem value="gemini">Gemini</SelectItem>
             <SelectItem value="azure-openai">Azure OpenAI</SelectItem>
             <SelectItem value="anthropic">Anthropic</SelectItem>
@@ -201,52 +202,28 @@ export const ModelForm = ({
       ) : null}
 
       <label className="grid gap-1.5">
-        <span className="text-sm font-medium">Max Output Tokens</span>
-        <Input
-          aria-label="Max Output Tokens"
-          type="number"
-          value={model.maxOutputTokens === null ? '' : String(model.maxOutputTokens)}
+        <span className="text-sm font-medium">思考强度</span>
+        <Select
+          value={model.reasoningEffort ?? FOLLOW_DEFAULT_REASONING_EFFORT}
           disabled={disabled}
-          onChange={(event) =>
+          onValueChange={(value) =>
             updateModel({
-              maxOutputTokens: event.target.value.trim() ? Number(event.target.value) : null,
+              reasoningEffort: value === FOLLOW_DEFAULT_REASONING_EFFORT ? undefined : (value as ReasoningEffort),
             })
           }
-        />
+        >
+          <SelectTrigger aria-label="思考强度" size="sm" className="w-full">
+            <SelectValue placeholder="思考强度" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FOLLOW_DEFAULT_REASONING_EFFORT}>跟随基础设置</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="max">Max</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
-
-      <label className="grid gap-1.5">
-        <span className="text-sm font-medium">Temperature</span>
-        <Input
-          aria-label="Temperature"
-          type="number"
-          step="0.1"
-          value={String(model.temperature)}
-          disabled={disabled}
-          onChange={(event) => updateModel({ temperature: Number(event.target.value || '0') })}
-        />
-      </label>
-
-      {showReasoningEffort ? (
-        <label className="grid gap-1.5">
-          <span className="text-sm font-medium">Reasoning Effort</span>
-          <Select
-            value={getResolvedReasoningEffort(model)}
-            disabled={disabled}
-            onValueChange={(value) => updateModel({ reasoningEffort: value as ModelConfig['reasoningEffort'] })}
-          >
-            <SelectTrigger aria-label="Reasoning Effort" size="sm" className="w-full">
-              <SelectValue placeholder="Reasoning Effort" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="max">Max</SelectItem>
-            </SelectContent>
-          </Select>
-        </label>
-      ) : null}
 
       {showGoogleTools ? (
         <label className="grid gap-1.5 md:col-span-2">

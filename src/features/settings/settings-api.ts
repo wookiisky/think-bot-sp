@@ -1,5 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
-import type { ModelConfig } from '../../domain/config/config-schema';
+import type { ModelConfig, ReasoningEffort } from '../../domain/config/config-schema';
 import type { RecentErrorSummary } from '../../domain/error/recent-error-schema';
 import { requestRuntimeMessage } from '../../shared/runtime-request';
 
@@ -76,11 +76,12 @@ export const settingsApi = {
   },
 
   /** 测试单个模型连通性。 */
-  async testModel(model: ModelConfig, llmRequestTimeoutSeconds: number) {
+  async testModel(model: ModelConfig, llmRequestTimeoutSeconds: number, reasoningEffort: ReasoningEffort) {
     const response = await requestConfig<RuntimeResponse<{ result: { provider: string; text: string } }>>({
       type: 'TEST_MODEL',
       model,
       llmRequestTimeoutSeconds,
+      reasoningEffort,
     });
     return response.result;
   },

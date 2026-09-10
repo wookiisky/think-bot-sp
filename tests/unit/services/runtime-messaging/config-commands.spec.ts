@@ -43,11 +43,9 @@ describe('config-commands', () => {
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'secret',
           deployment: '',
-          temperature: 1,
           tools: [],
           reasoningEffort: 'high',
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -156,12 +154,13 @@ describe('config-commands', () => {
         type: 'TEST_MODEL',
         model: config.models[0],
         llmRequestTimeoutSeconds: config.basic.llmRequestTimeoutSeconds,
+        reasoningEffort: 'high',
       }),
     ).resolves.toEqual({
       type: 'TEST_MODEL_SUCCESS',
       result: { provider: 'openai-compatible', text: 'hi' },
     });
-    expect(modelTestService.testModel).toHaveBeenCalledWith(config.models[0], config.basic.llmRequestTimeoutSeconds);
+    expect(modelTestService.testModel).toHaveBeenCalledWith(config.models[0], config.basic.llmRequestTimeoutSeconds, 'high');
 
     await expect(handler({ type: 'SYNC_NOW', config })).resolves.toEqual({
       type: 'SYNC_NOW_SUCCESS',

@@ -1,11 +1,11 @@
-import type * as Ai from 'ai';
 import type { LanguageModel, ToolSet } from 'ai';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
-import { getResolvedReasoningEffort, type ModelConfig } from '../../domain/config/config-schema';
+import { DEFAULT_OPENROUTER_BASE_URL, type ModelConfig, type ReasoningEffort } from '../../domain/config/config-schema';
+import { resolveModelRequestOptions, type ProviderOptions } from './model-request-options';
 
 type OpenAICompatibleProvider = {
   /** 兼容 OpenAI provider 的 chatModel 创建入口。 */
@@ -56,9 +56,6 @@ type BedrockFactory = (settings: {
   baseURL?: string;
 }) => CallableProvider;
 
-type GenerateTextRequest = Parameters<typeof Ai.generateText>[0];
-type ProviderOptions = GenerateTextRequest extends { providerOptions?: infer Value } ? Value : never;
-
 type ProviderRegistryDeps = {
   /** OpenAI Compatible provider 工厂。 */
   createOpenAICompatible: OpenAICompatibleFactory;
@@ -82,9 +79,7 @@ export type ResolvedProviderModel = {
   supportsImages: boolean;
   /** 交给 AI SDK 的模型对象。 */
   sdkModel: LanguageModel;
-  /** 顶层采样温度。 */
-  temperature: number;
-  /** 单次输出 token 上限。 */
+  /** 单次输出 token 上限，由代码按 provider / 模型给定；null 表示交给 provider 默认值。 */
   maxOutputTokens: number | null;
   /** provider tools。 */
   tools?: ToolSet;
@@ -103,13 +98,6 @@ const toOptionalString = (value: string | undefined): string | undefined => {
   return normalized ? normalized : undefined;
 };
 
-/** 把统一 reasoning effort 映射到 Google Thinking Level。 */
-const toGoogleThinkingLevel = (effort: ReturnType<typeof getResolvedReasoningEffort>) =>
-  effort === 'max' ? 'high' : effort;
-
-/** 仅 Amazon Nova 模型支持 maxReasoningEffort。 */
-const supportsBedrockEffort = (modelId: string) => modelId.startsWith('amazon.') || modelId.startsWith('us.amazon.');
-
 /** 构造 Gemini / Vertex tools。 */
 const buildGoogleTools = (provider: GoogleToolProvider, toolIds: string[]): ToolSet | undefined => {
   const nextTools: ToolSet = {};
@@ -125,30 +113,49 @@ const buildGoogleTools = (provider: GoogleToolProvider, toolIds: string[]): Tool
   return Object.keys(nextTools).length > 0 ? nextTools : undefined;
 };
 
+/** resolveProviderModel 的运行时输入。 */
+export type ResolveProviderModelOptions = {
+  /** 已解析的思考强度，由调用方按“模型覆盖优先、否则跟随基础设置”得出。 */
+  reasoningEffort: ReasoningEffort;
+};
+
 /** 创建可注入依赖的 provider registry。 */
 export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
   /** 按 provider 类型解析模型配置，返回统一 provider 句柄。 */
-  resolveProviderModel(model: ModelConfig): ResolvedProviderModel {
+  resolveProviderModel(model: ModelConfig, options: ResolveProviderModelOptions): ResolvedProviderModel {
     const resolvedModelId = model.provider === 'azure-openai' ? model.deployment : model.model;
+    const requestOptions = resolveModelRequestOptions({
+      provider: model.provider,
+      modelId: resolvedModelId,
+      reasoningEffort: options.reasoningEffort,
+    });
 
     switch (model.provider) {
       case 'openai-compatible':
+      case 'openrouter':
       case 'azure-openai': {
+        // OpenRouter 允许留空 Base URL，回退到官方地址；name 决定 providerOptions 键。
+        const baseURL =
+          model.provider === 'openrouter' ? (toOptionalString(model.baseUrl) ?? DEFAULT_OPENROUTER_BASE_URL) : model.baseUrl;
         const provider = deps.createOpenAICompatible({
           name: model.provider,
-          baseURL: model.baseUrl,
+          baseURL,
           apiKey: model.apiKey,
         });
 
-        return {
+        const resolved: ResolvedProviderModel = {
           providerId: model.provider,
           modelId: resolvedModelId,
           modelLabel: model.name,
           supportsImages: model.supportsImages,
           sdkModel: provider.chatModel(resolvedModelId),
-          temperature: model.temperature,
-          maxOutputTokens: model.maxOutputTokens,
+          maxOutputTokens: requestOptions.maxOutputTokens,
         };
+        if (requestOptions.providerOptions) {
+          resolved.providerOptions = requestOptions.providerOptions;
+        }
+
+        return resolved;
       }
       case 'gemini':
       case 'google-vertex': {
@@ -171,16 +178,11 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           modelLabel: model.name,
           supportsImages: model.supportsImages,
           sdkModel: provider(resolvedModelId),
-          temperature: model.temperature,
-          maxOutputTokens: model.maxOutputTokens,
-          providerOptions: {
-            google: {
-              thinkingConfig: {
-                thinkingLevel: toGoogleThinkingLevel(getResolvedReasoningEffort(model)),
-              },
-            },
-          },
+          maxOutputTokens: requestOptions.maxOutputTokens,
         };
+        if (requestOptions.providerOptions) {
+          resolved.providerOptions = requestOptions.providerOptions;
+        }
         const tools = buildGoogleTools(provider, model.tools);
         if (tools) {
           resolved.tools = tools;
@@ -197,21 +199,19 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           settings.baseURL = baseURL;
         }
         const provider = deps.createAnthropic(settings);
-
-        return {
+        const resolved: ResolvedProviderModel = {
           providerId: model.provider,
           modelId: resolvedModelId,
           modelLabel: model.name,
           supportsImages: model.supportsImages,
           sdkModel: provider(resolvedModelId),
-          temperature: model.temperature,
-          maxOutputTokens: model.maxOutputTokens,
-          providerOptions: {
-            anthropic: {
-              effort: getResolvedReasoningEffort(model),
-            },
-          },
+          maxOutputTokens: requestOptions.maxOutputTokens,
         };
+        if (requestOptions.providerOptions) {
+          resolved.providerOptions = requestOptions.providerOptions;
+        }
+
+        return resolved;
       }
       case 'amazon-bedrock': {
         const settings: Parameters<BedrockFactory>[0] = {};
@@ -234,18 +234,10 @@ export const createProviderRegistry = (deps: ProviderRegistryDeps) => ({
           modelLabel: model.name,
           supportsImages: model.supportsImages,
           sdkModel: provider(resolvedModelId),
-          temperature: model.temperature,
-          maxOutputTokens: model.maxOutputTokens,
+          maxOutputTokens: requestOptions.maxOutputTokens,
         };
-        if (supportsBedrockEffort(resolvedModelId)) {
-          resolved.providerOptions = {
-            bedrock: {
-              reasoningConfig: {
-                type: 'enabled',
-                maxReasoningEffort: getResolvedReasoningEffort(model),
-              },
-            },
-          };
+        if (requestOptions.providerOptions) {
+          resolved.providerOptions = requestOptions.providerOptions;
         }
 
         return resolved;
@@ -264,5 +256,5 @@ const defaultRegistry = createProviderRegistry({
 });
 
 /** 默认 registry，直接绑定官方 provider 工厂。 */
-export const resolveProviderModel = (model: ModelConfig): ResolvedProviderModel =>
-  defaultRegistry.resolveProviderModel(model);
+export const resolveProviderModel = (model: ModelConfig, options: ResolveProviderModelOptions): ResolvedProviderModel =>
+  defaultRegistry.resolveProviderModel(model, options);

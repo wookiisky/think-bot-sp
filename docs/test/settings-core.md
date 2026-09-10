@@ -52,9 +52,10 @@
   - 模型展开表单按双列排布，字段顺序固定为“名称 / Provider / Base URL / API Key / Model / 其他参数”。
   - 模型和快捷输入标题栏的 icon button hover / focus 时立即展示 tooltip。
   - 模型行展开后编辑显示名称、Provider、模型标识和差异字段并成功保存。
-  - `Thinking Budget` 已从设置页移除；支持的 provider 改为显示 `Reasoning Effort`。
+  - `Thinking Budget / Temperature / Max Output Tokens` 已从设置页移除；所有 provider 统一显示“思考强度”，默认“跟随基础设置”，可按模型覆盖。
+  - 测试模型命令携带按草稿解析后的思考强度（模型覆盖优先，否则取基础设置）。
   - `gemini / google-vertex` 的 tools 通过多选下拉展示，默认勾选 `URL Context + Grounding with Google Search`。
-  - 新增 provider：`Anthropic / Amazon Bedrock / Google Vertex`，并保留 OpenAI Compatible、Azure OpenAI、Gemini。
+  - 新增 provider：`Anthropic / Amazon Bedrock / Google Vertex / OpenRouter`，并保留 OpenAI Compatible、Azure OpenAI、Gemini。OpenRouter 的 Base URL 允许留空，运行时回退到官方地址。
   - API Key 默认掩码显示，切换查看后不影响保存值。
   - 快捷输入列表会过滤软删除项并保持顺序。
   - 快捷输入项标题栏单行展示名称与提示词预览，并在标题栏右侧提供 `上移 / 下移 / 删除 / 自动触发`。
@@ -64,7 +65,7 @@
   - 快捷输入支持从远端模板导入，并在导入时跳过重复项、过滤失效模型引用。
   - 快捷输入引用失效模型时前端有降级提示，但不导致保存失败。
   - 基础设置和快捷输入中的并行模型选择统一使用多选下拉。
-  - 基础设置支持配置默认提取区高度、全局大模型调用超时、提取区文本字体大小（7 档滑块，右侧实时预览）、Jina API Key 和 Jina 响应模板。
+  - 基础设置支持配置默认思考强度（默认 Medium）、默认提取区高度、全局大模型调用超时、提取区文本字体大小（7 档滑块，右侧实时预览）、Jina API Key 和 Jina 响应模板。
   - 侧边栏与历史页会读取提取区默认高度和文本字体大小，Jina 提取会真实消费 API Key 与响应模板。
   - 展示配置支持分别设置 `h1 / h2 / h3 / h4 / body` 的字号、颜色和下划线。
   - 展示配置顶部 3 个默认配置按钮能立即回写草稿，并在保存后持久化。

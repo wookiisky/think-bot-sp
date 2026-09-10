@@ -7,6 +7,7 @@ import { Textarea } from '../../components/ui/textarea';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
 import type { ModelConfig } from '../../domain/config/config-schema';
 import {
+  DEFAULT_REASONING_EFFORT,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MAX_EXTRACTION_TEXT_FONT_SIZE,
   MAX_LLM_REQUEST_TIMEOUT_SECONDS,
@@ -201,6 +202,25 @@ export const BasicSettingsPanel = ({
                 <SelectContent>
                   <SelectItem value="readability">Readability</SelectItem>
                   <SelectItem value="jina">Jina</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+
+            <label className="grid gap-1.5">
+              <span className="text-sm font-medium">{t('settings.reasoningEffort')}</span>
+              <Select
+                value={config.basic.reasoningEffort ?? DEFAULT_REASONING_EFFORT}
+                disabled={disabled}
+                onValueChange={(value) => updateBasic({ reasoningEffort: value as ExtensionConfig['basic']['reasoningEffort'] })}
+              >
+                <SelectTrigger aria-label={t('settings.reasoningEffort')} size="sm" className="w-full">
+                  <SelectValue placeholder={t('settings.reasoningEffort')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="max">Max</SelectItem>
                 </SelectContent>
               </Select>
             </label>

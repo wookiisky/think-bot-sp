@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { resolveModelReasoningEffort } from '../../domain/config/config-schema';
 import {
   getEnabledCompleteModels,
   isModelConfigComplete,
@@ -384,7 +385,11 @@ export const SettingsShell = () => {
 
     setTestingModelId(modelId);
     try {
-      const result = await settingsApi.testModel(model, draftConfig.basic.llmRequestTimeoutSeconds);
+      const result = await settingsApi.testModel(
+        model,
+        draftConfig.basic.llmRequestTimeoutSeconds,
+        resolveModelReasoningEffort(draftConfig.basic, model),
+      );
       showToast('success', '模型测试成功', result.text || `${result.provider} 已返回空文本`);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown error';

@@ -489,7 +489,7 @@ Chrome 内部页等受限环境下，不进行内容提取与对话。
 - 删除模型
 - 拖拽排序
 
-Provider 专属配置能力覆盖了 Base URL、API Key、Model、Deployment、Token、Temperature、Tools、Thinking Budget 等差异字段。
+Provider 专属配置能力覆盖了 Base URL、API Key、Model、Deployment、Tools、思考强度等差异字段；思考强度在基础设置中有全局默认值（Medium），模型可单独覆盖。
 
 ### 9.6 Cloud Sync
 

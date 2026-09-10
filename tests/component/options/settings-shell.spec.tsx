@@ -169,29 +169,26 @@ describe('SettingsShell', () => {
     expect(screen.getByLabelText('一级标题字号')).toHaveValue(30);
   });
 
-  it('展示配置预设会写入助手消息 Markdown 样式', async () => {
+  it('展示配置预设只覆盖颜色，不修改已调整的字号', async () => {
     const config = createDefaultConfig();
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getRecentError.mockResolvedValueOnce(null);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
-    mocks.saveConfig.mockResolvedValueOnce({
-      ...config,
-      display: {
-        assistantMarkdown: {
-          h1: { fontSizePx: 18, color: '#1d4ed8', underline: false },
-          h2: { fontSizePx: 18, color: '#2563eb', underline: false },
-          h3: { fontSizePx: 16, color: '#3b82f6', underline: false },
-          h4: { fontSizePx: 14, color: '#60a5fa', underline: false },
-          body: { fontSizePx: 14, color: '#111827', underline: false },
-        },
-      },
-    });
+    mocks.saveConfig.mockResolvedValueOnce(config);
 
     render(<SettingsShell />);
 
     await screen.findByRole('heading', { name: '设置' });
     fireEvent.click(screen.getByRole('tab', { name: '展示配置' }));
-    fireEvent.click(screen.getByRole('button', { name: '默认配置 1' }));
+
+    fireEvent.change(screen.getByLabelText('一级标题字号'), {
+      target: { value: '30' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '默认配置 2' }));
+
+    expect(screen.getByLabelText('一级标题字号')).toHaveValue(30);
+    expect(screen.getByLabelText('一级标题颜色')).toHaveValue('#c2410c');
+
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
@@ -202,12 +199,8 @@ describe('SettingsShell', () => {
         display: expect.objectContaining({
           assistantMarkdown: expect.objectContaining({
             h1: expect.objectContaining({
-              fontSizePx: 18,
-              color: '#1d4ed8',
-            }),
-            body: expect.objectContaining({
-              fontSizePx: 14,
-              color: '#111827',
+              fontSizePx: 30,
+              color: '#c2410c',
             }),
           }),
         }),
@@ -342,10 +335,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -422,10 +413,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -439,10 +428,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 1,
           deletedAt: null,
@@ -594,10 +581,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -741,10 +726,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret-1',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -758,10 +741,8 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret-2',
           deployment: '',
-          temperature: 0.2,
           tools: [],
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 1,
           deletedAt: null,
@@ -795,11 +776,9 @@ describe('SettingsShell', () => {
           baseUrl: 'https://api.example.com',
           apiKey: 'secret',
           deployment: '',
-          temperature: 1,
           tools: [],
           reasoningEffort: 'high',
           thinkingBudget: null,
-          maxOutputTokens: null,
           supportsImages: false,
           order: 0,
           deletedAt: null,
@@ -821,6 +800,7 @@ describe('SettingsShell', () => {
       expect(mocks.testModel).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'model-1' }),
         config.basic.llmRequestTimeoutSeconds,
+        'high',
       );
     });
     expect(await screen.findByText('模型测试成功')).toBeInTheDocument();

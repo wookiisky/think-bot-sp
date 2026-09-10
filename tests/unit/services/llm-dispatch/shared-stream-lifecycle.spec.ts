@@ -14,7 +14,7 @@ const createFixture = ({ parallel = false }: { parallel?: boolean } = {}) => {
   const models = ['main', 'other'].map((id) => modelConfigSchema.parse({
     id, name: id, provider: 'openai-compatible', enabled: true, model: id,
     baseUrl: 'https://example.invalid/v1', apiKey: 'dummy', deployment: '',
-    temperature: 1, tools: [], thinkingBudget: null, maxOutputTokens: null,
+    tools: [], thinkingBudget: null,
     supportsImages: false, order: 0, deletedAt: null,
   }));
   const config = createDefaultConfig({ models, basic: { parallelModelIds: parallel ? ['other'] : [] } });
@@ -26,7 +26,7 @@ const createFixture = ({ parallel = false }: { parallel?: boolean } = {}) => {
   const providerRegistry: Parameters<typeof createChatDispatchService>[0]['providerRegistry'] = {
     resolveProviderModel: (model) => ({
       providerId: model.provider, modelId: model.model, modelLabel: model.name,
-      supportsImages: model.supportsImages, temperature: model.temperature, maxOutputTokens: model.maxOutputTokens,
+      supportsImages: model.supportsImages, maxOutputTokens: null,
       sdkModel: createOpenAICompatible({ name: 'test', apiKey: 'dummy', baseURL: model.baseUrl }).chatModel(model.id),
     }),
   };
@@ -166,9 +166,9 @@ describe('shared stream lifecycle', () => {
     const before = await repository.getConversation(scope.normalizedUrl, scope.promptTabId);
     streamText.mockClear();
     const resolve = providerRegistry.resolveProviderModel;
-    vi.spyOn(providerRegistry, 'resolveProviderModel').mockImplementation((model) => {
+    vi.spyOn(providerRegistry, 'resolveProviderModel').mockImplementation((model, options) => {
       if (model.id === 'other') throw new Error('invalid provider');
-      return resolve(model);
+      return resolve(model, options);
     });
     const start = operation === 'send'
       ? service.dispatchChat(request)

@@ -36,6 +36,7 @@ export type ExtractionTextFontSize = (typeof EXTRACTION_TEXT_FONT_SIZE_VALUES)[n
 
 export const MODEL_PROVIDER_VALUES = [
   'openai-compatible',
+  'openrouter',
   'gemini',
   'azure-openai',
   'anthropic',
@@ -43,12 +44,20 @@ export const MODEL_PROVIDER_VALUES = [
   'google-vertex',
 ] as const;
 
+/** OpenRouter 默认 Base URL。 */
+export const DEFAULT_OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
 export const MODEL_TOOL_VALUES = ['url_context', 'google_search'] as const;
 
 export const REASONING_EFFORT_VALUES = ['low', 'medium', 'high', 'max'] as const;
 
+export type ReasoningEffort = (typeof REASONING_EFFORT_VALUES)[number];
+
+/** 全局默认思考强度。 */
+export const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
+
 const modelProviderSchema = z.enum(MODEL_PROVIDER_VALUES);
-const reasoningEffortSchema = z.enum(REASONING_EFFORT_VALUES);
+export const reasoningEffortSchema = z.enum(REASONING_EFFORT_VALUES);
 const extractionTextFontSizeSchema = z
   .number()
   .int()
@@ -79,6 +88,8 @@ export const getDefaultModelBaseUrl = (provider: z.infer<typeof modelProviderSch
   switch (provider) {
     case 'openai-compatible':
       return 'https://api.openai.com/v1';
+    case 'openrouter':
+      return DEFAULT_OPENROUTER_BASE_URL;
     case 'gemini':
       return 'https://generativelanguage.googleapis.com/v1beta';
     case 'anthropic':
@@ -91,10 +102,6 @@ export const getDefaultModelBaseUrl = (provider: z.infer<typeof modelProviderSch
       throw new Error(`unsupported provider: ${String(provider)}`);
   }
 };
-
-/** 判断当前 provider 是否支持 reasoning effort。 */
-export const providerSupportsReasoningEffort = (provider: z.infer<typeof modelProviderSchema>): boolean =>
-  provider === 'anthropic' || provider === 'gemini' || provider === 'amazon-bedrock' || provider === 'google-vertex';
 
 /** 判断当前 provider 是否支持 Google grounding tools。 */
 export const providerSupportsGoogleTools = (provider: z.infer<typeof modelProviderSchema>): boolean =>
@@ -117,12 +124,11 @@ export const modelConfigSchema = z
     region: z.string().optional(),
     project: z.string().optional(),
     location: z.string().optional(),
-    temperature: z.number(),
     tools: z.array(z.string()),
+    /** 模型级思考强度覆盖；缺省时跟随 `basic.reasoningEffort`。 */
     reasoningEffort: reasoningEffortSchema.optional(),
     /** 兼容旧配置保留，设置页不再暴露。 */
     thinkingBudget: z.number().int().nonnegative().nullable(),
-    maxOutputTokens: z.number().int().positive().nullable(),
     supportsImages: z.boolean().default(false),
     order: z.number().int().nonnegative(),
     deletedAt: z.number().int().nonnegative().nullable(),
@@ -130,6 +136,7 @@ export const modelConfigSchema = z
   .superRefine((value, ctx) => {
     const requiredFields: Record<string, Array<'baseUrl' | 'apiKey' | 'model' | 'deployment'>> = {
       'openai-compatible': ['baseUrl', 'apiKey', 'model'],
+      openrouter: ['apiKey', 'model'],
       gemini: ['apiKey', 'model'],
       'azure-openai': ['baseUrl', 'apiKey', 'deployment'],
       anthropic: ['apiKey', 'model'],
@@ -387,6 +394,8 @@ export const extensionConfigSchema = z
         defaultModelId: z.string().min(1).nullable(),
         parallelModelIds: z.array(z.string().min(1)).default([]),
         systemPrompt: z.string(),
+        /** 全局默认思考强度，模型未单独配置时使用。 */
+        reasoningEffort: reasoningEffortSchema.default(DEFAULT_REASONING_EFFORT),
         filterCot: z.boolean(),
         extractionMethod: z.enum(['readability', 'jina']),
         extractionPanelHeight: z
@@ -446,9 +455,11 @@ type ExtensionConfigOverrides = Partial<Omit<ExtensionConfig, 'basic' | 'sync' |
 };
 export type ModelConfig = ExtensionConfig['models'][number];
 
-/** 解析模型的 reasoning effort，旧配置缺省时默认 high。 */
-export const getResolvedReasoningEffort = (model: Pick<ModelConfig, 'reasoningEffort'>): z.infer<typeof reasoningEffortSchema> =>
-  model.reasoningEffort ?? 'high';
+/** 解析模型实际生效的思考强度：模型级覆盖优先，否则跟随基础设置。 */
+export const resolveModelReasoningEffort = (
+  basic: Pick<ExtensionConfig['basic'], 'reasoningEffort'>,
+  model: Pick<ModelConfig, 'reasoningEffort'>,
+): ReasoningEffort => model.reasoningEffort ?? basic.reasoningEffort;
 
 /** 判断模型是否足够完整，可进入默认模型候选。 */
 export const isModelConfigComplete = (model: ModelConfig): boolean =>
@@ -511,6 +522,7 @@ export const createDefaultConfig = (overrides: ExtensionConfigOverrides = {}): E
       defaultModelId: null,
       parallelModelIds: [],
       systemPrompt: '',
+      reasoningEffort: DEFAULT_REASONING_EFFORT,
       filterCot: false,
       extractionMethod: 'readability',
       extractionPanelHeight: DEFAULT_EXTRACTION_PANEL_HEIGHT,
