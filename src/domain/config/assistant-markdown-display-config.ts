@@ -5,6 +5,13 @@ export const MIN_ASSISTANT_MARKDOWN_FONT_SIZE = 12;
 /** 助手 Markdown 字号最大值。 */
 export const MAX_ASSISTANT_MARKDOWN_FONT_SIZE = 48;
 
+/** 助手分支阅读列最小宽度的下限。 */
+export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 160;
+/** 助手分支阅读列最小宽度默认值。 */
+export const DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH = 300;
+/** 助手分支阅读列最小宽度的上限。 */
+export const MAX_ASSISTANT_BRANCH_COLUMN_WIDTH = 800;
+
 /** 单个 Markdown 文本层级样式。 */
 export const assistantMarkdownTextStyleSchema = z.object({
   /** 字号，单位 px。 */
@@ -139,6 +146,13 @@ export const ASSISTANT_MARKDOWN_DISPLAY_PRESETS = [
 export const displayConfigSchema = z.object({
   /** 助手消息 Markdown 展示配置。 */
   assistantMarkdown: assistantMarkdownDisplayConfigSchema,
+  /** 助手消息分支超过两个时，每列的最小宽度，单位 px。 */
+  assistantBranchColumnWidth: z
+    .number()
+    .int()
+    .min(MIN_ASSISTANT_BRANCH_COLUMN_WIDTH)
+    .max(MAX_ASSISTANT_BRANCH_COLUMN_WIDTH)
+    .default(DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH),
 });
 
 export type DisplayConfig = z.infer<typeof displayConfigSchema>;
@@ -146,13 +160,23 @@ export type DisplayConfig = z.infer<typeof displayConfigSchema>;
 /** 默认展示配置。 */
 export const DEFAULT_DISPLAY_CONFIG = {
   assistantMarkdown: assistantMarkdownDisplayConfigSchema.parse(DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG),
+  assistantBranchColumnWidth: DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH,
 } satisfies z.input<typeof displayConfigSchema>;
 
+/** 展示配置的宽松输入：整块、单个层级都可以缺省，缺省部分由默认值补齐。 */
+export type PartialDisplayConfigInput = {
+  /** 助手消息 Markdown 展示配置，可只提供部分层级。 */
+  assistantMarkdown?: Partial<AssistantMarkdownDisplayConfig> | undefined;
+  /** 助手消息分支阅读列的最小宽度，单位 px。 */
+  assistantBranchColumnWidth?: number | undefined;
+};
+
 /** 用默认值补齐不完整的展示配置。 */
-export const fillDisplayConfigDefaults = (input?: Partial<DisplayConfig> | null): DisplayConfig => {
+export const fillDisplayConfigDefaults = (input?: PartialDisplayConfigInput | null): DisplayConfig => {
   const assistantMarkdown = input?.assistantMarkdown;
 
   return displayConfigSchema.parse({
+    assistantBranchColumnWidth: input?.assistantBranchColumnWidth ?? DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH,
     assistantMarkdown: {
       h1: {
         ...DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.h1,

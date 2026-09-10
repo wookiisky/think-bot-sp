@@ -14,6 +14,7 @@ import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { ToastStack } from '../../components/ui/toast-stack';
 import { Tooltip } from '../../components/ui/tooltip';
 import {
+  DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH,
   DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   type AssistantMarkdownDisplayConfig,
 } from '../../domain/config/assistant-markdown-display-config';
@@ -180,6 +181,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [assistantMarkdownDisplayConfig, setAssistantMarkdownDisplayConfig] = useState<AssistantMarkdownDisplayConfig>(
     DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
   );
+  const [assistantBranchColumnWidth, setAssistantBranchColumnWidth] = useState(DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH);
   const [themePreference, setThemePreference] = useState<ThemePreference>('system');
   const [sidebarResizeState, setSidebarResizeState] = useState<SidebarResizeState | null>(null);
   const [extractionResizeState, setExtractionResizeState] = useState<ExtractionResizeState | null>(null);
@@ -401,6 +403,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
       setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
       setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
+      setAssistantBranchColumnWidth(configResponse.config.display.assistantBranchColumnWidth);
       setThemePreference(configResponse.config.basic.theme);
       llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
       setConfigLoaded(true);
@@ -494,6 +497,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
+        setAssistantBranchColumnWidth(configResponse.config.display.assistantBranchColumnWidth);
         setThemePreference(configResponse.config.basic.theme);
         llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
         applyDetailState({
@@ -1460,6 +1464,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 availableBranchModels={models}
                 t={t}
                 assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
+                assistantBranchColumnWidth={assistantBranchColumnWidth}
                 onStartEdit={(messageId, content) => setPromptTabEditing(promptTab.id, { messageId, text: content })}
                 onEditingTextChange={(text) => {
                   const currentEditing = editingMap[promptTab.id];

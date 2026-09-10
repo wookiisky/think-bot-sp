@@ -20,7 +20,6 @@ import { MiniConfirm } from '../../components/ui/mini-confirm';
 import { Textarea } from '../../components/ui/textarea';
 import { Tooltip } from '../../components/ui/tooltip';
 import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
-import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../domain/config/config-schema';
 import { cn } from '../../lib/utils';
 import { ChatMarkdown } from '../workspace/chat-markdown';
 import { FloatingActionBar } from '../workspace/floating-action-bar';
@@ -93,6 +92,8 @@ type ChatThreadProps = {
   t: WorkspaceTranslator;
   /** 助手消息 Markdown 展示配置。 */
   assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
+  /** 分支超过两个时每列的最小宽度，单位 px。 */
+  assistantBranchColumnWidth: number;
   /** 开始编辑用户消息。 */
   onStartEdit: (...input: [messageId: string, content: string]) => void;
   /** 更新编辑草稿。 */
@@ -144,6 +145,8 @@ type AssistantBranchRailProps = {
   t: WorkspaceTranslator;
   /** 助手消息 Markdown 展示配置。 */
   assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
+  /** 分支超过两个时每列的最小宽度，单位 px。 */
+  assistantBranchColumnWidth: number;
   /** 更新当前 hover 的分支。 */
   onHoverBranch: (target: { messageId: string; branchId: string } | null) => void;
   /** 更新分支模型弹层目标。 */
@@ -224,6 +227,7 @@ const ChatThreadContent = memo(function ChatThreadContent({
   editingText,
   t,
   assistantMarkdownDisplayConfig,
+  assistantBranchColumnWidth,
   onStartEdit,
   onEditingTextChange,
   onCancelEdit,
@@ -363,6 +367,7 @@ const ChatThreadContent = memo(function ChatThreadContent({
                     scrollViewportRef={threadViewportRef}
                     t={t}
                     assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
+                    assistantBranchColumnWidth={assistantBranchColumnWidth}
                     onHoverBranch={setHoveredBranchTarget}
                     onExpandBranchPopoverTarget={setExpandBranchPopoverTarget}
                     onExpandBranches={onExpandBranches}
@@ -454,6 +459,7 @@ const AssistantBranchRail = ({
   scrollViewportRef,
   t,
   assistantMarkdownDisplayConfig,
+  assistantBranchColumnWidth,
   onHoverBranch,
   onExpandBranchPopoverTarget,
   onExpandBranches,
@@ -552,7 +558,7 @@ const AssistantBranchRail = ({
           ref={contentRef}
           data-testid={`branch-rail-content-${messageId}`}
           className="grid min-w-full w-full divide-x divide-border/70"
-          style={buildBranchRailStyle(branches.length)}
+          style={buildBranchRailStyle(branches.length, assistantBranchColumnWidth)}
         >
           {branches.map((branch) => {
             const isBranchLoading = branch.status === 'loading';
@@ -879,8 +885,8 @@ const resolveBranchRailLayout = (branches: ChatThreadBranch[]) => {
   return 'fixed-multi-columns';
 };
 
-/** 生成分支阅读区栅格样式。 */
-const buildBranchRailStyle = (branchCount: number) => {
+/** 生成分支阅读区栅格样式；两列以内自适应容器，超过两列才按配置的最小宽度撑开并横向滚动。 */
+const buildBranchRailStyle = (branchCount: number, columnWidth: number) => {
   if (branchCount <= 1) {
     return {
       gridTemplateColumns: 'minmax(0, 1fr)',
@@ -892,6 +898,6 @@ const buildBranchRailStyle = (branchCount: number) => {
     };
   }
   return {
-    gridTemplateColumns: `repeat(${branchCount}, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`,
+    gridTemplateColumns: `repeat(${branchCount}, minmax(${columnWidth}px, 1fr))`,
   };
 };

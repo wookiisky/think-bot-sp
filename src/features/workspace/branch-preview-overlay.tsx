@@ -333,7 +333,7 @@ export const BranchPreviewOverlay = ({
         aria-labelledby={titleId}
         data-testid="branch-preview-dialog"
         tabIndex={-1}
-        className="absolute flex max-w-full flex-col overflow-hidden border border-border/80 bg-background ring-1 ring-foreground/8 outline-none"
+        className="absolute flex max-w-full flex-col overflow-hidden border border-border/80 bg-assistant-surface ring-1 ring-foreground/8 outline-none"
         style={{ ...size, ...position }}
         onMouseEnter={() => setActionsVisible(true)}
         onMouseLeave={(event) => {

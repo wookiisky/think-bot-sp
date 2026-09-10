@@ -27,8 +27,6 @@ export const DEFAULT_EXTRACTION_TEXT_FONT_SIZE = 4;
 export const MAX_EXTRACTION_TEXT_FONT_SIZE = 7;
 /** 提取区文本字号支持的档位。 */
 export const EXTRACTION_TEXT_FONT_SIZE_VALUES = [1, 2, 3, 4, 5, 6, 7] as const;
-/** 分支阅读列最小宽度。 */
-export const MIN_ASSISTANT_BRANCH_COLUMN_WIDTH = 300;
 /** Jina 响应模板默认占位符。 */
 export const DEFAULT_JINA_RESPONSE_TEMPLATE = '{{content}}';
 

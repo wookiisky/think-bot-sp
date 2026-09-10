@@ -5,7 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../..
 import { Input } from '../../components/ui/input';
 import {
   ASSISTANT_MARKDOWN_DISPLAY_PRESETS,
+  MAX_ASSISTANT_BRANCH_COLUMN_WIDTH,
   MAX_ASSISTANT_MARKDOWN_FONT_SIZE,
+  MIN_ASSISTANT_BRANCH_COLUMN_WIDTH,
   MIN_ASSISTANT_MARKDOWN_FONT_SIZE,
   type AssistantMarkdownDisplayConfig,
   type AssistantMarkdownTextStyle,
@@ -73,6 +75,20 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
             ...patch,
           },
         },
+      },
+    });
+  };
+
+  /** 更新分支阅读列最小宽度，超出区间时按边界收敛。 */
+  const updateAssistantBranchColumnWidth = (value: number) => {
+    onChange({
+      ...config,
+      display: {
+        ...config.display,
+        assistantBranchColumnWidth: Math.min(
+          MAX_ASSISTANT_BRANCH_COLUMN_WIDTH,
+          Math.max(MIN_ASSISTANT_BRANCH_COLUMN_WIDTH, value),
+        ),
       },
     });
   };
@@ -205,6 +221,29 @@ export const DisplaySettingsPanel = ({ config, disabled, onChange, t }: DisplayS
               {renderColorInput(strongLabel, 'strong', assistantMarkdown.strong.color)}
               <span />
             </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium">{t('settings.assistantBranchColumnWidth')}</span>
+            <Input
+              aria-label={t('settings.assistantBranchColumnWidth')}
+              type="number"
+              min={MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}
+              max={MAX_ASSISTANT_BRANCH_COLUMN_WIDTH}
+              step={10}
+              value={config.display.assistantBranchColumnWidth}
+              disabled={disabled}
+              className="h-7 w-20"
+              onChange={(event) => {
+                const value = Number.parseInt(event.target.value, 10);
+                if (Number.isNaN(value)) {
+                  return;
+                }
+
+                updateAssistantBranchColumnWidth(value);
+              }}
+            />
+            <span className="text-[11px] text-muted-foreground">{t('settings.assistantBranchColumnWidthHint')}</span>
           </div>
         </CardContent>
       </Card>

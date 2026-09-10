@@ -200,6 +200,36 @@ describe('ChatMarkdown', () => {
     });
   });
 
+  it('GFM 表格渲染带边框的表格，并包在横向滚动容器里', () => {
+    const content = ['| 名称 | 说明 |', '| --- | --- |', '| 甲 | 第一行 |', '| 乙 | 第二行 |'].join('\n');
+    render(<ChatMarkdown content={content} assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />);
+
+    const table = screen.getByRole('table');
+    const scrollContainer = table.parentElement;
+
+    expect(scrollContainer?.className).toContain('overflow-x-auto');
+    expect(scrollContainer?.className).toContain('border');
+    expect(table.className).toContain('border-collapse');
+    expect(table.className).toContain('w-full');
+
+    const headerCell = screen.getByRole('columnheader', { name: '名称' });
+    expect(headerCell.className).toContain('border-b');
+    expect(headerCell).toHaveStyle({ fontSize: '16px' });
+
+    const bodyCell = screen.getByRole('cell', { name: '第一行' });
+    expect(bodyCell.className).toContain('border-t');
+    expect(bodyCell).toHaveStyle({ fontSize: '16px' });
+  });
+
+  it('表格列对齐用行内样式还原，避免被类名覆盖', () => {
+    const content = ['| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n');
+    render(<ChatMarkdown content={content} assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />);
+
+    expect(screen.getByRole('cell', { name: 'a' })).toHaveStyle({ textAlign: 'left' });
+    expect(screen.getByRole('cell', { name: 'b' })).toHaveStyle({ textAlign: 'center' });
+    expect(screen.getByRole('cell', { name: 'c' })).toHaveStyle({ textAlign: 'right' });
+  });
+
   it('助手正文大字号会计算安全行高，避免多行文本重叠', () => {
     render(
       <ChatMarkdown

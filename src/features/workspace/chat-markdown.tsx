@@ -179,6 +179,26 @@ const createBodyInlineStyle = (styleConfig: AssistantMarkdownTextStyle): CSSProp
   lineHeight: `${resolveBodyLineHeightPx(styleConfig.fontSizePx)}px`,
 });
 
+/**
+ * 生成表格单元格样式：字号和颜色跟随正文配置。
+ * GFM 的列对齐是以行内 style 传进来的，必须放在最后合并，否则会被正文样式覆盖掉。
+ */
+const createTableCellStyle = (
+  config: AssistantMarkdownDisplayConfig | undefined,
+  cellStyle: CSSProperties | undefined,
+  fontWeight: CSSProperties['fontWeight'],
+): CSSProperties | undefined => {
+  if (!config) {
+    return cellStyle;
+  }
+
+  return {
+    ...createBodyInlineStyle(config.body),
+    fontWeight,
+    ...(cellStyle ?? {}),
+  };
+};
+
 const AssistantDisplayContext = createContext<AssistantMarkdownDisplayConfig | undefined>(undefined);
 
 /** 标记当前是否处于列表项内部，松散列表里的段落需要继承列表项样式而不是正文样式。 */
@@ -270,6 +290,53 @@ const markdownComponents: Components = {
       <strong {...props} style={config && !insideHeading ? { color: config.strong.color } : undefined}>
         {children}
       </strong>
+    );
+  },
+  table: function MarkdownTable({ node: _node, children, ...props }) {
+    return (
+      <div className="my-2 w-full max-w-full overflow-x-auto border border-border/70">
+        <table {...props} className="w-full min-w-full table-auto border-collapse">
+          {children}
+        </table>
+      </div>
+    );
+  },
+  thead: function MarkdownTableHead({ node: _node, children, ...props }) {
+    return (
+      <thead {...props} className="bg-muted/60">
+        {children}
+      </thead>
+    );
+  },
+  tbody: function MarkdownTableBody({ node: _node, children, ...props }) {
+    return (
+      <tbody {...props} className="[&>tr:nth-child(even)]:bg-muted/20">
+        {children}
+      </tbody>
+    );
+  },
+  th: function MarkdownTableHeaderCell({ node: _node, children, style, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <th
+        {...props}
+        className="border-b border-border/70 px-2 py-1 text-left align-top font-semibold not-first:border-l not-first:border-l-border/50"
+        style={createTableCellStyle(config, style, 600)}
+      >
+        {children}
+      </th>
+    );
+  },
+  td: function MarkdownTableDataCell({ node: _node, children, style, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <td
+        {...props}
+        className="border-t border-border/50 px-2 py-1 align-top not-first:border-l not-first:border-l-border/50"
+        style={createTableCellStyle(config, style, 400)}
+      >
+        {children}
+      </td>
     );
   },
 };

@@ -85,6 +85,8 @@ settings.assistantMarkdownH4: 四级标题
 settings.assistantMarkdownBody: 正文
 settings.assistantMarkdownList: 列表项
 settings.assistantMarkdownStrong: 粗体
+settings.assistantBranchColumnWidth: 分支列最小宽度
+settings.assistantBranchColumnWidthHint: 助手消息超过两个分支时，每列的最小宽度（px），不足时横向滚动。
 settings.defaultModel: 默认模型
 settings.noDefaultModel: 不设置默认模型
 settings.branchModels: 并行模型

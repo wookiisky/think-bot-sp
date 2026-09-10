@@ -85,6 +85,8 @@ settings.assistantMarkdownH4: Heading 4
 settings.assistantMarkdownBody: Body
 settings.assistantMarkdownList: List Item
 settings.assistantMarkdownStrong: Bold
+settings.assistantBranchColumnWidth: Branch Column Min Width
+settings.assistantBranchColumnWidthHint: Minimum width (px) per column when an assistant message has more than two branches; narrower viewports scroll horizontally.
 settings.defaultModel: Default Model
 settings.noDefaultModel: No Default Model
 settings.branchModels: Parallel Models

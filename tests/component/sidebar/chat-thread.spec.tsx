@@ -3,8 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG } from '../../../src/domain/config/assistant-markdown-display-config';
-import { MIN_ASSISTANT_BRANCH_COLUMN_WIDTH } from '../../../src/domain/config/config-schema';
+import { DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH, DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG } from '../../../src/domain/config/assistant-markdown-display-config';
 import { ChatThread } from '../../../src/features/sidebar/chat-thread';
 import { ChatMarkdown } from '../../../src/features/workspace/chat-markdown';
 
@@ -76,6 +75,7 @@ const createBaseProps = () => ({
   editingText: '',
   t,
   assistantMarkdownDisplayConfig: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+  assistantBranchColumnWidth: DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH,
   onStartEdit: vi.fn(),
   onEditingTextChange: vi.fn(),
   onCancelEdit: vi.fn(),
@@ -561,7 +561,7 @@ describe('ChatThread', () => {
     const branchRail = screen.getByTestId('branch-rail-assistant-sync');
     const branchGrid = screen.getByTestId('branch-rail-content-assistant-sync');
 
-    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
+    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
     topScrollbar.scrollLeft = 96;
     fireEvent.scroll(topScrollbar);
     expect(branchRail.scrollLeft).toBe(96);
@@ -851,9 +851,45 @@ describe('ChatThread', () => {
     expect(branchRail.className).toContain('max-w-full');
     expect(branchRail.className).toContain('overflow-x-auto');
     expect(branchRail.className).not.toContain('pb-');
-    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${MIN_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
+    expect(branchGrid.getAttribute('style')).toContain(`repeat(3, minmax(${DEFAULT_ASSISTANT_BRANCH_COLUMN_WIDTH}px, 1fr))`);
     expect(branchGrid.className).toContain('min-w-full');
     expect(branchGrid.className).toContain('divide-x');
+  });
+
+  it('分支列最小宽度跟随配置，两列以内仍自适应容器', () => {
+    const buildBranch = (index: number) => ({
+      id: `branch-${index}`,
+      modelId: `model-${index}`,
+      modelLabel: `模型${index}`,
+      isPrimary: index === 1,
+      content: `分支${index}`,
+      status: 'done' as const,
+      errorMessage: null,
+    });
+    const buildMessage = (branchCount: number) => [
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '主回答',
+        status: 'done' as const,
+        errorMessage: null,
+        branches: Array.from({ length: branchCount }, (_unused, index) => buildBranch(index + 1)),
+        selectedBranchId: 'branch-1',
+      },
+    ];
+
+    const { rerender } = render(
+      <ChatThread {...createBaseProps()} assistantBranchColumnWidth={420} messages={buildMessage(3)} />,
+    );
+    expect(screen.getByTestId('branch-rail-content-assistant-1').getAttribute('style')).toContain(
+      'repeat(3, minmax(420px, 1fr))',
+    );
+
+    rerender(<ChatThread {...createBaseProps()} assistantBranchColumnWidth={420} messages={buildMessage(2)} />);
+    expect(screen.getByTestId('branch-rail-content-assistant-1').getAttribute('style')).toContain(
+      'repeat(2, minmax(0, 1fr))',
+    );
+    expect(screen.getByTestId('branch-rail-assistant-1').className).toContain('overflow-x-hidden');
   });
 
   it('继续新增分支从分支卡片按钮打开模型列表，且不再显示同模型序号', async () => {
