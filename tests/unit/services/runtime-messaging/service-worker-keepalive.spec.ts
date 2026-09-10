@@ -55,7 +55,7 @@ describe('service-worker keepalive', () => {
 
     const release = keepalive.acquire();
     await vi.advanceTimersByTimeAsync(1000);
-    expect(warn).toHaveBeenCalledWith('keepalive.ping_failed', { reason: 'no runtime' });
+    expect(warn).toHaveBeenCalledWith('keepalive.ping_failed', { holders: 1, reason: 'no runtime' });
     expect(keepalive.activeCount).toBe(1);
     release();
   });

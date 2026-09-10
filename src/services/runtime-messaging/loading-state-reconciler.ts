@@ -1,4 +1,5 @@
 import { hasActiveLoading } from '../../domain/loading/loading-state-schema';
+import { describeError, type Logger } from '../logger/logger';
 
 /** 孤儿 loading 收敛时写入分支的错误文案。 */
 export const ORPHANED_LOADING_ERROR_MESSAGE = '后台服务已重启，本次请求已中断，请重新发送';
@@ -121,12 +122,7 @@ type ReconcilerDeps = {
     publishToPromptTab: (_event: ReconcilerEvent) => void;
   };
   /** 结构化日志。 */
-  logger?: {
-    /** info 级别日志。 */
-    info: (_event: string, _payload?: Record<string, unknown>) => void;
-    /** warn 级别日志。 */
-    warn: (_event: string, _payload?: Record<string, unknown>) => void;
-  };
+  logger?: Pick<Logger, 'info' | 'warn'>;
   /** 当前时间。 */
   now?: () => number;
 };
@@ -169,6 +165,7 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
     const { normalizedUrl, promptTabId, sessionId } = loadingState;
     const startedAtByBranch = new Map(loadingState.branchStates.map((branch) => [branch.branchId, branch.startedAt]));
     const failedAt = now();
+    let failedBranchCount = 0;
     const conversation = await deps.conversationRepository.getConversation(normalizedUrl, promptTabId);
 
     for (const message of conversation?.messages ?? []) {
@@ -200,9 +197,10 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
             promptTab: promptTabId,
             messageId: message.id,
             branchId: branch.id,
-            reason: error instanceof Error ? error.message : String(error),
+            reason: describeError(error),
           });
         }
+        failedBranchCount += 1;
         publishSafely({
           type: isPrimary ? 'CHAT_STREAM_FAILED' : 'BRANCH_STREAM_FAILED',
           normalizedUrl,
@@ -222,11 +220,18 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
       logger.warn('loading.reconcile.cleanup_failed', {
         normalizedUrl,
         promptTab: promptTabId,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: describeError(error),
       });
     }
     publishSafely({ type: 'LOADING_STATE_UPDATE', normalizedUrl, promptTabId, sessionId, status: 'error' });
-    logger.info('loading.reconcile.orphan_converged', { normalizedUrl, promptTab: promptTabId, sessionId });
+    logger.warn('loading.reconcile.orphan_converged', {
+      normalizedUrl,
+      promptTab: promptTabId,
+      sessionId,
+      failedBranchCount,
+      startedAt: loadingState.startedAt,
+      staleMs: loadingState.startedAt === null ? null : Math.max(0, failedAt - loadingState.startedAt),
+    });
   };
 
   return {

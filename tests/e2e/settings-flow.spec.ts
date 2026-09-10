@@ -22,22 +22,19 @@ test('settings flow keeps language and theme after save, then reset to defaults'
   }
 
   const handledCommandTypes: string[] = [];
+  // 命令完成日志是 debug 级别，生产构建默认不输出；日志载荷序列化在消息文本里，直接从文本解析。
   serviceWorker.on('console', (message) => {
-    if (!message.text().includes('配置命令处理成功')) {
+    const match = /command\.completed (\{.*\})$/.exec(message.text());
+    if (!match?.[1]) {
       return;
     }
-
-    const payload = message.args()[1];
-    if (!payload) {
-      return;
+    const payload = JSON.parse(match[1]) as { source?: string; type?: string };
+    if (payload.source === 'config' && typeof payload.type === 'string') {
+      handledCommandTypes.push(payload.type);
     }
-
-    void payload.jsonValue().then((value) => {
-      const type = typeof value === 'object' && value && 'type' in value ? value.type : null;
-      if (typeof type === 'string') {
-        handledCommandTypes.push(type);
-      }
-    });
+  });
+  await serviceWorker.evaluate(() => {
+    (globalThis as typeof globalThis & { __thinkBotLog?: { setLevel: (level: string) => void } }).__thinkBotLog?.setLevel('debug');
   });
 
   await serviceWorker.evaluate(async ({ page, conversation, loading, ignored }) => {

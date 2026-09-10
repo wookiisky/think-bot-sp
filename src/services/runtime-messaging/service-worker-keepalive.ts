@@ -1,3 +1,5 @@
+import { describeError, type Logger } from '../logger/logger';
+
 /** Chrome 空闲 30 秒即回收 MV3 service worker，取略短于该阈值的心跳间隔。 */
 export const DEFAULT_KEEPALIVE_INTERVAL_MS = 20_000;
 
@@ -7,10 +9,7 @@ type KeepaliveDeps = {
   /** 心跳间隔，默认 20 秒。 */
   intervalMs?: number;
   /** 结构化日志。 */
-  logger?: {
-    /** warn 级别日志。 */
-    warn: (_event: string, _payload?: Record<string, unknown>) => void;
-  };
+  logger?: Pick<Logger, 'warn'>;
 };
 
 /**
@@ -31,9 +30,7 @@ export const createServiceWorkerKeepalive = (deps: KeepaliveDeps) => {
     void Promise.resolve()
       .then(() => deps.ping())
       .catch((error: unknown) => {
-        deps.logger?.warn('keepalive.ping_failed', {
-          reason: error instanceof Error ? error.message : String(error),
-        });
+        deps.logger?.warn('keepalive.ping_failed', { holders, reason: describeError(error) });
       });
   };
 

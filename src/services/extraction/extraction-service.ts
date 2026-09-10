@@ -1,17 +1,9 @@
 import type { ExtractionMethod } from '../../domain/page/page-schema';
 import { normalizePageUrl } from '../../domain/page/page-schema';
 import type { CollectPageSourceInput, PageSource } from './page-source';
+import type { Logger } from '../logger/logger';
 
-type ExtractionLogger = {
-  /** 记录信息日志。 */
-  info: LoggerMethod;
-  /** 记录警告日志。 */
-  warn: LoggerMethod;
-  /** 记录错误日志。 */
-  error: LoggerMethod;
-};
-
-type LoggerMethod = (...args: [string, (Record<string, unknown> | undefined)?]) => void;
+type ExtractionLogger = Pick<Logger, 'info' | 'warn' | 'error'>;
 
 type ExtractionInput = {
   /** 浏览器标签页 id。 */
@@ -69,17 +61,20 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
       const normalizedUrl = normalizePageUrl(pageSource.url);
 
       logger.info('extraction.started', {
-        tabId: input.tabId,
+        browserTabId: input.tabId,
         normalizedUrl,
         method: input.method,
+        titleLength: pageSource.title.length,
+        hasFavicon: pageSource.faviconUrl.length > 0,
       });
 
       if (input.method === 'readability') {
         const parsed = pageSource.readability;
         if (!parsed?.content.trim()) {
           logger.warn('extraction.readability_failed', {
-            tabId: input.tabId,
+            browserTabId: input.tabId,
             normalizedUrl,
+            reason: parsed ? 'empty_content' : 'parser_failed',
           });
           throw new Error('readability extraction failed');
         }
@@ -95,8 +90,9 @@ export const createExtractionService = (dependencies: ExtractionDependencies) =>
       }
 
       logger.info('extraction.jina_started', {
-        tabId: input.tabId,
+        browserTabId: input.tabId,
         normalizedUrl,
+        hasApiKey: input.jinaApiKey.trim().length > 0,
       });
       const content = await jinaClient.extract(pageSource.url, {
         apiKey: input.jinaApiKey,

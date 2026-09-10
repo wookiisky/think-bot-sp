@@ -13,7 +13,8 @@
 约束：
 
 - side panel 初始化、页面提取、消息发送、流式恢复、同步、黑名单确认这些主流程都必须记录关键开始、结束、取消、失败节点。
-- 日志统一使用结构化 `console` 输出，事件名和上下文字段由 `Services/logger.md` 作为唯一主来源。
+- 日志统一输出为单行文本 `[scope] event {json}`，事件名、级别和上下文字段由 `Services/logger.md` 作为唯一主来源。
+- 高频状态同步和命令级成功路径使用 `debug`，生产构建默认只输出 `info` 及以上。
 - 调试日志只用于排障，不写入本地存储，不参与同步，不作为恢复依据。
 - 日志上下文必须优先携带 `browserTabId`、`pageId`、`promptTab`、`sessionId`、`branchId` 这类关联字段，而不是正文或敏感原文。
 

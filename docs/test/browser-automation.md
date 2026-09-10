@@ -55,7 +55,8 @@
   - `conversations.html` 再次点击扩展图标会进入设置页。
   - 黑名单命中时先展示确认层，未放行前不执行提取和自动触发。
 - 可观测性：
-  - 关键流程可在浏览器 console 中观察到稳定日志事件名。
+  - 关键流程可在浏览器 console 中观察到稳定日志事件名，格式为 `[scope] event {json}`，用例从文本解析载荷。
+  - 生产构建默认不输出 `debug`；需要观察命令级事件时先 `serviceWorker.evaluate(() => __thinkBotLog.setLevel('debug'))`。
   - 调试日志不输出 API Key、同步密钥、完整页面正文和完整用户输入。
   - 同步流程：
     - 连接测试。

@@ -131,18 +131,25 @@ describe('chat-dispatch-service session lifecycle', () => {
       sessionId: 'session-1',
       messageId: 'assistant-1',
       provider: 'openai-compatible',
+      modelId: 'model-1',
+      messageCount: 1,
+      timeoutSeconds: expect.any(Number),
     });
     expect(logger.info).toHaveBeenCalledWith('chat.stream.first_chunk', {
       normalizedUrl: 'https://example.com/article',
       promptTab: 'chat',
       sessionId: 'session-1',
       messageId: 'assistant-1',
+      ttfbMs: expect.any(Number),
     });
     expect(logger.info).toHaveBeenCalledWith('chat.stream.completed', {
       normalizedUrl: 'https://example.com/article',
       promptTab: 'chat',
       sessionId: 'session-1',
       messageId: 'assistant-1',
+      durationMs: expect.any(Number),
+      flushCount: expect.any(Number),
+      contentLength: 6,
     });
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
       messages: [
@@ -383,12 +390,13 @@ describe('chat-dispatch-service session lifecycle', () => {
       status: 'cancelled',
     });
     await expect(conversationRepository.getLoadingState('https://example.com/article', 'chat')).resolves.toBeNull();
-    expect(logger.info).toHaveBeenCalledWith('chat.stream.cancelled', {
+    expect(logger.info).toHaveBeenCalledWith('chat.stream.cancelled', expect.objectContaining({
       normalizedUrl: 'https://example.com/article',
       promptTab: 'chat',
       sessionId: 'session-2',
       messageId: 'assistant-2',
-    });
+      flushCount: expect.any(Number),
+    }));
     await expect(conversationRepository.getConversation('https://example.com/article', 'chat')).resolves.toMatchObject({
       messages: [
         expect.objectContaining({
@@ -1503,7 +1511,7 @@ describe('chat-dispatch-service session lifecycle', () => {
         }),
       ]),
     );
-    expect(logger.info).toHaveBeenCalledWith('branch.stream.started', {
+    expect(logger.info).toHaveBeenCalledWith('branch.stream.started', expect.objectContaining({
       normalizedUrl: 'https://example.com/article',
       promptTab: 'quick-summary',
       sessionId: 'branch-session-b',
@@ -1511,22 +1519,25 @@ describe('chat-dispatch-service session lifecycle', () => {
       branchId: 'branch-b',
       provider: 'openai-compatible',
       modelId: 'model-branch-b',
-    });
-    expect(logger.info).toHaveBeenCalledWith('branch.stream.first_chunk', {
+    }));
+    expect(logger.info).toHaveBeenCalledWith('branch.stream.first_chunk', expect.objectContaining({
       normalizedUrl: 'https://example.com/article',
       promptTab: 'quick-summary',
       sessionId: 'branch-session-b',
       messageId: 'assistant-1',
       branchId: 'branch-b',
-    });
-    expect(logger.error).toHaveBeenCalledWith('branch.stream.failed', {
+    }));
+    expect(logger.error).toHaveBeenCalledWith('branch.stream.failed', expect.objectContaining({
       normalizedUrl: 'https://example.com/article',
       promptTab: 'quick-summary',
       sessionId: 'branch-session-b',
       messageId: 'assistant-1',
       branchId: 'branch-b',
       reason: 'branch provider timeout',
-    });
+      modelId: 'model-branch-b',
+      timedOut: false,
+      persisted: true,
+    }));
   });
 
   it('editUserMessage 会裁剪后续结果并基于编辑后的消息重新生成主回答', async () => {

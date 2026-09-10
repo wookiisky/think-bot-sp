@@ -209,7 +209,7 @@ describe('browser-entry service', () => {
       openPanelOnActionClick: false,
     });
     expect(sidePanel.setPanelBehavior).toHaveBeenCalledBefore(sidePanel.setOptions);
-    expect(logger.warn).toHaveBeenCalledWith('当前标签页侧边栏禁用失败', {
+    expect(logger.warn).toHaveBeenCalledWith('panel.disable.failed', {
       browserTabId: 9,
       reason: 'disable failed',
     });
@@ -226,7 +226,7 @@ describe('browser-entry service', () => {
     expect(sidePanel.setPanelBehavior).toHaveBeenCalledWith({
       openPanelOnActionClick: false,
     });
-    expect(logger.warn).toHaveBeenCalledWith('活动标签页查询能力不可用', {});
+    expect(logger.warn).toHaveBeenCalledWith('entry.tabs_query.unavailable');
   });
 
   it('普通网页通过消息驱动入口时只配置当前 tab，不手动调用 sidePanel.open', async () => {
@@ -399,7 +399,7 @@ describe('browser-entry service', () => {
     expect(tabs.create).toHaveBeenCalledWith({
       url: 'chrome-extension://ext-id/conversations.html',
     });
-    expect(logger.warn).toHaveBeenCalledWith('侧边栏按钮行为能力不可用', {});
+    expect(logger.warn).toHaveBeenCalledWith('entry.action_behavior.unavailable');
   });
 
   it('切换到其他 browserTab 时会禁用旧 tab，并为当前 tab 预配置 side panel', async () => {

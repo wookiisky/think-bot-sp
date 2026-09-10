@@ -1,3 +1,5 @@
+import type { Logger } from '../../services/logger/logger';
+
 /** 两个工作台共用的最小 port 形状；组件测试里的假 port 不带 onDisconnect。 */
 export type StreamPortLike = {
   /** 断开订阅。 */
@@ -34,6 +36,21 @@ type SubscribeInput = {
   setTimeout?: (_callback: () => void, _delayMs: number) => unknown;
   /** 定时器清理注入。 */
   clearTimeout?: (_handle: unknown) => void;
+  /** 结构化日志。 */
+  logger?: Pick<Logger, 'debug' | 'warn'>;
+};
+
+/** 取 port 事件的类型和关联 id，正文 chunk 不进日志。 */
+const describePortEvent = (message: unknown): Record<string, unknown> | null => {
+  if (typeof message !== 'object' || message === null || !('type' in message)) {
+    return null;
+  }
+  const event = message as { type?: unknown; sessionId?: unknown; messageId?: unknown; branchId?: unknown; status?: unknown };
+  const type = String(event.type);
+  if (type.endsWith('_CHUNK')) {
+    return null;
+  }
+  return { type, sessionId: event.sessionId, messageId: event.messageId, branchId: event.branchId, status: event.status };
 };
 
 /**
@@ -56,6 +73,10 @@ export const subscribeStreamPort = (input: SubscribeInput): (() => void) => {
     const handleMessage = (message: unknown) => {
       // 收到任何消息都说明链路健康，下一次断开从最短延迟重试。
       attempt = 0;
+      const described = describePortEvent(message);
+      if (described) {
+        input.logger?.debug('port.event', described);
+      }
       input.onEvent(message);
     };
     const handleDisconnect = () => {
@@ -66,6 +87,7 @@ export const subscribeStreamPort = (input: SubscribeInput): (() => void) => {
       current = null;
       attempt += 1;
       const delayMs = Math.min(STREAM_RECONNECT_BASE_DELAY_MS * 2 ** (attempt - 1), STREAM_RECONNECT_MAX_DELAY_MS);
+      input.logger?.warn('port.disconnected', { attempt, reconnectInMs: delayMs });
       timer = schedule(() => {
         timer = null;
         if (disposed) {

@@ -1,4 +1,5 @@
 import type { ExtensionConfig } from '../../domain/config/config-schema';
+import { describeError, type Logger } from '../logger/logger';
 import {
   hasUsableExtractionCache,
   pageRecordSchema,
@@ -215,6 +216,7 @@ export const createSyncService = ({
   testProvider,
   getTestProvider,
   syncRepository,
+  logger: injectedLogger,
 }: {
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -223,9 +225,12 @@ export const createSyncService = ({
   getTestProvider?: () => SyncTestProvider | null;
   /** 同步快照仓储。 */
   syncRepository?: SyncRepository;
+  /** 结构化日志。 */
+  logger?: Pick<Logger, 'info' | 'warn' | 'error'>;
 } = {}) => {
   const gistProvider = createGistSyncProvider(fetchImpl);
   const webdavProvider = createWebdavSyncProvider(fetchImpl);
+  const logger = injectedLogger ?? { info: () => undefined, warn: () => undefined, error: () => undefined };
 
   const buildSnapshot = async (config?: ExtensionConfig): Promise<SyncSnapshot> =>
     syncRepository
@@ -262,7 +267,16 @@ export const createSyncService = ({
 
     const provider = resolveProvider(config.sync);
     const revision = await syncRepository?.getRevision?.();
+    logger.info('sync.started', { provider: config.sync.provider, revision, lastSyncAt: config.sync.lastSyncAt });
     const remoteSnapshot = await provider.readSnapshot(config.sync);
+    logger.info('sync.remote_loaded', {
+      provider: config.sync.provider,
+      remoteSnapshotVersion: remoteSnapshot?.snapshotVersion ?? null,
+      remotePages: remoteSnapshot?.pages.length ?? 0,
+      remoteConversations: remoteSnapshot?.conversations.length ?? 0,
+      remoteTombstones: remoteSnapshot?.tombstones.length ?? 0,
+      remoteLastSyncAt: remoteSnapshot?.lastSyncAt ?? null,
+    });
     let nextSnapshot: SyncSnapshot;
     if (syncRepository?.mergeSnapshot && revision !== undefined) {
       nextSnapshot = await syncRepository.mergeSnapshot(
@@ -313,16 +327,38 @@ export const createSyncService = ({
         return activeTestProvider.testConnection(sync);
       }
 
-      if (sync.provider === 'gist') {
-        return gistProvider.testConnection(sync);
+      try {
+        const result = sync.provider === 'gist' ? await gistProvider.testConnection(sync) : await webdavProvider.testConnection(sync);
+        logger.info('sync.connection_tested', { provider: sync.provider, ok: result.ok });
+        return result;
+      } catch (error) {
+        logger.error('sync.connection_failed', { provider: sync.provider, reason: describeError(error) });
+        throw error;
       }
-
-      return webdavProvider.testConnection(sync);
     },
 
     /** 同步任务串行，但远端 I/O 不占用本地存储队列。 */
     syncNow(config: ExtensionConfig) {
-      const result = syncQueue.then(() => performSync(config));
+      const startedAt = now();
+      const result = syncQueue.then(() => performSync(config)).then(
+        (outcome) => {
+          logger.info('sync.completed', {
+            provider: outcome.provider,
+            durationMs: Math.max(0, now() - startedAt),
+            snapshotBytes: outcome.snapshotBytes,
+            lastSyncAt: outcome.lastSyncAt,
+          });
+          return outcome;
+        },
+        (error: unknown) => {
+          logger.error('sync.failed', {
+            provider: config.sync.provider,
+            durationMs: Math.max(0, now() - startedAt),
+            reason: describeError(error),
+          });
+          throw error;
+        },
+      );
       syncQueue = result.then(() => undefined, () => undefined);
       return result;
     },

@@ -1,4 +1,5 @@
 import type * as Ai from 'ai';
+import type { Logger } from '../logger/logger';
 import type { LanguageModel, ToolSet } from 'ai';
 import { createDefaultConfig, resolveModelReasoningEffort, resolvePromptTabParallelModelIds } from '../../domain/config/config-schema';
 import type { ExtensionConfig, ModelConfig } from '../../domain/config/config-schema';
@@ -605,15 +606,8 @@ type ChatDispatchServiceDeps = {
     /** 取消信号。 */
     abortSignal: AbortSignal;
   }) => Promise<StreamTextResult>;
-  /** 结构化日志。 */
-  logger?: {
-    /** info 级别日志。 */
-    info: (_event: string, _payload?: Record<string, unknown>) => void;
-    /** warn 级别日志。 */
-    warn: (_event: string, _payload?: Record<string, unknown>) => void;
-    /** error 级别日志。 */
-    error: (_event: string, _payload?: Record<string, unknown>) => void;
-  };
+  /** 结构化日志；debug 可选，兼容只提供三档的测试夹具。 */
+  logger?: Pick<Logger, 'info' | 'warn' | 'error'> & Partial<Pick<Logger, 'debug'>>;
   /** 生成会话 id。 */
   createSessionId?: () => string;
   /** 生成消息 id。 */
@@ -986,7 +980,11 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     const prefix = input.primary ? 'chat' : 'branch';
     const done = (async (): Promise<ChatStreamResult> => {
       let streamStartedAt: number | null = null;
+      // 首包耗时只用于日志，取墙钟时间，不消耗注入的 now() 序列。
+      let streamStartedWallClock = 0;
       let persistenceFailed = false;
+      let flushCount = 0;
+      let contentLength = 0;
       try {
         const startedAt = now();
         if (input.primary) {
@@ -999,7 +997,9 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         logger.info(`${prefix}.stream.started`, {
           ...logScope,
           provider: resolvedModel.providerId,
-          ...(!input.primary ? { modelId: input.model.id } : {}),
+          modelId: input.model.id,
+          messageCount: input.streamMessages.length,
+          timeoutSeconds: input.requestTimeoutSeconds,
         });
         publishToPromptTabSafely({
           ...eventScope,
@@ -1009,6 +1009,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           startedAt,
         });
         streamStartedAt = startedAt;
+        streamStartedWallClock = Date.now();
         const response = await deps.streamText(buildModelInvocation({
           resolvedModel,
           messages: input.streamMessages,
@@ -1016,8 +1017,13 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         }));
         await consumeBufferedTextStream(response.textStream, {
           signal: abortScope.signal,
-          onFirstChunk: () => logger.info(`${prefix}.stream.first_chunk`, logScope),
+          onFirstChunk: () => logger.info(`${prefix}.stream.first_chunk`, {
+            ...logScope,
+            ttfbMs: Math.max(0, Date.now() - streamStartedWallClock),
+          }),
           write: async (chunk) => {
+            flushCount += 1;
+            contentLength += chunk.length;
             const update = { ...scope, chunk, now: now() };
             try {
               if (input.primary) {
@@ -1049,7 +1055,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           type: input.primary ? 'CHAT_STREAM_FINISHED' : 'BRANCH_STREAM_FINISHED',
           durationMs,
         });
-        logger.info(`${prefix}.stream.completed`, logScope);
+        logger.info(`${prefix}.stream.completed`, { ...logScope, durationMs, flushCount, contentLength });
         return { sessionId, messageId: input.messageId, status: 'done', errorMessage: null, persisted: true };
       } catch (error) {
         const failure = persistenceFailed
@@ -1092,19 +1098,31 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
             });
             rolledBack = true;
             persisted = false;
+            logger.info('chat.rollback.completed', { ...logScope, userMessageId: input.rollbackUserMessageId });
           } catch (rollbackError) {
             logger.error('chat.rollback.failed', { ...logScope, reason: getErrorMessage(rollbackError, 'rollback failed') });
           }
         }
         if (status === 'cancelled') {
-          logger.info(`${prefix}.stream.cancelled`, { ...logScope, ...(!input.primary ? { durationMs } : {}) });
+          logger.info(`${prefix}.stream.cancelled`, { ...logScope, durationMs, flushCount, contentLength });
           publishToPromptTabSafely({
             ...eventScope,
             type: input.primary ? 'CHAT_STREAM_CANCELLED' : 'BRANCH_STREAM_CANCELLED',
             durationMs,
           });
         } else {
-          logger.error(`${prefix}.stream.failed`, { ...logScope, reason: errorMessage });
+          logger.error(`${prefix}.stream.failed`, {
+            ...logScope,
+            reason: errorMessage,
+            provider: resolvedModel.providerId,
+            modelId: input.model.id,
+            durationMs,
+            flushCount,
+            contentLength,
+            timedOut: abortScope.isTimedOut(),
+            persisted,
+            rolledBack,
+          });
           publishToPromptTabSafely({
             ...eventScope,
             type: input.primary ? 'CHAT_STREAM_FAILED' : 'BRANCH_STREAM_FAILED',
@@ -1186,6 +1204,18 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
   }): MultiBranchStreamSession => {
     const primaryPlan = input.initialBranchPlans[0];
     if (!primaryPlan) throw new Error(`primary branch plan missing: ${input.promptTabId}`);
+    logger.debug?.('chat.turn.prepared', {
+      normalizedUrl: input.normalizedUrl,
+      promptTab: input.promptTabId,
+      sessionId: input.sessionId,
+      messageId: input.messageId,
+      messageCount: input.streamMessages.length,
+      systemPromptLength: input.streamMessages[0]?.role === 'system' ? input.streamMessages[0].content.length : 0,
+      imageCount: input.streamMessages.reduce((total, message) => total + message.images.length, 0),
+      models: input.initialBranchPlans.map((plan) => plan.modelId),
+      timeoutSeconds: input.requestTimeoutSeconds,
+      rollbackOnFailure: input.rollbackOnFailure ?? false,
+    });
     const branchSessions = input.initialBranchPlans.slice(1).map((plan) => createStreamSession({
       normalizedUrl: input.normalizedUrl,
       promptTabId: input.promptTabId,
@@ -1225,7 +1255,12 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       try {
         await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
       } catch (error) {
-        logger.warn('chat.loading.cleanup_failed', { reason: getErrorMessage(error, 'cleanup failed') });
+        logger.warn('chat.loading.cleanup_failed', {
+          normalizedUrl: input.normalizedUrl,
+          promptTab: input.promptTabId,
+          sessionId: input.sessionId,
+          reason: getErrorMessage(error, 'cleanup failed'),
+        });
       }
       publishToPromptTabSafely({
         type: 'LOADING_STATE_UPDATE',

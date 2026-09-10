@@ -9,7 +9,7 @@ import {
   normalizeParallelModelSelections,
 } from '../../domain/config/config-schema';
 import { createLocaleService } from '../../services/i18n/locale-service';
-import { createLogger } from '../../services/logger/logger';
+import { createLogger, describeError } from '../../services/logger/logger';
 import { downloadTextFile } from '../../shared/download-file';
 import { ToastStack } from '../../components/ui/toast-stack';
 import { Icon } from '../../ui/icon';
@@ -54,7 +54,7 @@ type SettingsToast = {
   message: string;
 };
 
-const logger = createLogger('settings-shell');
+const logger = createLogger('options');
 const localeService = createLocaleService();
 
 /** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入编辑。 */
@@ -94,8 +94,6 @@ export const SettingsShell = () => {
     let active = true;
 
     const load = async () => {
-      logger.info('开始加载设置页');
-
       try {
         const [nextConfig, nextCacheStats, nextLocaleResources] = await Promise.all([
           settingsApi.getConfig(),
@@ -112,18 +110,21 @@ export const SettingsShell = () => {
         setCacheStats(nextCacheStats);
         setLocaleResources(nextLocaleResources);
         setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
-        logger.info('设置页加载完成', {
-          pageCount: nextCacheStats.pageCount,
-          entryCount: nextCacheStats.entryCount,
-          bytes: nextCacheStats.bytes,
+        logger.info('settings.loaded', {
+          modelCount: nextConfig.models.length,
+          quickInputCount: nextConfig.quickInputs.length,
+          language: nextConfig.basic.language,
+          syncProvider: nextConfig.sync.provider,
+          cachePageCount: nextCacheStats.pageCount,
+          cacheBytes: nextCacheStats.bytes,
         });
       } catch (error) {
         if (!active) {
           return;
         }
 
-        const message = error instanceof Error ? error.message : 'unknown error';
-        logger.error('设置页加载失败', { message });
+        const message = describeError(error);
+        logger.error('settings.load.failed', { reason: message });
         setLoadError({ title: '加载失败', message });
       }
     };
@@ -179,13 +180,13 @@ export const SettingsShell = () => {
 
     if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
       showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型不存在，阻止保存', { defaultModelId: nextDraftConfig.basic.defaultModelId });
+      logger.warn('settings.save.blocked', { reason: 'default_model_missing', defaultModelId: nextDraftConfig.basic.defaultModelId });
       return null;
     }
 
     if (defaultModel && !isModelConfigComplete(defaultModel)) {
       showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
-      logger.warn('默认模型配置不完整，阻止保存', { defaultModelId: defaultModel.id });
+      logger.warn('settings.save.blocked', { reason: 'default_model_incomplete', defaultModelId: defaultModel.id });
       return null;
     }
 
@@ -203,12 +204,18 @@ export const SettingsShell = () => {
       const nextConfig = await settingsApi.saveConfig(nextDraftConfig);
       setSavedConfig(nextConfig);
       setDraftConfig(nextConfig);
-      logger.info('保存设置成功', { language: nextConfig.basic.language });
+      logger.info('settings.saved', {
+        language: nextConfig.basic.language,
+        theme: nextConfig.basic.theme,
+        modelCount: nextConfig.models.length,
+        defaultModelId: nextConfig.basic.defaultModelId,
+        syncProvider: nextConfig.sync.provider,
+      });
       setToast(null);
       return nextConfig;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('保存设置失败', { message });
+      const message = describeError(error);
+      logger.error('settings.save.failed', { reason: message });
       showToast('error', '保存失败', message);
       return null;
     } finally {
@@ -253,12 +260,12 @@ export const SettingsShell = () => {
       setDraftConfig(nextConfig);
       setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
       await refreshCacheStats();
-      logger.info('导入配置成功');
+      logger.info('settings.import.completed', { modelCount: nextConfig.models.length, quickInputCount: nextConfig.quickInputs.length });
       setToast(null);
       setSyncFeedback(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('导入配置失败', { message });
+      const message = describeError(error);
+      logger.error('settings.import.failed', { reason: message });
       showToast('error', '导入失败', message);
     }
   };
@@ -271,11 +278,11 @@ export const SettingsShell = () => {
         content: payload,
         mimeType: 'application/json;charset=utf-8',
       });
-      logger.info('导出配置成功', { filename });
+      logger.info('settings.export.completed', { filename, bytes: payload.length });
       setToast(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('导出配置失败', { message });
+      const message = describeError(error);
+      logger.error('settings.export.failed', { reason: message });
       showToast('error', '导出失败', message);
     }
   };
@@ -284,11 +291,11 @@ export const SettingsShell = () => {
     try {
       await settingsApi.clearLocalCache();
       await refreshCacheStats();
-      logger.info('清理本地缓存成功');
+      logger.info('settings.cache.cleared');
       setToast(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('清理本地缓存失败', { message });
+      const message = describeError(error);
+      logger.error('settings.cache.clear_failed', { reason: message });
       showToast('error', '清理缓存失败', message);
     }
   };
@@ -313,8 +320,8 @@ export const SettingsShell = () => {
       setDraftConfig(result.config);
       setToast(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('导入远端快捷输入模板失败', { message });
+      const message = describeError(error);
+      logger.error('settings.quick_input_templates.import_failed', { reason: message });
       showToast('error', '导入快捷输入模板失败', message);
     } finally {
       setImportingQuickInputTemplates(false);
@@ -341,14 +348,11 @@ export const SettingsShell = () => {
       setSavedConfig(nextConfig);
       setDraftConfig(nextConfig);
       setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
-      logger.info('恢复默认配置成功', {
-        language: nextConfig.basic.language,
-        theme: nextConfig.basic.theme,
-      });
+      logger.info('settings.reset.completed', { language: nextConfig.basic.language, theme: nextConfig.basic.theme });
       setToast(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('恢复默认配置失败', { message });
+      const message = describeError(error);
+      logger.error('settings.reset.failed', { reason: message });
       showToast('error', '恢复默认失败', message);
     } finally {
       setSaving(false);
@@ -392,8 +396,8 @@ export const SettingsShell = () => {
       );
       showToast('success', '模型测试成功', result.text || `${result.provider} 已返回空文本`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      logger.error('模型测试失败', { modelId, message });
+      const message = describeError(error);
+      logger.error('settings.model_test.failed', { modelId, provider: model.provider, reason: message });
       showToast('error', '模型测试失败', message);
     } finally {
       setTestingModelId((current) => (current === modelId ? null : current));

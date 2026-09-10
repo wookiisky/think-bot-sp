@@ -349,6 +349,7 @@ describe('runtime-messaging', () => {
       getMatchedRuleId: vi.fn().mockReturnValue(null),
     };
     const logger = {
+      debug: vi.fn(),
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
@@ -427,17 +428,19 @@ describe('runtime-messaging', () => {
       browserTabId: 7,
       normalizedUrl: 'https://example.com/article',
     });
-    expect(logger.info).toHaveBeenCalledWith('panel.init.started', {
+    expect(logger.debug).toHaveBeenCalledWith('panel.init.started', {
       browserTabId: 7,
       normalizedUrl: 'https://example.com/article',
     });
-    expect(logger.info).toHaveBeenCalledWith('page.info.loaded', {
+    expect(logger.info).toHaveBeenCalledWith('page.info.loaded', expect.objectContaining({
       browserTabId: 7,
       normalizedUrl: 'https://example.com/article',
       hasPage: true,
       conversationCount: 1,
       loadingCount: 1,
-    });
+      blockedByBlacklist: false,
+      shouldExtract: false,
+    }));
   });
 
   it('bootstrap 命中黑名单时会记录 blacklist.detected', async () => {
@@ -702,6 +705,11 @@ describe('runtime-messaging', () => {
       sessionId: 'session-1',
       messageId: 'assistant-1',
       modelId: 'model-1',
+      textLength: 2,
+      imageCount: 0,
+      includePageContent: true,
+      pageContentLength: 6,
+      branchCount: 0,
     });
     await expect(
       handler(
@@ -1425,11 +1433,7 @@ describe('runtime-messaging', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
     });
-    expect(logger.info).toHaveBeenCalledWith('conversation.export.requested', {
-      browserTabId: 7,
-      normalizedUrl: 'https://example.com/article',
-      promptTab: 'chat',
-    });
+    expect(logger.info).not.toHaveBeenCalledWith('conversation.export.requested', expect.anything());
     expect(logger.info).toHaveBeenCalledWith('conversation.export.completed', {
       browserTabId: 7,
       normalizedUrl: 'https://example.com/article',

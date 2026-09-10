@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createLogger, describeError } from '../../services/logger/logger';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -132,6 +133,9 @@ const EXTRACTION_METHOD_OPTION_ACTIVE_CLASS = 'bg-primary text-primary-foregroun
 /** 首屏聊天标签默认文案。 */
 const getDefaultChatTabLabel = (resources: ReturnType<typeof loadWorkspaceLocaleResources> | null, locale: WorkspaceLocaleCode) =>
   resources?.t('workspace.chatTab', locale) ?? 'Chat';
+
+const logger = createLogger('sidebar');
+const portLogger = logger.child('port');
 
 const EMPTY_MESSAGES: ChatMessageState[] = [];
 
@@ -474,6 +478,7 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
       return subscribeStreamPort({
         connect: () => api.connectStream({ tabId, pageUrl, promptTabId }),
         onEvent: handlePortMessage,
+        logger: portLogger.child('stream', { promptTab: promptTabId }),
       });
     });
 
@@ -575,7 +580,8 @@ export const SidebarShell = ({ api, tabId, pageUrl }: SidebarShellProps) => {
         setContent(extraction.payload.content);
         setMethod(extraction.payload.extractionMethod);
         setState('ready');
-      } catch {
+      } catch (error) {
+        logger.error('sidebar.bootstrap.failed', { browserTabId: tabId, reason: describeError(error) });
         if (!cancelled) {
           setState('error');
         }

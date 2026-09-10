@@ -1,4 +1,5 @@
 import { normalizePageUrl } from '../../domain/page/page-schema';
+import type { Logger } from '../logger/logger';
 import {
   sidebarBootstrapCommandSchema,
   sidebarDeleteBranchCommandSchema,
@@ -230,14 +231,8 @@ type SidebarHandlerContext = {
   sender: SidebarMessageSender;
 };
 
-type SidebarCommandLogger = {
-  /** info 级别日志。 */
-  info: (_event: string, _payload?: Record<string, unknown>) => void;
-  /** warn 级别日志。 */
-  warn: (_event: string, _payload?: Record<string, unknown>) => void;
-  /** error 级别日志。 */
-  error: (_event: string, _payload?: Record<string, unknown>) => void;
-};
+/** debug 可选，兼容只提供三档的测试夹具。 */
+type SidebarCommandLogger = Pick<Logger, 'info' | 'warn' | 'error'> & Partial<Pick<Logger, 'debug'>>;
 
 /** 创建 sidebar runtime command 处理器。 */
 export const createSidebarCommandHandler = ({
@@ -298,7 +293,7 @@ export const createSidebarCommandHandler = ({
         assertPageSender(context.sender, runtime.id);
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
-        commandLogger.info('panel.init.started', {
+        commandLogger.debug?.('panel.init.started', {
           browserTabId: command.tabId,
           normalizedUrl,
         });
@@ -331,8 +326,12 @@ export const createSidebarCommandHandler = ({
           browserTabId: command.tabId,
           normalizedUrl,
           hasPage: page !== null,
+          extractionMethod: page?.extractionMethod ?? null,
+          contentLength: page?.content.length ?? 0,
           conversationCount: conversations.length,
           loadingCount: loadingStates.length,
+          blockedByBlacklist,
+          shouldExtract: page === null,
         });
         if (blockedByBlacklist) {
           commandLogger.info('blacklist.detected', {
@@ -403,6 +402,11 @@ export const createSidebarCommandHandler = ({
           sessionId: session.sessionId,
           messageId: session.messageId,
           modelId: command.modelId,
+          textLength: command.text.length,
+          imageCount: command.images.length,
+          includePageContent: command.includePageContent,
+          pageContentLength: dispatchInput.pageContent.length,
+          branchCount: branches?.length ?? 0,
         });
         return {
           type: 'SEND_CHAT_SUCCESS' as const,
@@ -815,7 +819,7 @@ export const createSidebarCommandHandler = ({
         }
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
-        commandLogger.info('conversation.export.requested', {
+        commandLogger.debug?.('conversation.export.requested', {
           browserTabId: command.tabId,
           normalizedUrl,
           promptTab: command.promptTabId,

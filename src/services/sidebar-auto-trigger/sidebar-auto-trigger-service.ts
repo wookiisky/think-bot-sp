@@ -1,13 +1,8 @@
 import { getEnabledCompleteModels, type ExtensionConfig } from '../../domain/config/config-schema';
+import { describeError, type Logger } from '../logger/logger';
 
-type AutoTriggerLogger = {
-  /** 记录信息日志。 */
-  info: (_event: string, _context?: Record<string, unknown>) => void;
-  /** 记录警告日志。 */
-  warn: (_event: string, _context?: Record<string, unknown>) => void;
-  /** 记录错误日志。 */
-  error: (_event: string, _context?: Record<string, unknown>) => void;
-};
+/** debug 可选，兼容只提供三档的测试夹具。 */
+type AutoTriggerLogger = Pick<Logger, 'info' | 'warn' | 'error'> & Partial<Pick<Logger, 'debug'>>;
 
 type AutoTriggerSession = {
   /** 本次流式会话 id。 */
@@ -141,6 +136,12 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
       const candidates = config.quickInputs
         .filter((item) => item.deletedAt === null && item.autoTrigger)
         .sort((left, right) => left.order - right.order);
+      deps.logger.debug?.('auto_trigger.evaluated', {
+        browserTabId: input.browserTabId,
+        normalizedUrl: input.normalizedUrl,
+        candidateCount: candidates.length,
+        pageContentLength: input.pageContent.length,
+      });
 
       for (const quickInput of candidates) {
         const [conversation, loadingState] = await Promise.all([
@@ -149,7 +150,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
         ]);
 
         if ((conversation?.messages.length ?? 0) > 0) {
-          deps.logger.info('auto_trigger.skipped', {
+          deps.logger.debug?.('auto_trigger.skipped', {
             browserTabId: input.browserTabId,
             normalizedUrl: input.normalizedUrl,
             promptTab: quickInput.id,
@@ -158,7 +159,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
           continue;
         }
         if (loadingState?.promptTabStatus === 'loading') {
-          deps.logger.info('auto_trigger.skipped', {
+          deps.logger.debug?.('auto_trigger.skipped', {
             browserTabId: input.browserTabId,
             normalizedUrl: input.normalizedUrl,
             promptTab: quickInput.id,
@@ -212,6 +213,8 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             normalizedUrl: input.normalizedUrl,
             promptTab: quickInput.id,
             sessionId: session.sessionId,
+            messageId: session.messageId,
+            modelId,
           });
 
           void session.done
@@ -243,16 +246,16 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
               });
             })
             .catch((error: unknown) => {
-              const reason = error instanceof Error ? error.message : String(error);
               deps.logger.warn('auto_trigger.finalize_failed', {
                 browserTabId: input.browserTabId,
                 normalizedUrl: input.normalizedUrl,
                 promptTab: quickInput.id,
-                reason,
+                sessionId: session.sessionId,
+                reason: describeError(error),
               });
             });
         } catch (error: unknown) {
-          const reason = error instanceof Error ? error.message : String(error);
+          const reason = describeError(error);
           await deps.pageRepository.setPromptTabState({
             normalizedUrl: input.normalizedUrl,
             url: input.pageUrl,
@@ -263,6 +266,7 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             browserTabId: input.browserTabId,
             normalizedUrl: input.normalizedUrl,
             promptTab: quickInput.id,
+            modelId,
             reason,
           });
         }

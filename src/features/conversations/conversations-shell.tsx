@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createLogger } from '../../services/logger/logger';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -139,6 +140,9 @@ const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.ma
 /** 限制提取区高度范围。 */
 const clampExtractionPanelHeight = (height: number) =>
   Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
+
+const logger = createLogger('conversations');
+const portLogger = logger.child('port');
 
 const EMPTY_MESSAGES: ChatMessageState[] = [];
 
@@ -562,6 +566,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     const subscriptions = subscriptionIds.map((promptTabId) => subscribeStreamPort({
       connect: () => api.connectStream({ pageUrl: selectedPage.url, promptTabId }),
       onEvent: handlePortMessage,
+      logger: portLogger.child('stream', { promptTab: promptTabId }),
     }));
     return () => {
       for (const unsubscribe of subscriptions) {

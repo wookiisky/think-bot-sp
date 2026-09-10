@@ -21,7 +21,7 @@ import { createChatDispatchService } from '../src/services/llm-dispatch/chat-dis
 import { toModelMessages } from '../src/services/llm-dispatch/model-messages';
 import { resolveProviderModel } from '../src/services/llm-dispatch/provider-registry';
 import { bridgeStreamError, type StreamErrorBox } from '../src/services/llm-dispatch/stream-error-bridge';
-import { createLogger } from '../src/services/logger/logger';
+import { createLogger, describeError } from '../src/services/logger/logger';
 import { createConfigCommandHandler, isConfigCommandMessage } from '../src/services/runtime-messaging/config-commands';
 import { createConversationsCommandHandler, isConversationsCommandMessage } from '../src/services/runtime-messaging/conversations-commands';
 import { createLoadingStateReconciler } from '../src/services/runtime-messaging/loading-state-reconciler';
@@ -45,6 +45,8 @@ type ProviderOptions = GenerateTextRequest extends { providerOptions?: infer Val
 
 export default defineBackground(() => {
   const logger = createLogger('background');
+  const commandLogger = logger.child('command');
+  const portLogger = logger.child('port');
   const storage = createChromeLocalAdapter(chrome.storage.local);
   const configRepository = createConfigRepository(storage);
   const pageRepository = createPageRepository(storage);
@@ -57,6 +59,7 @@ export default defineBackground(() => {
   });
   const recentErrorRepository = createRecentErrorRepository(storage);
   const syncService = createSyncService({
+    logger: logger.child('sync'),
     getTestProvider: () =>
       (globalThis as typeof globalThis & {
         __THINK_BOT_TEST_SYNC_PROVIDER__?: {
@@ -70,11 +73,11 @@ export default defineBackground(() => {
   const sessionRegistry = createSidebarSessionRegistry();
   // 模型思考阶段没有 chunk 落库和 port 消息，worker 会因 30 秒空闲被回收；请求期间定时调用扩展 API 续命。
   const keepalive = createServiceWorkerKeepalive({
-    logger,
+    logger: logger.child('keepalive'),
     ping: () => chrome.runtime.getPlatformInfo(),
   });
   const loadingStateReconciler = createLoadingStateReconciler({
-    logger,
+    logger: logger.child('loading'),
     conversationRepository,
     sessionRegistry,
     portBus: {
@@ -98,12 +101,10 @@ export default defineBackground(() => {
       }
     })
     .catch((error: unknown) => {
-      logger.warn('loading.reconcile.startup_failed', {
-        reason: error instanceof Error ? error.message : String(error),
-      });
+      logger.warn('loading.reconcile.startup_failed', { reason: describeError(error) });
     });
   const chatDispatchService = createChatDispatchService({
-    logger,
+    logger: logger.child('dispatch'),
     configRepository,
     providerRegistry: {
       resolveProviderModel,
@@ -172,7 +173,10 @@ export default defineBackground(() => {
     syncService,
     modelTestService: {
       async testModel(model, llmRequestTimeoutSeconds, reasoningEffort) {
+        const modelTestLogger = logger.child('model_test', { modelId: model.id, provider: model.provider });
         const resolvedModel = resolveProviderModel(model, { reasoningEffort });
+        const testStartedAt = Date.now();
+        modelTestLogger.info('model_test.started', { timeoutSeconds: llmRequestTimeoutSeconds, reasoningEffort });
         const abortController = new AbortController();
         let timedOut = false;
         const timeoutId = setTimeout(() => {
@@ -203,6 +207,11 @@ export default defineBackground(() => {
         const response = await keepalive
           .run(() => generateText(request))
           .catch((error: unknown) => {
+            modelTestLogger.error('model_test.failed', {
+              durationMs: Date.now() - testStartedAt,
+              timedOut,
+              reason: describeError(error),
+            });
             if (timedOut) {
               throw new Error(`大模型调用超时（${llmRequestTimeoutSeconds} 秒）`);
             }
@@ -210,6 +219,10 @@ export default defineBackground(() => {
           })
           .finally(() => clearTimeout(timeoutId));
 
+        modelTestLogger.info('model_test.completed', {
+          durationMs: Date.now() - testStartedAt,
+          textLength: response.text.length,
+        });
         return {
           provider: resolvedModel.providerId,
           text: response.text,
@@ -230,7 +243,7 @@ export default defineBackground(() => {
       logger.warn('recent_error.persist_failed', {
         source: input.source,
         operation: input.operation,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: describeError(error),
       });
     });
   };
@@ -247,7 +260,7 @@ export default defineBackground(() => {
     }
   };
   const browserEntry = createBrowserEntryService({
-    logger,
+    logger: logger.child('entry'),
     runtime: chrome.runtime,
     tabs: chrome.tabs,
     sidePanel: chrome.sidePanel,
@@ -256,10 +269,11 @@ export default defineBackground(() => {
     getUiLocale: () => chrome.i18n?.getUILanguage?.() ?? 'en',
   });
   void browserEntry.configureActionClickBehavior().catch((error: unknown) => {
-    const reason = error instanceof Error ? error.message : String(error);
-    logger.warn('侧边栏按钮行为配置失败', { reason });
+    logger.warn('entry.action_behavior.failed', { reason: describeError(error) });
   });
+  const extractionLogger = logger.child('extraction');
   const contentSource = createContentSource({
+    logger: extractionLogger,
     tabs: {
       executeScript: (tabId) =>
         chrome.scripting
@@ -287,13 +301,13 @@ export default defineBackground(() => {
     },
   });
   const extractionService = createExtractionService({
-    logger,
+    logger: extractionLogger,
     contentSource,
     jinaClient: createJinaClient(),
     pageRepository,
   });
   const sidebarAutoTriggerService = createSidebarAutoTriggerService({
-    logger,
+    logger: logger.child('auto_trigger'),
     configRepository,
     pageRepository,
     conversationRepository,
@@ -306,7 +320,7 @@ export default defineBackground(() => {
     configRepository,
   });
   const handleSidebarCommand = createSidebarCommandHandler({
-    logger,
+    logger: commandLogger,
     runtime: chrome.runtime,
     pageRepository,
     conversationRepository,
@@ -333,7 +347,7 @@ export default defineBackground(() => {
     },
   });
   const handleConversationsChatCommand = createSidebarCommandHandler({
-    logger,
+    logger: commandLogger.child('conversations'),
     runtime: chrome.runtime,
     pageRepository,
     conversationRepository,
@@ -363,13 +377,12 @@ export default defineBackground(() => {
     }
 
     const portId = portBus.register(port);
-    logger.info('port.connected', {
-      portName: port.name,
-    });
+    portLogger.info('port.connected', { portId });
 
     port.onMessage.addListener((message: unknown) => {
       const parsed = sidebarPortClientMessageSchema.safeParse(message);
       if (!parsed.success) {
+        portLogger.warn('port.message.rejected', { portId, issues: parsed.error.issues.length });
         return;
       }
 
@@ -378,23 +391,20 @@ export default defineBackground(() => {
         normalizedUrl,
         promptTabId: parsed.data.promptTabId,
       });
-      logger.info('port.restore_requested', {
+      const restoreLogger = portLogger.child('restore', {
+        portId,
         browserTabId: parsed.data.tabId,
         normalizedUrl,
         promptTab: parsed.data.promptTabId,
       });
+      restoreLogger.info('port.restore_requested');
 
       void startupReconciliation
         .then(() => loadingStateReconciler.reconcilePromptTab(normalizedUrl, parsed.data.promptTabId))
         .then(async (outcome) => {
           // 只有当前 worker 里仍在跑的会话才值得恢复 loading；孤儿已在 reconcile 中收敛并推送失败事件。
           if (outcome !== 'active') {
-            logger.info('port.restore_skipped', {
-              browserTabId: parsed.data.tabId,
-              normalizedUrl,
-              promptTab: parsed.data.promptTabId,
-              outcome,
-            });
+            restoreLogger.debug('port.restore_skipped', { outcome });
             return;
           }
           const [loadingState, conversation] = await Promise.all([
@@ -402,6 +412,10 @@ export default defineBackground(() => {
             conversationRepository.getConversation(normalizedUrl, parsed.data.promptTabId),
           ]);
           if (!loadingState || !conversation) {
+            restoreLogger.warn('port.restore_skipped', {
+              outcome,
+              reason: !loadingState ? 'loading_state_missing' : 'conversation_missing',
+            });
             return;
           }
 
@@ -414,9 +428,21 @@ export default defineBackground(() => {
           const hasActiveLoading =
             loadingState.promptTabStatus === 'loading' || loadingState.branchStates.some((branchState) => branchState.status === 'loading');
           if (!restoreMessage || !hasActiveLoading) {
+            restoreLogger.warn('port.restore_skipped', {
+              outcome,
+              reason: !restoreMessage ? 'restore_message_missing' : 'no_active_loading',
+              restoreMessageId,
+            });
             return;
           }
 
+          restoreLogger.info('port.restore_sent', {
+            sessionId: loadingState.sessionId,
+            messageId: restoreMessage.id,
+            contentLength: restoreMessage.content.length,
+            branchCount: loadingState.branchStates.length,
+            startedAt: loadingState.startedAt,
+          });
           port.postMessage(
             sidebarPortEventSchema.parse({
               type: 'RESTORE_LOADING',
@@ -431,21 +457,13 @@ export default defineBackground(() => {
           );
         })
         .catch((error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
-          logger.warn('port.restore_failed', {
-            browserTabId: parsed.data.tabId,
-            normalizedUrl,
-            promptTab: parsed.data.promptTabId,
-            reason,
-          });
+          restoreLogger.error('port.restore_failed', { reason: describeError(error) });
         });
     });
 
     port.onDisconnect.addListener(() => {
       portBus.unregister(portId);
-      logger.info('port.disconnected', {
-        portName: port.name,
-      });
+      portLogger.info('port.disconnected', { portId });
     });
   });
 
@@ -486,14 +504,11 @@ export default defineBackground(() => {
         clearBypassForTab(tab.id);
       }
       void browserEntry.handleBrowserActionClick(tab).catch((error: unknown) => {
-        logger.warn('扩展按钮入口处理失败', {
-          browserTabId: tab?.id,
-          reason: error instanceof Error ? error.message : String(error),
-        });
+        logger.error('entry.action.failed', { browserTabId: tab?.id, reason: describeError(error) });
       });
     });
   } else {
-    logger.warn('扩展按钮能力不可用', {});
+    logger.warn('entry.action.unavailable');
   }
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -503,7 +518,8 @@ export default defineBackground(() => {
         .handleE2EBrowserActionClick(message as { type: '__E2E_BROWSER_ACTION_CLICK__'; tabId: number; pageUrl: string })
         .then((result) => sendResponse(result))
         .catch((error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
+          const reason = describeError(error);
+          logger.error('entry.action.failed', { browserTabId: (message as { tabId?: number }).tabId, source: 'e2e', reason });
           sendResponse({ error: reason });
         });
       return true;
@@ -519,7 +535,7 @@ export default defineBackground(() => {
         const command = sidebarConfirmBlacklistContinueCommandSchema.parse(message);
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         bypassStore.set(toBypassKey(command.tabId, normalizedUrl), Date.now());
-        logger.info('blacklist.bypass_confirmed', {
+        commandLogger.info('blacklist.bypass_confirmed', {
           browserTabId: command.tabId,
           normalizedUrl,
         });
@@ -534,6 +550,7 @@ export default defineBackground(() => {
 
       if (message.type === 'RE_EXTRACT_CONTENT') {
         const command = sidebarReExtractContentCommandSchema.parse(message);
+        const extractionStartedAt = Date.now();
         void configRepository
           .getConfig()
           .then((config) =>
@@ -547,11 +564,14 @@ export default defineBackground(() => {
           )
           .then((result) => {
             const shouldRunAutoTrigger = command.source === 'panel_bootstrap' || command.source === 'blacklist_continue';
-            logger.info('extraction.completed', {
+            extractionLogger.info('extraction.completed', {
               browserTabId: command.tabId,
               normalizedUrl: result.normalizedUrl,
               method: result.extractionMethod,
               source: command.source,
+              contentLength: result.content.length,
+              durationMs: Date.now() - extractionStartedAt,
+              autoTrigger: shouldRunAutoTrigger,
             });
             sendResponse({
               type: 'RE_EXTRACT_CONTENT_SUCCESS',
@@ -567,9 +587,13 @@ export default defineBackground(() => {
             }
           })
           .catch((error: unknown) => {
-            const reason = error instanceof Error ? error.message : String(error);
-            logger.error('extraction.failed', {
+            const reason = describeError(error);
+            extractionLogger.error('extraction.failed', {
               browserTabId: command.tabId,
+              normalizedUrl: normalizePageUrl(command.pageUrl),
+              method: command.method,
+              source: command.source,
+              durationMs: Date.now() - extractionStartedAt,
               reason,
             });
             recordRecentError({
@@ -595,7 +619,7 @@ export default defineBackground(() => {
             method: command.method,
           })
           .then((result) => {
-            logger.info('extraction.method_switched', {
+            extractionLogger.info('extraction.method_switched', {
               browserTabId: command.tabId,
               normalizedUrl,
               method: command.method,
@@ -617,10 +641,11 @@ export default defineBackground(() => {
             });
           })
           .catch((error: unknown) => {
-            const reason = error instanceof Error ? error.message : String(error);
-            logger.error('extraction.method_switch_failed', {
+            const reason = describeError(error);
+            extractionLogger.error('extraction.method_switch_failed', {
               browserTabId: command.tabId,
               normalizedUrl,
+              method: command.method,
               reason,
             });
             sendResponse({ error: reason });
@@ -635,22 +660,21 @@ export default defineBackground(() => {
           ? handleConversationsChatCommand
           : handleSidebarCommand;
 
+      const isConversationsSender = isConversationsPageSender(senderInfo, runtimeId);
+      const commandScope = {
+        source: isConversationsSender ? 'conversations' : 'sidebar',
+        type: message.type,
+        browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
+      };
+      const commandStartedAt = Date.now();
       void commandHandler(message, { sender: senderInfo })
         .then((result) => {
-          logger.info('sidebar.command.succeeded', {
-            type: message.type,
-            browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
-          });
+          commandLogger.debug('command.completed', { ...commandScope, durationMs: Date.now() - commandStartedAt });
           sendResponse(result);
         })
         .catch((error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
-          const isConversationsSender = isConversationsPageSender(senderInfo, runtimeId);
-          logger.error('sidebar.command.failed', {
-            type: message.type,
-            browserTabId: 'tabId' in message && typeof message.tabId === 'number' ? message.tabId : undefined,
-            reason,
-          });
+          const reason = describeError(error);
+          commandLogger.error('command.failed', { ...commandScope, durationMs: Date.now() - commandStartedAt, reason });
           recordRecentError({
             source: isConversationsSender ? 'conversations' : 'sidebar',
             operation: message.type,
@@ -663,6 +687,7 @@ export default defineBackground(() => {
 
     if (isConversationsCommandMessage(message)) {
       const type = message.type;
+      const commandStartedAt = Date.now();
       void handleConversationsCommand(message, {
         sender: {
           id: (sender as { id?: string | null }).id ?? null,
@@ -670,12 +695,12 @@ export default defineBackground(() => {
         },
       })
         .then((result) => {
-          logger.info('conversations.command.succeeded', { type });
+          commandLogger.debug('command.completed', { source: 'conversations', type, durationMs: Date.now() - commandStartedAt });
           sendResponse(result);
         })
         .catch((error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
-          logger.error('conversations.command.failed', { type, reason });
+          const reason = describeError(error);
+          commandLogger.error('command.failed', { source: 'conversations', type, durationMs: Date.now() - commandStartedAt, reason });
           recordRecentError({
             source: 'conversations',
             operation: type,
@@ -691,14 +716,15 @@ export default defineBackground(() => {
     }
 
     const type = message.type;
+    const commandStartedAt = Date.now();
     void handleConfigCommand(message)
       .then((result) => {
-        logger.info('配置命令处理成功', { type });
+        commandLogger.debug('command.completed', { source: 'config', type, durationMs: Date.now() - commandStartedAt });
         sendResponse(result);
       })
       .catch((error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        logger.error('配置命令处理失败', { type, reason });
+        const reason = describeError(error);
+        commandLogger.error('command.failed', { source: 'config', type, durationMs: Date.now() - commandStartedAt, reason });
         recordRecentError({
           source: type === 'SYNC_NOW' || type === 'TEST_SYNC_CONNECTION' ? 'sync' : 'settings',
           operation: type,
