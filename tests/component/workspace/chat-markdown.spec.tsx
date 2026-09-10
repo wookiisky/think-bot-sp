@@ -154,12 +154,49 @@ describe('ChatMarkdown', () => {
     });
   });
 
-  it('助手正文默认字号使用 18px 行高', () => {
+  it('助手列表项和正文粗体按展示配置渲染，标题内粗体跟随标题色，松散列表段落跟随列表项样式', () => {
+    const { container } = render(
+      <ChatMarkdown
+        content={'# 标题含**标题粗体**\n\n正文含**粗体**\n\n- 紧凑列表项\n\n- 松散列表项\n\n  第二段'}
+        assistantDisplayConfig={{
+          ...DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG,
+          body: { fontSizePx: 16, color: '#111827', underline: false },
+          list: { fontSizePx: 20, color: '#0f766e', underline: true },
+          strong: { color: '#be123c' },
+        }}
+      />,
+    );
+
+    const listItems = container.querySelectorAll('li');
+    expect(listItems).toHaveLength(2);
+    expect(listItems[0]).toHaveStyle({
+      fontSize: '20px',
+      lineHeight: '25px',
+      color: 'rgb(15, 118, 110)',
+      textDecoration: 'underline',
+    });
+
+    const loosePargraph = screen.getByText('松散列表项');
+    expect(loosePargraph.tagName).toBe('P');
+    expect(loosePargraph.style.fontSize).toBe('');
+    expect(screen.getByText('第二段').style.fontSize).toBe('');
+
+    const strong = screen.getByText('粗体');
+    expect(strong.tagName).toBe('STRONG');
+    expect(strong).toHaveStyle({ color: 'rgb(190, 18, 60)' });
+    expect(strong.closest('p')).toHaveStyle({ fontSize: '16px' });
+
+    const headingStrong = screen.getByText('标题粗体');
+    expect(headingStrong.tagName).toBe('STRONG');
+    expect(headingStrong.style.color).toBe('');
+  });
+
+  it('助手正文默认字号 16px 使用 20px 行高', () => {
     render(<ChatMarkdown content="正文" assistantDisplayConfig={DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG} />);
 
     expect(screen.getByText('正文')).toHaveStyle({
-      fontSize: '14px',
-      lineHeight: '18px',
+      fontSize: '16px',
+      lineHeight: '20px',
     });
   });
 

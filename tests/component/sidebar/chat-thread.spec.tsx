@@ -336,6 +336,8 @@ describe('ChatThread', () => {
             color: '#111827',
             underline: false,
           },
+          list: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.list,
+          strong: DEFAULT_ASSISTANT_MARKDOWN_DISPLAY_CONFIG.strong,
         }}
         messages={[
           {

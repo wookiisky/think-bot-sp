@@ -184,10 +184,12 @@ describe('SettingsShell', () => {
     fireEvent.change(screen.getByLabelText('一级标题字号'), {
       target: { value: '30' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '默认配置 2' }));
+    fireEvent.click(screen.getByRole('button', { name: '橙色' }));
 
     expect(screen.getByLabelText('一级标题字号')).toHaveValue(30);
     expect(screen.getByLabelText('一级标题颜色')).toHaveValue('#c2410c');
+    expect(screen.getByLabelText('粗体颜色')).toHaveValue('#9a3412');
+    expect(screen.getByLabelText('列表项字号')).toHaveValue(16);
 
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
@@ -202,6 +204,7 @@ describe('SettingsShell', () => {
               fontSizePx: 30,
               color: '#c2410c',
             }),
+            strong: { color: '#9a3412' },
           }),
         }),
       }),

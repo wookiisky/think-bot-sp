@@ -1,9 +1,12 @@
-import { createContext, memo, useContext, type CSSProperties } from 'react';
+import { createContext, memo, useContext, type CSSProperties, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 
-import type { AssistantMarkdownDisplayConfig } from '../../domain/config/assistant-markdown-display-config';
+import type {
+  AssistantMarkdownDisplayConfig,
+  AssistantMarkdownTextStyle,
+} from '../../domain/config/assistant-markdown-display-config';
 import { cn } from '../../lib/utils';
 
 type MarkdownTextNode = {
@@ -161,7 +164,7 @@ const remarkCjkQuotedStrong = () => (tree: MarkdownNode, file: MarkdownFile) => 
 
 /** 生成单个 Markdown 层级的行内样式。 */
 const createInlineStyle = (
-  styleConfig: AssistantMarkdownDisplayConfig[keyof AssistantMarkdownDisplayConfig],
+  styleConfig: AssistantMarkdownTextStyle,
   fontWeight: CSSProperties['fontWeight'],
 ): CSSProperties => ({
   fontSize: `${styleConfig.fontSizePx}px`,
@@ -170,13 +173,24 @@ const createInlineStyle = (
   fontWeight,
 });
 
-/** 生成 Markdown 正文的行内样式。 */
-const createBodyInlineStyle = (styleConfig: AssistantMarkdownDisplayConfig['body']): CSSProperties => ({
+/** 生成 Markdown 正文或列表项的行内样式。 */
+const createBodyInlineStyle = (styleConfig: AssistantMarkdownTextStyle): CSSProperties => ({
   ...createInlineStyle(styleConfig, 400),
   lineHeight: `${resolveBodyLineHeightPx(styleConfig.fontSizePx)}px`,
 });
 
 const AssistantDisplayContext = createContext<AssistantMarkdownDisplayConfig | undefined>(undefined);
+
+/** 标记当前是否处于列表项内部，松散列表里的段落需要继承列表项样式而不是正文样式。 */
+const ListItemContext = createContext(false);
+
+/** 标记当前是否处于标题内部，标题里的粗体跟随标题色，不套用正文粗体色。 */
+const HeadingContext = createContext(false);
+
+/** 标题内容统一包一层 HeadingContext，避免四个标题组件各写一遍。 */
+const HeadingChildren = ({ children }: { children: ReactNode }) => (
+  <HeadingContext.Provider value={true}>{children}</HeadingContext.Provider>
+);
 
 /** 元素类型保持稳定，展示设置通过 context 更新，不重新解析正文。 */
 const markdownComponents: Components = {
@@ -188,7 +202,7 @@ const markdownComponents: Components = {
         className={config ? 'mb-1.5 mt-3 leading-tight first:mt-0' : undefined}
         style={config ? createInlineStyle(config.h1, 700) : undefined}
       >
-        {children}
+        <HeadingChildren>{children}</HeadingChildren>
       </h1>
     );
   },
@@ -200,7 +214,7 @@ const markdownComponents: Components = {
         className={config ? 'mb-1.5 mt-3 leading-tight first:mt-0' : undefined}
         style={config ? createInlineStyle(config.h2, 700) : undefined}
       >
-        {children}
+        <HeadingChildren>{children}</HeadingChildren>
       </h2>
     );
   },
@@ -212,7 +226,7 @@ const markdownComponents: Components = {
         className={config ? 'mb-1 mt-2.5 leading-tight first:mt-0' : undefined}
         style={config ? createInlineStyle(config.h3, 600) : undefined}
       >
-        {children}
+        <HeadingChildren>{children}</HeadingChildren>
       </h3>
     );
   },
@@ -224,20 +238,38 @@ const markdownComponents: Components = {
         className={config ? 'mb-1 mt-2.5 leading-tight first:mt-0' : undefined}
         style={config ? createInlineStyle(config.h4, 600) : undefined}
       >
-        {children}
+        <HeadingChildren>{children}</HeadingChildren>
       </h4>
     );
   },
   p: function MarkdownParagraph({ node: _node, children, ...props }) {
     const config = useContext(AssistantDisplayContext);
+    const insideListItem = useContext(ListItemContext);
     return (
       <p
         {...props}
         className={config ? 'whitespace-pre-wrap' : undefined}
-        style={config ? createBodyInlineStyle(config.body) : undefined}
+        style={config && !insideListItem ? createBodyInlineStyle(config.body) : undefined}
       >
         {children}
       </p>
+    );
+  },
+  li: function MarkdownListItem({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    return (
+      <li {...props} style={config ? createBodyInlineStyle(config.list) : undefined}>
+        <ListItemContext.Provider value={true}>{children}</ListItemContext.Provider>
+      </li>
+    );
+  },
+  strong: function MarkdownStrong({ node: _node, children, ...props }) {
+    const config = useContext(AssistantDisplayContext);
+    const insideHeading = useContext(HeadingContext);
+    return (
+      <strong {...props} style={config && !insideHeading ? { color: config.strong.color } : undefined}>
+        {children}
+      </strong>
     );
   },
 };
