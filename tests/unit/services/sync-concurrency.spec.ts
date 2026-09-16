@@ -24,7 +24,7 @@ const setup = async () => {
   const configRepository = createConfigRepository(adapter);
   const pageRepository = createPageRepository(adapter);
   const conversationRepository = createConversationRepository(adapter);
-  const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+  const syncRepository = createSyncRepository({ storage: adapter });
   const config = createDefaultConfig();
   Object.assign(config.sync, { enabled: true, provider: 'webdav', webdavUrl: 'https://webdav.test/snapshot' });
   await configRepository.saveConfig(config);
@@ -120,7 +120,7 @@ describe('sync and local mutations', () => {
       const restartedStorage = createFakeStorageArea();
       await restartedStorage.set(saved);
       const adapter = createChromeLocalAdapter(restartedStorage);
-      context.syncRepository = createSyncRepository({ storage: adapter, configRepository: context.configRepository, pageRepository: context.pageRepository, conversationRepository: context.conversationRepository });
+      context.syncRepository = createSyncRepository({ storage: adapter });
       context.service = createSyncService({ syncRepository: context.syncRepository, fetchImpl: context.fetchImpl as typeof fetch });
     }
     context.remote.resolve(remote);

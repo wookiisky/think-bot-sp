@@ -43,6 +43,7 @@ describe('sync-service', () => {
 
     const service = createSyncService({
       getTestProvider: () => testProvider,
+      syncRepository: createSyncRepository({ storage: createChromeLocalAdapter(createFakeStorageArea()) }),
       fetchImpl: vi.fn(),
       now: () => 456,
     });
@@ -95,9 +96,6 @@ describe('sync-service', () => {
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
     const syncRepository = createSyncRepository({
-      configRepository,
-      pageRepository,
-      conversationRepository,
       storage: adapter,
       now: () => 400,
     });
@@ -415,13 +413,8 @@ describe('sync-service', () => {
   it('远端快照格式非法时不会覆盖本地有效数据', async () => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
-    const configRepository = createConfigRepository(adapter);
     const pageRepository = createPageRepository(adapter);
-    const conversationRepository = createConversationRepository(adapter);
     const syncRepository = createSyncRepository({
-      configRepository,
-      pageRepository,
-      conversationRepository,
       storage: adapter,
       now: () => 300,
     });
@@ -480,13 +473,8 @@ describe('sync-service', () => {
   it('webdav 远端文件不存在时按首次同步处理，并推送本地完整快照', async () => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
-    const configRepository = createConfigRepository(adapter);
     const pageRepository = createPageRepository(adapter);
-    const conversationRepository = createConversationRepository(adapter);
     const syncRepository = createSyncRepository({
-      configRepository,
-      pageRepository,
-      conversationRepository,
       storage: adapter,
       now: () => 610,
     });

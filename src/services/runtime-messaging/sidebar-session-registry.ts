@@ -24,25 +24,45 @@ type SidebarSessionRecord = SidebarSession & SidebarSessionScope;
 export const createSidebarSessionRegistry = () => {
   const activeSessions = new Map<string, SidebarSessionRecord>();
 
-  return {
-    /** 注册活跃会话，并在生命周期结束后自动回收。 */
-    register(session: SidebarSession, scope: SidebarSessionScope) {
-      const record: SidebarSessionRecord = {
-        ...session,
-        normalizedUrl: scope.normalizedUrl,
-        promptTabId: scope.promptTabId,
-      };
-      if (scope.branchId !== undefined) {
-        record.branchId = scope.branchId;
+  /** 注册单个生命周期；分支归属只由 scope 决定，协调器不能继承主分支 id。 */
+  const register = (session: SidebarSession, scope: SidebarSessionScope) => {
+    const record: SidebarSessionRecord = {
+      sessionId: session.sessionId,
+      messageId: session.messageId,
+      cancel: session.cancel,
+      done: session.done,
+      normalizedUrl: scope.normalizedUrl,
+      promptTabId: scope.promptTabId,
+    };
+    if (scope.branchId !== undefined) {
+      record.branchId = scope.branchId;
+    }
+    activeSessions.set(session.sessionId, record);
+    const release = () => {
+      if (activeSessions.get(session.sessionId) === record) {
+        activeSessions.delete(session.sessionId);
       }
-      activeSessions.set(session.sessionId, record);
-      const release = () => {
-        if (activeSessions.get(session.sessionId) === record) {
-          activeSessions.delete(session.sessionId);
-        }
-      };
-      // 同时消费成功与失败，避免 finally 产生无人处理的 rejected promise。
-      void session.done.then(release, release);
+    };
+    // 同时消费成功与失败，避免 finally 产生无人处理的 rejected promise。
+    void session.done.then(release, release);
+  };
+
+  return {
+    register,
+
+    /** 注册整轮协调器与附加分支；协调器负责整轮取消，附加分支可独立停止。 */
+    registerTurn(input: {
+      /** 整轮生命周期，done 等待全部分支收尾。 */
+      coordinator: SidebarSession;
+      /** 可独立取消的附加分支，不包含主分支。 */
+      branchSessions: Array<SidebarSession & { branchId: string }>;
+      /** 整轮所属页面与标签。 */
+      scope: Pick<SidebarSessionScope, 'normalizedUrl' | 'promptTabId'>;
+    }) {
+      register(input.coordinator, input.scope);
+      for (const branch of input.branchSessions) {
+        register(branch, { ...input.scope, branchId: branch.branchId });
+      }
     },
 
     /** 当前 worker 内该 promptTab 是否仍有活跃会话；worker 重启后注册表为空，持久化 loading 即为孤儿。 */

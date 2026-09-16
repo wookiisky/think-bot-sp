@@ -16,7 +16,7 @@ const createRepositories = (storage = createFakeStorageArea()) => {
   const pageRepository = createPageRepository(adapter);
   const configRepository = createConfigRepository(adapter);
   const conversationRepository = createConversationRepository(adapter);
-  const syncRepository = createSyncRepository({ storage: adapter, pageRepository, configRepository, conversationRepository });
+  const syncRepository = createSyncRepository({ storage: adapter });
   return { storage, adapter, pageRepository, configRepository, conversationRepository, syncRepository };
 };
 

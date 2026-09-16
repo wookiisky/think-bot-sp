@@ -590,6 +590,7 @@ describe('runtime-messaging', () => {
       error: vi.fn(),
     };
     const dispatchChat = vi.fn().mockResolvedValue({
+      branchSessions: [],
       sessionId: 'session-1',
       userMessageId: 'user-1',
       messageId: 'assistant-1',
@@ -938,6 +939,7 @@ describe('runtime-messaging', () => {
       done: new Promise<void>((resolve) => { completeOldSession = resolve; }),
     }, { normalizedUrl: 'https://example.com/article', promptTabId: 'chat' });
     const retryUserMessage = vi.fn().mockResolvedValue({
+      branchSessions: [],
       sessionId: 'session-new', messageId: 'assistant-new', cancel: vi.fn(), done: Promise.resolve(),
     });
     const handler = createSidebarCommandHandler({
@@ -963,6 +965,7 @@ describe('runtime-messaging', () => {
 
   it('编辑与重试命令会路由到调度服务并注册新会话', async () => {
     const editUserMessage = vi.fn().mockResolvedValue({
+      branchSessions: [],
       sessionId: 'session-edit',
       messageId: 'assistant-edit',
       branchId: 'assistant-edit:primary',
@@ -984,6 +987,7 @@ describe('runtime-messaging', () => {
       }),
     });
     const retryUserMessage = vi.fn().mockResolvedValue({
+      branchSessions: [],
       sessionId: 'session-user-retry',
       messageId: 'assistant-1',
       branchId: 'branch-1',
@@ -1205,6 +1209,7 @@ describe('runtime-messaging', () => {
       logger,
       chatDispatchService: {
         dispatchChat: vi.fn().mockResolvedValue({
+          branchSessions: [],
           sessionId: 'session-1',
           messageId: 'assistant-1',
           cancel: vi.fn(() => {
@@ -1305,12 +1310,14 @@ describe('runtime-messaging', () => {
         dispatchChat: vi
           .fn()
           .mockResolvedValueOnce({
+            branchSessions: [],
             sessionId: 'session-chat',
             messageId: 'assistant-chat',
             cancel: chatCancel,
             done: chatDone,
           })
           .mockResolvedValueOnce({
+            branchSessions: [],
             sessionId: 'session-quick',
             messageId: 'assistant-quick',
             cancel: quickCancel,

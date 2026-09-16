@@ -180,6 +180,7 @@ describe('ConversationsShell', () => {
     expect(screen.queryByText('历史对话')).toBeNull();
     expect(await screen.findByText('页面 A')).toBeVisible();
     expect(await screen.findByText('正文 A')).toBeVisible();
+    expect(api.listPages).toHaveBeenCalledTimes(1);
     const pageItems = screen.getAllByTestId('conversations-page-item');
     const firstPageItem = pageItems[0];
     if (!firstPageItem) {
@@ -317,6 +318,13 @@ describe('ConversationsShell', () => {
     render(<ConversationsShell api={api} />);
 
     await user.click(await screen.findByRole('button', { name: '编辑页面标题' }));
+    const initialPages = (await api.listPages.mock.results[0]!.value).pages;
+    api.listPages.mockResolvedValue({
+      type: 'LIST_PAGES_SUCCESS',
+      pages: initialPages.map((page: { normalizedUrl: string }) => page.normalizedUrl.endsWith('article-a')
+        ? { ...page, title: '页面 A 新标题' }
+        : page),
+    });
     const input = await screen.findByLabelText('编辑页面标题');
     await user.clear(input);
     await user.type(input, '页面 A 新标题');
@@ -329,10 +337,17 @@ describe('ConversationsShell', () => {
       }),
     );
 
+    await waitFor(() => expect(api.listPages).toHaveBeenCalledTimes(2));
+    api.listPages.mockResolvedValue({
+      type: 'LIST_PAGES_SUCCESS',
+      pages: initialPages.filter((page: { normalizedUrl: string }) => page.normalizedUrl.endsWith('article-b')),
+    });
     await user.click(screen.getByLabelText('删除页面 页面 A 新标题'));
     await user.click(within(screen.getByTestId('delete-page-confirm-https://example.com/article-a')).getByRole('button', { name: '删除页面' }));
     await waitFor(() => expect(api.deletePage).toHaveBeenCalledWith('https://example.com/article-a'));
     expect(within(screen.getByRole('alert')).getByText('页面已软删并写入 tombstone')).toBeVisible();
+    await waitFor(() => expect(api.listPages).toHaveBeenCalledTimes(3));
+    expect(within(screen.getByTestId('conversations-page-list')).queryByText('页面 A 新标题')).toBeNull();
   });
 
   it('提取区显示和复制都会统一删除空行，标签下划线与 tab 等宽', async () => {
@@ -911,17 +926,24 @@ describe('ConversationsShell 页面命令归属', () => {
   it('新页面详情完成前禁用发送，不能将旧草稿发到新页面', async () => {
     const user = userEvent.setup();
     const { api, pageA, pageB } = await createTwoPageApi();
+    pageA.conversations[0].messages = [{ id: 'a-user', role: 'user', content: 'A 的既有消息', status: 'done', errorMessage: null, branches: [], selectedBranchId: null }];
     const detail = deferred<typeof pageB>();
     api.getPageDetail.mockImplementation((url: string) => url.endsWith('article-b') ? detail.promise : Promise.resolve(pageA));
     render(<ConversationsShell api={api} />);
     await screen.findByText('正文 A');
+    expect(screen.getByText('A 的既有消息')).toBeVisible();
     await user.type(screen.getByLabelText('聊天输入'), 'A 的草稿');
     await selectPageB(user);
+    expect(screen.queryByText('正文 A')).toBeNull();
+    expect(screen.queryByText('A 的既有消息')).toBeNull();
+    expect(screen.getByLabelText('聊天输入')).toBeDisabled();
+    expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled();
     expect(api.sendChat).not.toHaveBeenCalled();
     await act(async () => { detail.resolve(pageB); });
     expect(screen.getByLabelText('聊天输入')).toHaveValue('');
     expect(screen.getByText('正文 B')).toBeVisible();
+    expect(api.listPages).toHaveBeenCalledTimes(1);
   });
 });
 

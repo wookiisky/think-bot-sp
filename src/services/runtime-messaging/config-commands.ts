@@ -63,6 +63,7 @@ const importConfigCommandSchema = z.object({
 const testSyncConnectionCommandSchema = z.object({
   type: z.literal('TEST_SYNC_CONNECTION'),
   sync: syncConfigSchema,
+  language: z.enum(['zh-CN', 'en']).default('zh-CN'),
 });
 
 const testModelCommandSchema = z.object({
@@ -111,7 +112,7 @@ type RecentErrorRepository = {
 
 type SyncService = {
   /** 测试同步连接。 */
-  testConnection: (sync: ExtensionConfig['sync']) => Promise<unknown>;
+  testConnection: (sync: ExtensionConfig['sync'], language?: ExtensionConfig['basic']['language']) => Promise<unknown>;
   /** 执行同步。 */
   syncNow: (config: ExtensionConfig) => Promise<{ provider: string; lastSyncAt: number; snapshotBytes: number }>;
 };
@@ -185,7 +186,7 @@ export const createConfigCommandHandler = ({
         const command = testSyncConnectionCommandSchema.parse(input);
         return {
           type: 'TEST_SYNC_CONNECTION_SUCCESS',
-          result: await syncService.testConnection(command.sync),
+          result: await syncService.testConnection(command.sync, command.language),
         };
       }
       case 'TEST_MODEL': {

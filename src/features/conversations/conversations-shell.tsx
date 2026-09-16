@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { createLogger } from '../../services/logger/logger';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CopyIcon,
   ExternalLinkIcon,
@@ -21,7 +20,6 @@ import {
 import {
   DEFAULT_EXTRACTION_TEXT_FONT_SIZE,
   DEFAULT_EXTRACTION_PANEL_HEIGHT,
-  DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS,
   type ExtractionTextFontSize,
   MAX_EXTRACTION_PANEL_HEIGHT,
   MIN_EXTRACTION_PANEL_HEIGHT,
@@ -36,39 +34,26 @@ import {
   getCompactPromptTabStateClass,
 } from '../../ui/compact-layout';
 import { type ThemePreference, useDocumentTheme } from '../../ui/theme-mode';
-import { downloadTextFile } from '../../shared/download-file';
 import {
   CHAT_PROMPT_TAB_ID,
-  appendAssistantBranches,
-  buildActiveSessionIdMap,
-  buildComposerStateMap,
-  buildMessageStateMap,
   buildPromptTabs,
-  buildRestoreMessageIdMap,
   findBranchPreviewDetail,
   getPromptTabStatusKind,
   toModelOptions,
-  toOptimisticUserContent,
   type ChatMessageState,
-  type ComposerState,
-  type EditingState,
   type ModelOption,
   type PromptTabDefinition,
-  syncAssistantMessageState,
-  upsertAssistantMessage,
 } from '../workspace/workspace-state';
+import { createConversationsWorkspaceTransport } from '../workspace/workspace-transport';
+import { useWorkspaceController } from '../workspace/use-workspace-controller';
 import { usePageScope } from '../workspace/use-page-scope';
-import { subscribeStreamPort } from '../workspace/stream-port-subscription';
-import { reduceWorkspaceEvent } from '../workspace/workspace-stream-state';
-import { mergeWorkspaceCommandResult } from '../workspace/workspace-command-state';
-import { getWorkspaceSessionUpdate } from '../workspace/workspace-session-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
 import {
   WORKSPACE_HORIZONTAL_RESIZE_HANDLE_CLASS,
   WORKSPACE_VERTICAL_RESIZE_HANDLE_CLASS,
 } from '../workspace/workspace-resize-handle-style';
 import type { SidebarConversationRecord, SidebarLoadingStateRecord, SidebarPageRecord } from '../../services/runtime-messaging/sidebar-contract';
-import { toPageSummary, type PageSummary } from '../../domain/page/page-summary';
+import { toPageSummary } from '../../domain/page/page-summary';
 import { ChatInput } from '../sidebar/chat-input';
 import { ChatThread } from '../sidebar/chat-thread';
 import {
@@ -80,8 +65,8 @@ import {
 import { normalizeExtractionText } from '../workspace/extraction-text';
 import type { WorkspaceToastPayload } from '../workspace/workspace-toast';
 import type { ConversationsApi } from './conversations-api';
+import { useHistoryPages } from './use-history-pages';
 import { getExtractionTextClassName } from '../../lib/extraction-text-font-size';
-import { sidebarPortEventSchema } from '../../services/runtime-messaging/sidebar-contract';
 
 type ConversationsShellProps = {
   /** conversations 页 API。 */
@@ -142,22 +127,13 @@ const clampSidebarWidth = (width: number) => Math.min(MAX_SIDEBAR_WIDTH, Math.ma
 const clampExtractionPanelHeight = (height: number) =>
   Math.min(MAX_EXTRACTION_PANEL_HEIGHT, Math.max(MIN_EXTRACTION_PANEL_HEIGHT, height));
 
-const logger = createLogger('conversations');
-const portLogger = logger.child('port');
-
 const EMPTY_MESSAGES: ChatMessageState[] = [];
-
-/** 把未知错误收敛为当前回复可展示文案。 */
-const getReplyErrorMessage = (error: unknown, fallback: string): string =>
-  error instanceof Error && error.message.trim() ? error.message : fallback;
 
 /** conversations 历史工作台。 */
 export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [localeResources, setLocaleResources] = useState<ReturnType<typeof loadWorkspaceLocaleResources>>(loadWorkspaceLocaleResources());
   const [localeCode, setLocaleCode] = useState<WorkspaceLocaleCode>('zh-CN');
-  const [pages, setPages] = useState<PageSummary[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPageUrl, setSelectedPageUrl] = useState<string | null>(null);
+  const { pages, searchQuery, setSearchQuery, selectedPageUrl, selectPage, pageUpdated, pageDeleted, status: listStatus } = useHistoryPages({ api });
   const isCurrentPage = usePageScope(selectedPageUrl);
   const [detailStatus, setDetailStatus] = useState<DetailStatus>('idle');
   const [detail, setDetail] = useState<PageDetailState>({
@@ -165,15 +141,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     conversations: [],
     loadingStates: [],
   });
-  const [models, setModels] = useState<ModelOption[]>([]);
-  const [promptTabs, setPromptTabs] = useState<PromptTabDefinition[]>([]);
-  const [activePromptTabId, setActivePromptTabId] = useState(CHAT_PROMPT_TAB_ID);
-  const [messageMap, setMessageMap] = useState<Record<string, ChatMessageState[]>>({});
-  const [restoreMessageIds, setRestoreMessageIds] = useState<Record<string, string | null>>({});
-  const [activeSessionIds, setActiveSessionIds] = useState<Record<string, string | null>>({});
-  const [composerMap, setComposerMap] = useState<Record<string, ComposerState>>({});
-  const [editingMap, setEditingMap] = useState<Record<string, EditingState | null>>({});
-  const [includePageContent, setIncludePageContent] = useState(true);
   const [toast, setToast] = useState<ConversationsToast | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   const [extractionPanelHeight, setExtractionPanelHeight] = useState(DEFAULT_EXTRACTION_PANEL_HEIGHT);
@@ -190,70 +157,37 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [isTitleEditing, setIsTitleEditing] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
   const themeRootAttributes = useDocumentTheme(themePreference);
-  const terminalSessionIdsRef = useRef<Set<string>>(new Set());
-  /** 只在助手重试命令等待响应期间记录流进度；所有待决命令结束后释放。 */
-  const streamedSessionIdsRef = useRef<Set<string>>(new Set());
-  const pendingAssistantRetriesRef = useRef<Map<string, number>>(new Map());
-
-  useEffect(() => {
-    terminalSessionIdsRef.current.clear();
-    streamedSessionIdsRef.current.clear();
-  }, [selectedPageUrl]);
-  /** 恢复 loading 时判断是否已超过请求超时；后台的定时器可能随 worker 一起消失过。 */
-  const llmRequestTimeoutSecondsRef = useRef(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
   const t = useMemo(() => createWorkspaceTranslator(localeResources, localeCode), [localeResources, localeCode]);
-
   const selectedPage = detail.page?.normalizedUrl === selectedPageUrl && detailStatus === 'ready' ? detail.page : null;
-  const promptTabSubscriptionKey = JSON.stringify(promptTabs.map((promptTab) => promptTab.id));
-  const activePromptTab = promptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? null;
+  const transport = useMemo(() => selectedPage ? createConversationsWorkspaceTransport({ api, pageUrl: selectedPage.url, normalizedUrl: selectedPage.normalizedUrl }) : null, [api, selectedPage?.url, selectedPage?.normalizedUrl]);
+  const workspace = useWorkspaceController({
+    pageKey: selectedPageUrl, transport, t,
+    onToast: (nextToast) => setToast({ id: Date.now(), ...nextToast }),
+  });
+  const { promptTabs, activePromptTabId, messageMap, restoreMessageIds, activeSessionIds, composerMap, models, includePageContent, editingMap } = workspace.view;
+  const {
+    selectPromptTab: setActivePromptTabId, updateComposer: setPromptTabComposer, updateEditing: setPromptTabEditing,
+    setIncludePageContent, send: handleSend, editUserMessage: handleEditUserMessage, retryUserMessage: handleRetryUserMessage,
+    retryAssistantMessage: handleRetryMessage, selectAssistantBranch: handleSelectAssistantBranch,
+    expandBranches: handleExpandBranches, stop: handleStop, stopBranch: handleStopBranch, deleteBranch: handleDeleteBranch,
+    clearTab: handleClearTabConversation, exportConversation: handleExport,
+  } = workspace.actions;
+
+  const visiblePromptTabs = selectedPage && workspace.view.ready ? promptTabs : [];
+  const activePromptTab = visiblePromptTabs.find((promptTab) => promptTab.id === activePromptTabId) ?? null;
   const activeComposer = activePromptTab ? composerMap[activePromptTab.id] ?? null : null;
   const activeSessionId = activePromptTab ? activeSessionIds[activePromptTab.id] ?? null : null;
-  const normalizedExtractionContent = normalizeExtractionText(detail.page?.content ?? '');
+  const normalizedExtractionContent = normalizeExtractionText(selectedPage?.content ?? '');
   const extractionTextClassName = getExtractionTextClassName(extractionTextFontSize);
   const isExtractionPanelCollapsed = extractionPanelHeight <= MIN_EXTRACTION_PANEL_HEIGHT;
   const branchPreview =
-    branchPreviewTarget
+    selectedPage && workspace.view.ready && branchPreviewTarget
       ? findBranchPreviewDetail(
           messageMap[branchPreviewTarget.promptTabId] ?? [],
           branchPreviewTarget.messageId,
           branchPreviewTarget.branchId,
         )
       : null;
-
-  /** 更新单个标签的消息列表。 */
-  const setPromptTabMessages = (promptTabId: string, update: (_current: ChatMessageState[]) => ChatMessageState[]) => {
-    setMessageMap((current) => {
-      const messages = current[promptTabId] ?? EMPTY_MESSAGES;
-      const nextMessages = update(messages);
-      return nextMessages === messages ? current : { ...current, [promptTabId]: nextMessages };
-    });
-  };
-
-  /** 标记会话重新进入活动态。 */
-  const markSessionActive = (sessionId: string) => {
-    terminalSessionIdsRef.current.delete(sessionId);
-  };
-
-  /** 标记会话已进入终态，防止较晚的命令响应覆盖最终 UI。 */
-  const markSessionTerminal = (sessionId: string) => {
-    terminalSessionIdsRef.current.add(sessionId);
-  };
-
-  /** 判断命令响应对应的会话是否已经被流式事件置为终态。 */
-  const hasTerminalSession = (sessionId: string) => terminalSessionIdsRef.current.has(sessionId);
-
-  /** 更新单个标签草稿。 */
-  const setPromptTabComposer = (promptTabId: string, patch: Partial<ComposerState>) => {
-    setComposerMap((current) => ({
-      ...current,
-      [promptTabId]: {
-        text: current[promptTabId]?.text ?? promptTabs.find((item) => item.id === promptTabId)?.defaultText ?? '',
-        images: current[promptTabId]?.images ?? [],
-        selectedModelId: current[promptTabId]?.selectedModelId ?? promptTabs.find((item) => item.id === promptTabId)?.preferredModelId ?? '',
-        ...patch,
-      },
-    }));
-  };
 
   /** 推送页面级 toast。 */
   const pushToast = (tone: ConversationsToast['tone'], message: string) => {
@@ -267,14 +201,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   /** 推送工作台一次性 toast。 */
   const pushWorkspaceToast = (nextToast: WorkspaceToastPayload) => {
     pushToast(nextToast.tone, nextToast.message);
-  };
-
-  /** 更新单个标签编辑态。 */
-  const setPromptTabEditing = (promptTabId: string, editing: EditingState | null) => {
-    setEditingMap((current) => ({
-      ...current,
-      [promptTabId]: editing,
-    }));
   };
 
   /** 同步右侧工作台状态。 */
@@ -299,6 +225,8 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     defaultIncludePageContent: boolean;
     /** 恢复目标标签。 */
     activePromptTabId: string;
+    /** 后台会话恢复超时。 */
+    llmRequestTimeoutSeconds: number;
     /** 默认聊天标签名称。 */
     chatLabel: string;
   }) => {
@@ -311,20 +239,13 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     });
 
     setDetail(input.detail);
-    setPromptTabs(nextPromptTabs);
-    setMessageMap(buildMessageStateMap(nextPromptTabs, input.detail.conversations, input.detail.loadingStates));
-    setRestoreMessageIds(
-      buildRestoreMessageIdMap({
-        promptTabs: nextPromptTabs,
-        conversations: input.detail.conversations,
-        loadingStates: input.detail.loadingStates,
-      }),
-    );
-    setActiveSessionIds(buildActiveSessionIdMap(nextPromptTabs, input.detail.loadingStates));
-    setComposerMap(buildComposerStateMap(nextPromptTabs));
-    setEditingMap(Object.fromEntries(nextPromptTabs.map((promptTab) => [promptTab.id, null])));
-    setActivePromptTabId(input.activePromptTabId);
-    setIncludePageContent(input.detail.page?.includePageContent ?? input.defaultIncludePageContent);
+    workspace.restore({
+      pageKey: selectedPageUrl!, promptTabs: nextPromptTabs, models: input.models,
+      conversations: input.detail.conversations, loadingStates: input.detail.loadingStates,
+      activePromptTabId: input.activePromptTabId,
+      includePageContent: input.detail.page?.includePageContent ?? input.defaultIncludePageContent,
+      llmRequestTimeoutSeconds: input.llmRequestTimeoutSeconds,
+    });
     setTitleDraft(input.detail.page?.title ?? '');
   };
 
@@ -392,8 +313,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     let cancelled = false;
 
     const load = async () => {
-      const [pagesResponse, configResponse, resources] = await Promise.all([
-        api.listPages(),
+      const [configResponse, resources] = await Promise.all([
         api.getConfig(),
         loadWorkspaceLocaleResources(),
       ]);
@@ -402,29 +322,16 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       }
 
       const nextLocaleCode = configResponse.config.basic.language as WorkspaceLocaleCode;
-      const nextModels = toModelOptions(getEnabledCompleteModels(configResponse.config));
 
       setLocaleResources(resources);
       setLocaleCode(nextLocaleCode);
-      setPages(pagesResponse.pages);
-      setModels(nextModels);
       setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
       setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
       setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
       setAssistantBranchColumnWidth(configResponse.config.display.assistantBranchColumnWidth);
       setThemePreference(configResponse.config.basic.theme);
-      llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
       setConfigLoaded(true);
 
-      const initialPage = pagesResponse.pages[0] ?? null;
-      if (!initialPage) {
-        setSelectedPageUrl(null);
-        setDetailStatus('ready');
-        return;
-      }
-
-      setSelectedPageUrl(initialPage.normalizedUrl);
-      setDetailStatus('loading');
     };
 
     void load().catch(() => {
@@ -439,48 +346,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   }, [api]);
 
   useEffect(() => {
-    if (!configLoaded) {
-      return;
-    }
-
-    let cancelled = false;
-    const loadPages = async () => {
-      const response = searchQuery.trim() ? await api.searchPages(searchQuery) : await api.listPages();
-      if (cancelled) {
-        return;
-      }
-
-      setPages(response.pages);
-      if (response.pages.length === 0) {
-        setSelectedPageUrl(null);
-        return;
-      }
-      if (!response.pages.some((page) => page.normalizedUrl === selectedPageUrl)) {
-        const firstPage = response.pages[0];
-        if (!firstPage) {
-          setSelectedPageUrl(null);
-          return;
-        }
-        setSelectedPageUrl(firstPage.normalizedUrl);
-      }
-    };
-
-    void loadPages();
-    return () => {
-      cancelled = true;
-    };
-  }, [api, configLoaded, searchQuery, selectedPageUrl]);
-
-  useEffect(() => {
     if (!selectedPageUrl || !configLoaded) {
       if (!selectedPageUrl) {
         setDetail({ page: null, conversations: [], loadingStates: [] });
-        setPromptTabs([]);
-        setMessageMap({});
-        setRestoreMessageIds({});
-        setActiveSessionIds({});
-        setComposerMap({});
-        setEditingMap({});
+        workspace.reset();
       }
       return;
     }
@@ -501,13 +370,11 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         const fallbackModelId =
           nextModels.find((model) => model.id === configResponse.config.basic.defaultModelId)?.id ?? nextModels[0]?.id ?? '';
         setLocaleCode(nextLocaleCode);
-        setModels(nextModels);
         setExtractionPanelHeight(clampExtractionPanelHeight(configResponse.config.basic.extractionPanelHeight));
         setExtractionTextFontSize(configResponse.config.basic.extractionTextFontSize);
         setAssistantMarkdownDisplayConfig(configResponse.config.display.assistantMarkdown);
         setAssistantBranchColumnWidth(configResponse.config.display.assistantBranchColumnWidth);
         setThemePreference(configResponse.config.basic.theme);
-        llmRequestTimeoutSecondsRef.current = configResponse.config.basic.llmRequestTimeoutSeconds;
         applyDetailState({
           detail: {
             page: detailResponse.page,
@@ -519,6 +386,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           fallbackModelId,
           defaultIncludePageContent: configResponse.config.basic.includePageContentByDefault,
           activePromptTabId: detailResponse.activePromptTabId,
+          llmRequestTimeoutSeconds: configResponse.config.basic.llmRequestTimeoutSeconds,
           chatLabel: localeResources?.t('workspace.chatTab', nextLocaleCode) ?? 'Chat',
         });
         setDetailStatus('ready');
@@ -534,65 +402,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       cancelled = true;
     };
   }, [api, configLoaded, selectedPageUrl]);
-
-  useEffect(() => {
-    const subscriptionIds = JSON.parse(promptTabSubscriptionKey) as string[];
-    if (!selectedPage || subscriptionIds.length === 0) {
-      return;
-    }
-
-    const handlePortMessage = (event: unknown) => {
-      if (!isCurrentPage()) return;
-      const parsed = sidebarPortEventSchema.safeParse(event);
-      if (!parsed.success) {
-        return;
-      }
-
-      const payload = parsed.data;
-      if (!('promptTabId' in payload) || payload.normalizedUrl !== selectedPageUrl) {
-        return;
-      }
-      const promptTabId = payload.promptTabId;
-
-      const retryEvent = 'branchId' in payload && 'sessionId' in payload && pendingAssistantRetriesRef.current.has(payload.branchId)
-        ? payload : null;
-      const isFirstRetryEvent = retryEvent !== null && !streamedSessionIdsRef.current.has(retryEvent.sessionId);
-      if (retryEvent) streamedSessionIdsRef.current.add(retryEvent.sessionId);
-      const sessionUpdate = getWorkspaceSessionUpdate(payload);
-      if (sessionUpdate?.terminalSessionId) markSessionTerminal(sessionUpdate.terminalSessionId);
-      if (sessionUpdate?.startedSessionId) markSessionActive(sessionUpdate.startedSessionId);
-      if (sessionUpdate && 'activeSessionId' in sessionUpdate) {
-        setActiveSessionIds((current) => current[promptTabId] === sessionUpdate.activeSessionId
-          ? current : { ...current, [promptTabId]: sessionUpdate.activeSessionId ?? null });
-      }
-      if (sessionUpdate && 'restoreMessageId' in sessionUpdate) {
-        setRestoreMessageIds((current) => current[promptTabId] === sessionUpdate.restoreMessageId
-          ? current : { ...current, [promptTabId]: sessionUpdate.restoreMessageId ?? null });
-      }
-      setPromptTabMessages(promptTabId, (current) => reduceWorkspaceEvent(
-        isFirstRetryEvent && retryEvent ? mergeWorkspaceCommandResult(current, {
-          kind: 'assistant', targetMessageId: retryEvent.messageId, response: retryEvent, hasStreamEvent: false,
-        }) : current, payload, {
-        primaryBranch: t('workspace.status.primaryBranch'),
-        branch: t('workspace.status.branch'),
-        error: t('workspace.status.error'),
-        cancelled: t('workspace.status.cancelled'),
-        timeout: t('workspace.status.timeout'),
-      }, { now: Date.now(), timeoutMs: llmRequestTimeoutSecondsRef.current * 1000 }));
-    };
-
-    // worker 被回收会让 port 从后台侧断开；自动重连会唤醒 worker，由它决定恢复还是收敛。
-    const subscriptions = subscriptionIds.map((promptTabId) => subscribeStreamPort({
-      connect: () => api.connectStream({ pageUrl: selectedPage.url, promptTabId }),
-      onEvent: handlePortMessage,
-      logger: portLogger.child('stream', { promptTab: promptTabId }),
-    }));
-    return () => {
-      for (const unsubscribe of subscriptions) {
-        unsubscribe();
-      }
-    };
-  }, [api, promptTabSubscriptionKey, selectedPage?.url, selectedPageUrl]);
 
   /** 复制提取内容。 */
   const handleCopyExtraction = async () => {
@@ -646,7 +455,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         normalizedUrl: detail.page.normalizedUrl,
         title: nextTitle,
       });
-      setPages((current) => current.map((page) => (page.normalizedUrl === response.page.normalizedUrl ? toPageSummary(response.page) : page)));
+      void pageUpdated(toPageSummary(response.page));
       if (!isCurrentPage()) return;
       setDetail((current) => ({
         ...current,
@@ -659,137 +468,6 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       setTitleDraft(detail.page.title);
       setIsTitleEditing(false);
       pushToast('error', t('conversations.notice.titleSaveFailed'));
-    }
-  };
-
-  /** 发送消息。 */
-  const handleSend = async (
-    promptTabId: string,
-    input: { text: string; displayText?: string; images: string[]; modelId: string; includePageContent: boolean },
-  ) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    const optimisticUserMessageId = `local-user:${promptTabId}:${Date.now()}`;
-    const optimisticDisplayContent = input.displayText ?? toOptimisticUserContent(input.text, input.images);
-    setPromptTabMessages(promptTabId, (current) => [
-      ...current,
-      {
-        id: optimisticUserMessageId,
-        role: 'user',
-        content: input.text,
-        ...(optimisticDisplayContent !== input.text ? { displayContent: optimisticDisplayContent } : {}),
-        status: 'done',
-        errorMessage: null,
-        branches: [],
-        selectedBranchId: null,
-      },
-    ]);
-
-    try {
-      const request = {
-        pageUrl: selectedPage.url,
-        promptTabId,
-        modelId: input.modelId,
-        text: input.text,
-        images: input.images,
-        includePageContent: input.includePageContent,
-      } as {
-        pageUrl: string;
-        promptTabId: string;
-        modelId: string;
-        text: string;
-        images: string[];
-        includePageContent: boolean;
-        displayText?: string;
-      };
-      if (input.displayText !== undefined) {
-        request.displayText = input.displayText;
-      }
-      const response = await api.sendChat(request);
-      if (!isCurrentPage()) return;
-      const sessionAlreadyTerminal = hasTerminalSession(response.payload.sessionId);
-      if (!sessionAlreadyTerminal) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
-      setIncludePageContent(input.includePageContent);
-      setPromptTabMessages(promptTabId, (current) => {
-        const persistedUserMessageId = response.payload.userMessageId;
-        const messagesWithPersistedUserId =
-          persistedUserMessageId === null
-            ? current
-            : current.map((message) => (message.id === optimisticUserMessageId ? { ...message, id: persistedUserMessageId } : message));
-        if (sessionAlreadyTerminal) {
-          return messagesWithPersistedUserId;
-        }
-        return appendAssistantBranches(
-          upsertAssistantMessage(messagesWithPersistedUserId, response.payload.messageId, (message) => ({
-            id: response.payload.messageId,
-            role: 'assistant',
-            content: message?.content ?? '',
-            status: 'loading',
-            errorMessage: null,
-            branches: message?.branches ?? [],
-            selectedBranchId: response.payload.branchId,
-          })),
-          response.payload.messageId,
-          (response.payload.branches ?? [
-            {
-              branchId: response.payload.branchId,
-              modelId: response.payload.modelId,
-              modelLabel: response.payload.modelLabel,
-            },
-          ]).map((branch) => ({
-            id: branch.branchId,
-            modelId: branch.modelId,
-            modelLabel: branch.modelLabel,
-            isPrimary: branch.branchId === response.payload.branchId,
-          })),
-        );
-      });
-    } catch (error) {
-      if (!isCurrentPage()) return;
-      const errorMessage = getReplyErrorMessage(error, t('workspace.notice.sendFailed'));
-      const assistantMessageId = `local-assistant:${promptTabId}:${Date.now()}`;
-      const branchId = `${assistantMessageId}:primary`;
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setPromptTabMessages(promptTabId, (current) => [
-        ...current,
-        {
-          id: assistantMessageId,
-          role: 'assistant',
-          content: errorMessage,
-          status: 'error',
-          errorMessage,
-          branches: [
-            {
-              id: branchId,
-              modelId: input.modelId,
-              modelLabel: models.find((model) => model.id === input.modelId)?.name ?? t('workspace.status.primaryBranch'),
-              isPrimary: true,
-              content: errorMessage,
-              status: 'error',
-              errorMessage,
-              durationMs: null,
-              startedAt: null,
-            },
-          ],
-          selectedBranchId: branchId,
-        },
-      ]);
     }
   };
 
@@ -814,301 +492,13 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
     if (!isCurrentPage()) return;
   };
 
-  /** 编辑用户消息。 */
-  const handleEditUserMessage = async (promptTabId: string, messageId: string, text: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      const response = await api.editUserMessage({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-        text,
-      });
-      if (!isCurrentPage()) return;
-      setPromptTabEditing(promptTabId, null);
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
-      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
-        kind: 'user', targetMessageId: messageId, response: response.payload, editedText: text,
-      }));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.editFailed'));
-    }
-  };
-
-  /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
-  const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      const response = await api.retryUserMessage({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-      });
-      if (!isCurrentPage()) return;
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
-      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
-        kind: 'user', targetMessageId: messageId, response: response.payload,
-      }));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.retryFailed'));
-    }
-  };
-
-  /** 重试目标助手分支。 */
-  const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    pendingAssistantRetriesRef.current.set(branchId, (pendingAssistantRetriesRef.current.get(branchId) ?? 0) + 1);
-    try {
-      const response = await api.retryMessage({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-        branchId,
-      });
-      if (!isCurrentPage()) return;
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
-      const hasStreamEvent = streamedSessionIdsRef.current.has(response.payload.sessionId);
-      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
-        kind: 'assistant', targetMessageId: messageId, response: response.payload, hasStreamEvent,
-      }));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.retryFailed'));
-    } finally {
-      const remaining = (pendingAssistantRetriesRef.current.get(branchId) ?? 1) - 1;
-      if (remaining === 0) pendingAssistantRetriesRef.current.delete(branchId);
-      else pendingAssistantRetriesRef.current.set(branchId, remaining);
-      if (pendingAssistantRetriesRef.current.size === 0) streamedSessionIdsRef.current.clear();
-    }
-  };
-
-  /** 切换当前轮继续对话使用的主分支。 */
-  const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      await api.selectAssistantBranch({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-        branchId,
-      });
-      if (!isCurrentPage()) return;
-      setPromptTabMessages(promptTabId, (current) =>
-        current.map((message) =>
-          message.id === messageId && message.role === 'assistant'
-            ? syncAssistantMessageState({
-                ...message,
-                selectedBranchId: branchId,
-              })
-            : message,
-        ),
-      );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.selectPrimaryBranchFailed'));
-    }
-  };
-
-  /** 新增分支。 */
-  const handleExpandBranches = async (promptTabId: string, messageId: string, modelId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      const response = await api.expandMessageBranches({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-        modelId,
-      });
-      if (!isCurrentPage()) return;
-      setPromptTabMessages(promptTabId, (current) =>
-        appendAssistantBranches(
-          current,
-          messageId,
-          response.payload.branches.map((branch) => ({
-            id: branch.branchId,
-            modelId: branch.modelId,
-            modelLabel: branch.modelLabel,
-          })),
-        ),
-      );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.expandBranchFailed'));
-    }
-  };
-
-  /** 停止当前标签会话。 */
-  const handleStop = async (promptTabId: string, sessionId: string | null) => {
-    if (!isCurrentPage() || !selectedPage) return;
-    if (!selectedPage || !sessionId) {
-      return;
-    }
-
-    await api.stopSession({
-      pageUrl: selectedPage.url,
-      promptTabId,
-      sessionId,
-    });
-    if (!isCurrentPage()) return;
-  };
-
-  /** 停止分支。 */
-  const handleStopBranch = async (promptTabId: string, branchId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      await api.stopBranch({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        branchId,
-      });
-      if (!isCurrentPage()) return;
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.stopBranchFailed'));
-    }
-  };
-
-  /** 删除分支。 */
-  const handleDeleteBranch = async (promptTabId: string, messageId: string, branchId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      await api.deleteBranch({
-        pageUrl: selectedPage.url,
-        promptTabId,
-        messageId,
-        branchId,
-      });
-      if (!isCurrentPage()) return;
-      setPromptTabMessages(promptTabId, (current) =>
-        current.map((message) =>
-          message.id === messageId && message.role === 'assistant'
-            ? syncAssistantMessageState({
-                ...message,
-                branches: message.branches.filter((branch) => branch.id !== branchId),
-              })
-            : message,
-        ),
-      );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.deleteBranchFailed'));
-    }
-  };
-
-  /** 清空当前标签。 */
-  const handleClearTabConversation = async (promptTabId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    try {
-      await api.clearTabConversation({
-        pageUrl: selectedPage.url,
-        promptTabId,
-      });
-      if (!isCurrentPage()) return;
-      setPromptTabMessages(promptTabId, () => []);
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setPromptTabEditing(promptTabId, null);
-      pushToast('success', t('workspace.notice.clearTabSuccess'));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.clearTabFailed'));
-    }
-  };
-
-  /** 导出当前标签会话。 */
-  const handleExport = async (promptTabId: string) => {
-    if (!isCurrentPage() || !selectedPage) return;
-
-    const messages = messageMap[promptTabId] ?? [];
-    const hasExportableMessage = messages.some((message) => message.content.trim().length > 0);
-    if (!hasExportableMessage) {
-      pushToast('error', t('workspace.notice.emptyExport'));
-      return;
-    }
-
-    try {
-      const exported = await api.exportConversation({
-        pageUrl: selectedPage.url,
-        promptTabId,
-      });
-      if (!isCurrentPage()) return;
-      downloadTextFile({
-        filename: exported.payload.filename,
-        content: exported.payload.content,
-        mimeType: exported.payload.mimeType,
-      });
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.exportFailed'));
-    }
-  };
-
   /** 删除当前页面。 */
   const handleDeletePage = async (normalizedUrl: string) => {
     if (!isCurrentPage()) return;
     try {
       const response = await api.deletePage(normalizedUrl);
-      setPages((current) => current.filter((page) => page.normalizedUrl !== normalizedUrl));
+      void pageDeleted(normalizedUrl);
       if (!isCurrentPage()) return;
-      const currentPages = pages.filter((page) => page.normalizedUrl !== normalizedUrl);
-      if (selectedPageUrl === normalizedUrl) {
-        setSelectedPageUrl(currentPages[0]?.normalizedUrl ?? null);
-        if (currentPages.length === 0) {
-          setDetail({
-            page: null,
-            conversations: [],
-            loadingStates: [],
-          });
-          setPromptTabs([]);
-          setMessageMap({});
-          setRestoreMessageIds({});
-          setActiveSessionIds({});
-          setComposerMap({});
-        }
-      }
       pushToast(
         'success',
         response.payload.deleteMode === 'soft'
@@ -1168,7 +558,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                 <button
                   type="button"
                   className={cn(COMPACT_ROW_BUTTON_CLASS, 'flex flex-1 items-center gap-1.5')}
-                  onClick={() => setSelectedPageUrl(page.normalizedUrl)}
+                  onClick={() => selectPage(page.normalizedUrl)}
                 >
                   {page.faviconUrl ? (
                     <img src={page.faviconUrl} alt="" className="size-3.5 rounded-sm" />
@@ -1237,7 +627,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           data-testid="conversations-detail-header"
           className="shrink-0 border-b border-border px-2 py-1.5"
         >
-          {detail.page ? (
+          {selectedPage ? (
             <div className="space-y-1">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
@@ -1255,7 +645,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                           void saveTitle();
                         }
                         if (event.key === 'Escape') {
-                          setTitleDraft(detail.page?.title ?? '');
+                          setTitleDraft(selectedPage?.title ?? '');
                           setIsTitleEditing(false);
                         }
                       }}
@@ -1268,10 +658,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
                       className="text-left text-base font-semibold"
                       onClick={() => setIsTitleEditing(true)}
                     >
-                      {detail.page.title || detail.page.url}
+                      {selectedPage.title || selectedPage.url}
                     </button>
                   )}
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail.page.url}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{selectedPage.url}</p>
                 </div>
                 <div className="flex gap-1">
                   <Tooltip content={t('conversations.action.copyExtraction')}>
@@ -1294,7 +684,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
             </div>
           ) : (
             <div className="text-sm text-muted-foreground">
-              {detailStatus === 'error' ? t('conversations.state.loadFailed') : t('conversations.state.selectPage')}
+              {(detailStatus === 'error' || listStatus === 'error') ? t('conversations.state.loadFailed') : t('conversations.state.selectPage')}
             </div>
           )}
         </header>
@@ -1307,7 +697,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
           )}
           style={{ height: `${extractionPanelHeight}px` }}
         >
-          {detailStatus === 'loading' && !detail.page ? (
+          {selectedPageUrl && !selectedPage && detailStatus !== 'error' ? (
             <div className="flex items-center gap-2 text-sm text-primary">
               <LoaderCircleIcon className="size-4 animate-spin" />
               <span>{t('conversations.state.bootstrapping')}</span>
@@ -1321,7 +711,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
               {normalizedExtractionContent}
             </article>
           ) : null}
-          {detail.page && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
+          {selectedPage && !normalizedExtractionContent ? <p className="text-sm text-muted-foreground">{t('conversations.state.noContent')}</p> : null}
         </section>
 
         <div
@@ -1340,7 +730,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
 
         <section role="tablist" aria-label={t('conversations.tablistLabel')} className="shrink-0 border-b border-border px-2 py-[3px]">
           <div className="flex flex-wrap gap-1">
-            {promptTabs.map((promptTab) => {
+            {visiblePromptTabs.map((promptTab) => {
               const isActive = promptTab.id === activePromptTabId;
               const status = getPromptTabStatusKind(promptTab, activeSessionIds[promptTab.id] ?? null);
               const statusKey = getPromptTabStatusLabelKey(status);
@@ -1388,7 +778,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         </section>
 
         <section className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          {promptTabs.map((promptTab) => (
+          {visiblePromptTabs.map((promptTab) => (
             <div
               key={promptTab.id}
               role="tabpanel"

@@ -1191,8 +1191,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     }
   };
 
-  /** 本轮协调器等待所有分支结束后清理主 loading；公开结果仍对应主回答。 */
-  const createTurnSession = (input: {
+  /** 先持久化 loading 再启动网络；协调器等待所有分支结束后清理，公开结果仍对应主回答。 */
+  const startTurnSession = async (input: {
     normalizedUrl: string;
     promptTabId: string;
     messageId: string;
@@ -1202,7 +1202,8 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
     initialBranchPlans: InitialBranchPlan[];
     streamMessages: ConversationHistoryMessage[];
     requestTimeoutSeconds: number;
-  }): MultiBranchStreamSession => {
+  }): Promise<MultiBranchStreamSession> => {
+    await saveTurnLoading(input);
     const primaryPlan = input.initialBranchPlans[0];
     if (!primaryPlan) throw new Error(`primary branch plan missing: ${input.promptTabId}`);
     logger.debug?.('chat.turn.prepared', {
@@ -1352,15 +1353,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         selectedBranchId: primaryBranch.branchId,
         now: now(),
       });
-      await saveTurnLoading({
-        normalizedUrl: input.normalizedUrl,
-        promptTabId: input.promptTabId,
-        messageId: assistantMessageId,
-        sessionId,
-        initialBranchPlans,
-      });
-
-      return createTurnSession({
+      return startTurnSession({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         messageId: assistantMessageId,
@@ -1447,15 +1440,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         selectedBranchId: primaryBranch.branchId,
         now: now(),
       });
-      await saveTurnLoading({
-        normalizedUrl: input.normalizedUrl,
-        promptTabId: input.promptTabId,
-        messageId: assistantMessageId,
-        sessionId,
-        initialBranchPlans,
-      });
-
-      return createTurnSession({
+      return startTurnSession({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         messageId: assistantMessageId,
@@ -1550,15 +1535,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         selectedBranchId: primaryBranch.branchId,
         now: now(),
       });
-      await saveTurnLoading({
-        normalizedUrl: input.normalizedUrl,
-        promptTabId: input.promptTabId,
-        messageId: assistantMessageId,
-        sessionId,
-        initialBranchPlans,
-      });
-
-      return createTurnSession({
+      return startTurnSession({
         normalizedUrl: input.normalizedUrl,
         promptTabId: input.promptTabId,
         messageId: assistantMessageId,

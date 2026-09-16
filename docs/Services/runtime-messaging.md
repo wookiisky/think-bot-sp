@@ -165,6 +165,8 @@ long-lived port 事件：
 - side panel 重开后，通过 `SUBSCRIBE_SIDEBAR_STREAM` 触发 `RESTORE_LOADING` 重新订阅。
 - 所有会改变历史或页面状态的动作都必须经由 one-shot command 进入 background，不允许 UI 直接绕过消息层访问仓储。
 - 自动触发不暴露新的 one-shot command；由“侧边栏打开流程”的 `RE_EXTRACT_CONTENT` 成功后的 background 编排直接复用 `dispatchChat` 和现有流式 port 管线。
+- 手动发送、用户编辑、用户重试和自动触发统一用 `registerTurn({ coordinator, branchSessions, scope })` 注册生命周期。协调器只按页面与标签索引，附加分支同时按分支 id 索引；独立的助手重试与新增分支仍使用 `register`。
+- 页面或标签取消须等待所有注册生命周期收尾；注册表只释放仍对应同一条记录的会话，旧会话失败或完成不能移除同 id 的新会话。
 - `TEST_SYNC_CONNECTION` 只校验当前同步表单，不写入本地配置。
 - `TEST_MODEL` 只校验当前模型表单，并显式携带当前草稿的 `basic.llmRequestTimeoutSeconds`，不依赖已保存配置。
 - `SYNC_NOW` 先持久化当前配置，再执行远端推送，成功后由仓储回写 `sync.lastSyncAt`。

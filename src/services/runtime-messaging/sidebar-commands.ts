@@ -22,7 +22,7 @@ import {
   type SidebarPageRecord,
 } from './sidebar-contract';
 import { deletePageWithPolicy } from './page-delete';
-import type { SidebarSession, SidebarSessionScope } from './sidebar-session-registry';
+import type { createSidebarSessionRegistry, SidebarSession } from './sidebar-session-registry';
 import { assertSidebarPageSender, type SidebarMessageSender } from './sender';
 
 /** 阶段 4 sidebar 命令集合。 */
@@ -255,20 +255,7 @@ export const createSidebarCommandHandler = ({
   runtime: { id: string };
   chatDispatchService?: ChatDispatchService;
   conversationExporter?: ConversationExporter;
-  sessionRegistry: {
-    /** 注册活跃会话。 */
-    register: (session: SidebarSession, scope: SidebarSessionScope) => void;
-    /** 精确取消某个会话。 */
-    cancelSession: (input: { sessionId: string; normalizedUrl: string; promptTabId: string }) => boolean;
-    /** 精确取消某个分支会话。 */
-    cancelBranchSession: (input: { normalizedUrl: string; promptTabId: string; branchId: string }) => boolean;
-    /** 精确取消某个分支会话并等待收敛。 */
-    cancelBranchSessionAndWait: (input: { normalizedUrl: string; promptTabId: string; branchId: string }) => Promise<boolean>;
-    /** 取消当前页面全部活跃会话。 */
-    cancelPageSessions: (normalizedUrl: string) => Promise<number>;
-    /** 取消当前 promptTab 全部活跃会话。 */
-    cancelPromptTabSessions: (input: { normalizedUrl: string; promptTabId: string }) => Promise<number>;
-  };
+  sessionRegistry: Omit<ReturnType<typeof createSidebarSessionRegistry>, 'hasPromptTabSessions'>;
   logger?: SidebarCommandLogger;
   configRepository?: ConfigRepository;
   syncRepository?: SyncRepository;
@@ -383,17 +370,11 @@ export const createSidebarCommandHandler = ({
           dispatchInput.rollbackOnFailure = command.rollbackOnFailure;
         }
         const session = await chatDispatchService.dispatchChat(dispatchInput);
-        sessionRegistry.register(session, {
-          normalizedUrl,
-          promptTabId: command.promptTabId,
+        sessionRegistry.registerTurn({
+          coordinator: session,
+          branchSessions: session.branchSessions,
+          scope: { normalizedUrl, promptTabId: command.promptTabId },
         });
-        for (const branchSession of session.branchSessions ?? []) {
-          sessionRegistry.register(branchSession, {
-            normalizedUrl,
-            promptTabId: command.promptTabId,
-            branchId: branchSession.branchId,
-          });
-        }
         const branches = session.branches;
         commandLogger.info('chat.send.accepted', {
           browserTabId: command.tabId,
@@ -441,17 +422,11 @@ export const createSidebarCommandHandler = ({
           content: command.text,
           pageContent: resolveRequestPageContent(page),
         });
-        sessionRegistry.register(session, {
-          normalizedUrl,
-          promptTabId: command.promptTabId,
+        sessionRegistry.registerTurn({
+          coordinator: session,
+          branchSessions: session.branchSessions,
+          scope: { normalizedUrl, promptTabId: command.promptTabId },
         });
-        for (const branchSession of session.branchSessions ?? []) {
-          sessionRegistry.register(branchSession, {
-            normalizedUrl,
-            promptTabId: command.promptTabId,
-            branchId: branchSession.branchId,
-          });
-        }
         const branches = session.branches;
         commandLogger.info('chat.edit.accepted', {
           browserTabId: command.tabId,
@@ -493,17 +468,11 @@ export const createSidebarCommandHandler = ({
           messageId: command.messageId,
           pageContent: resolveRequestPageContent(page),
         });
-        sessionRegistry.register(session, {
-          normalizedUrl,
-          promptTabId: command.promptTabId,
+        sessionRegistry.registerTurn({
+          coordinator: session,
+          branchSessions: session.branchSessions,
+          scope: { normalizedUrl, promptTabId: command.promptTabId },
         });
-        for (const branchSession of session.branchSessions ?? []) {
-          sessionRegistry.register(branchSession, {
-            normalizedUrl,
-            promptTabId: command.promptTabId,
-            branchId: branchSession.branchId,
-          });
-        }
         const branches = session.branches;
         commandLogger.info('chat.user_retry.accepted', {
           browserTabId: command.tabId,

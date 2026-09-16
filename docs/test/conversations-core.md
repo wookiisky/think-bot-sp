@@ -83,8 +83,9 @@
 
 - 已覆盖单测：页面列表排序、搜索、标题更新、`LIST_PAGES / SEARCH_PAGES / GET_PAGE_DETAIL / UPDATE_PAGE_TITLE / DELETE_PAGE`。
 - 已覆盖组件测试：列表加载、搜索过滤、标题编辑、页面删除、分支预览层遮罩关闭、标题栏移动限制、右侧悬浮按钮组与草稿保持。
+- `history-pages.spec.tsx` 覆盖初次只读一次、切换选中项不读取、200ms 搜索防抖、查询往返时的过期响应隔离、显式刷新保留有效选择、删除后的选择恢复及失败重试；已确认的标题和删除结果不会因刷新失败回退。
 - 已覆盖入口 E2E 基线：`conversations.html` 能进入真实工作台结构。
+- `conversations-workspace.spec.ts` 在真实 Chrome 扩展中覆盖正文搜索、切页、历史会话继续发送、流式结果落库和刷新恢复，以及标题保存、删除后自动选择剩余页面。数据写入真实扩展存储，模型流使用测试注入。
 - 尚未补齐的自动化：
-  - 真实扩展环境下的继续对话流程
-  - conversations 页流式恢复的端到端验证
+  - conversations 页活动流在 worker 重启后的端到端恢复
   - 分支预览层 Playwright 用例当前已建骨架但处于 `fixme`，阻塞在现有 side panel/bootstrap 链路不稳定

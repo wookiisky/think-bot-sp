@@ -101,6 +101,43 @@ describe('SettingsShell', () => {
     };
   };
 
+  it('英文草稿同步连接传递语言，成功反馈使用当前语言', async () => {
+    const config = createDefaultConfig();
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+    mocks.testSyncConnection.mockResolvedValueOnce({ message: 'Connected to Gist' });
+    mocks.syncNow.mockImplementationOnce(async (draft) => ({
+      config: draft,
+      result: { provider: 'gist', lastSyncAt: 300, snapshotBytes: 512 },
+    }));
+
+    render(<SettingsShell />);
+    await screen.findByRole('heading', { name: '设置' });
+    await selectOption('语言', 'English');
+    fireEvent.click(screen.getByRole('tab', { name: 'Cloud Sync' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }));
+    expect(await screen.findByText('Connected to Gist')).toBeInTheDocument();
+    expect(mocks.testSyncConnection).toHaveBeenCalledWith(config.sync, 'en');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }));
+    expect(await screen.findByText('Synced 512 B')).toBeInTheDocument();
+  });
+
+  it('英文保存失败展示英文标题并保留原始错误详情', async () => {
+    const config = createDefaultConfig();
+    config.basic.language = 'en';
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+    mocks.saveConfig.mockRejectedValueOnce(new Error('storage request failed: E_IO'));
+
+    render(<SettingsShell />);
+    await screen.findByRole('heading', { name: 'Settings' });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Failed to save')).toBeInTheDocument();
+    expect(screen.getByText('storage request failed: E_IO')).toBeInTheDocument();
+  });
+
   it('加载配置并展示缓存统计', async () => {
     mocks.getConfig.mockResolvedValueOnce(createDefaultConfig());
     mocks.getRecentError.mockResolvedValueOnce(null);
@@ -767,7 +804,10 @@ describe('SettingsShell', () => {
     expect(screen.getByLabelText('API Key')).toHaveAttribute('type', 'password');
   });
 
-  it('测试模型成功后通过 toast 展示返回文本', async () => {
+  it.each([
+    { language: 'zh-CN', title: '设置', modelsTab: '语言模型', text: 'hello', feedbackTitle: '模型测试成功', feedback: 'hello' },
+    { language: 'en', title: 'Settings', modelsTab: 'Language Models', text: '', feedbackTitle: 'Model test succeeded', feedback: 'openai-compatible returned empty text' },
+  ] as const)('测试模型成功后按 $language 展示返回文本或空输出说明', async ({ language, title, modelsTab, text, feedbackTitle, feedback }) => {
     const config = createDefaultConfig({
       models: [
         {
@@ -788,14 +828,15 @@ describe('SettingsShell', () => {
         },
       ],
     });
+    config.basic.language = language;
     mocks.getConfig.mockResolvedValueOnce(config);
     mocks.getLocalCacheStats.mockResolvedValueOnce({ entryCount: 1, bytes: 16 });
-    mocks.testModel.mockResolvedValueOnce({ provider: 'openai-compatible', text: 'hello' });
+    mocks.testModel.mockResolvedValueOnce({ provider: 'openai-compatible', text });
 
     render(<SettingsShell />);
 
-    await screen.findByRole('heading', { name: '设置' });
-    fireEvent.click(screen.getByRole('tab', { name: '语言模型' }));
+    await screen.findByRole('heading', { name: title });
+    fireEvent.click(screen.getByRole('tab', { name: modelsTab }));
     fireEvent.click(screen.getByTestId('language-model-summary-model-1'));
     fireEvent.click(screen.getByRole('button', { name: '测试模型' }));
 
@@ -806,8 +847,8 @@ describe('SettingsShell', () => {
         'high',
       );
     });
-    expect(await screen.findByText('模型测试成功')).toBeInTheDocument();
-    expect(screen.getByText('hello')).toBeInTheDocument();
+    expect(await screen.findByText(feedbackTitle)).toBeInTheDocument();
+    expect(screen.getByText(feedback)).toBeInTheDocument();
   });
 
   it('清理缓存后会刷新缓存统计', async () => {

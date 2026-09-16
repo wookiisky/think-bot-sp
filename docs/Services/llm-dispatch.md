@@ -105,7 +105,8 @@ Provider 适配规则：
 - 自动触发当前统一以请求级 `pageContent` 注入页面正文，不改写页面级 `includePageContent`。
 - 自动触发、编辑重发、用户重试、助手分支重试和继续新增分支，统一复用“页面正文追加到最终 system prompt”这套拼装规则。
 - 快捷输入首轮自动触发会按“主模型 + 并行模型”并发生成同一条助手消息的分支集合。
-- 自动触发会话必须进入与手动发送同一套活跃会话注册表，保证 `STOP_SESSION`、页面级清空与恢复行为一致。
+- 自动触发与手动发送通过 `registerTurn` 注册整轮协调器和附加分支，保证 `STOP_SESSION`、`STOP_BRANCH`、分支删除等待、页面级清空与恢复行为一致。
+- 整轮协调器不绑定分支 id，取消它会停止本轮所有流；附加分支各自绑定分支 id，可以独立停止而不取消整轮。
 - 自动触发首轮失败时启用 `rollbackOnFailure`，不持久化用户消息、助手错误态和 `auto-error` 标签状态。
 
 编辑与分支操作规则：
@@ -153,6 +154,7 @@ Provider 适配规则：
   - 若失败事件先于 `SEND_CHAT` 成功响应到达，UI 只允许用后续成功响应补齐本地用户消息 id，不得把已失败的助手消息改回 loading。
   - 持久化的 `ConversationRecord` 只保留 `status: error` 与已有输出内容，`errorMessage` 保持 `null`，避免把 Provider 原始错误写入历史。
 - setup 在助手占位消息创建后失败：
+  - 发送、编辑和用户重试统一经过 `startTurnSession`，等待主 loading 保存成功后才启动任何分支的网络请求。
   - 助手消息补偿收敛到 `error`。
   - `session.done` 不会启动。
 - 首轮快捷输入开启 `rollbackOnFailure` 后流式失败：

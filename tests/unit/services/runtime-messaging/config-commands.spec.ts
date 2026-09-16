@@ -147,7 +147,9 @@ describe('config-commands', () => {
       type: 'TEST_SYNC_CONNECTION_SUCCESS',
       result: { provider: 'gist', ok: true, message: 'ok' },
     });
-    expect(syncService.testConnection).toHaveBeenCalledWith(config.sync);
+    expect(syncService.testConnection).toHaveBeenCalledWith(config.sync, 'zh-CN');
+    await handler({ type: 'TEST_SYNC_CONNECTION', sync: config.sync, language: 'en' });
+    expect(syncService.testConnection).toHaveBeenLastCalledWith(config.sync, 'en');
 
     await expect(
       handler({

@@ -11,6 +11,7 @@ import { isSyncConversationVisible, mergePromptTabClearHistory } from '../../dom
 import type { SyncSnapshot, SyncTombstone } from '../../domain/sync/sync-snapshot-schema';
 import { createGistSyncProvider } from './gist-sync-provider';
 import { createWebdavSyncProvider } from './webdav-sync-provider';
+import { createSyncTranslator, type SyncTranslator } from './sync-copy';
 
 type SyncConnectionResult = {
   /** provider 名称。 */
@@ -38,19 +39,18 @@ type SyncTestProvider = {
 };
 
 type SyncRepository = {
-  getRevision?(): Promise<number>;
-  mergeSnapshot?(merge: (local: SyncSnapshot) => SyncSnapshot, sinceRevision: number): Promise<SyncSnapshot>;
-  /** 构建完整同步快照。 */
-  buildSnapshot(config?: ExtensionConfig): Promise<SyncSnapshot>;
-  /** 把合并后的快照回写到本地。 */
-  applyMergedSnapshot(snapshot: SyncSnapshot): Promise<void>;
+  /** 捕获远端读取前的本地版本。 */
+  getRevision(): Promise<number>;
+  /** 在存储事务中合并快照，保护网络请求期间的本地变更。 */
+  mergeSnapshot(merge: (local: SyncSnapshot) => SyncSnapshot, sinceRevision: number): Promise<SyncSnapshot>;
   /** 在同步成功后回写本地状态。 */
   markSyncCompleted(input: { snapshotVersion: number; lastSyncAt: number }): Promise<void>;
 };
 
-const ensureSyncEnabled = (sync: ExtensionConfig['sync']) => {
+/** 在请求前校验同步开关，并使用当前操作的语言报告错误。 */
+const ensureSyncEnabled = (sync: ExtensionConfig['sync'], t: SyncTranslator) => {
   if (!sync.enabled || sync.provider === 'none') {
-    throw new Error('请先启用同步并选择提供方');
+    throw new Error(t('sync.message.disabled'));
   }
 };
 
@@ -227,49 +227,29 @@ export const createSyncService = ({
   /** 按调用时机解析测试 provider，避免 service worker 启动后注入失效。 */
   getTestProvider?: () => SyncTestProvider | null;
   /** 同步快照仓储。 */
-  syncRepository?: SyncRepository;
+  syncRepository: SyncRepository;
   /** 结构化日志。 */
   logger?: Pick<Logger, 'info' | 'warn' | 'error'>;
-} = {}) => {
-  const gistProvider = createGistSyncProvider(fetchImpl);
-  const webdavProvider = createWebdavSyncProvider(fetchImpl);
+}) => {
   const logger = injectedLogger ?? { info: () => undefined, warn: () => undefined, error: () => undefined };
-
-  const buildSnapshot = async (config?: ExtensionConfig): Promise<SyncSnapshot> =>
-    syncRepository
-      ? syncRepository.buildSnapshot(config)
-      : (() => {
-          if (!config) {
-            throw new Error('缺少本地同步配置快照');
-          }
-
-          return {
-            schemaVersion: SYNC_SNAPSHOT_SCHEMA_VERSION,
-            snapshotVersion: 1,
-            exportedAt: now(),
-            config,
-            pages: [],
-            conversations: [],
-            tombstones: [],
-            lastSyncAt: config.sync.lastSyncAt,
-          };
-        })();
 
   /** 统一解析当前可用的测试 provider。 */
   const resolveTestProvider = () => getTestProvider?.() ?? testProvider ?? null;
   /** 解析当前真实 provider。 */
-  const resolveProvider = (sync: ExtensionConfig['sync']) => (sync.provider === 'gist' ? gistProvider : webdavProvider);
+  const resolveProvider = (sync: ExtensionConfig['sync'], t: SyncTranslator) =>
+    sync.provider === 'gist' ? createGistSyncProvider(fetchImpl, t) : createWebdavSyncProvider(fetchImpl, t);
 
   const performSync = async (config: ExtensionConfig) => {
-    ensureSyncEnabled(config.sync);
+    const t = createSyncTranslator(config.basic.language);
+    ensureSyncEnabled(config.sync, t);
 
     const activeTestProvider = resolveTestProvider();
     if (activeTestProvider) {
       return activeTestProvider.syncNow(config);
     }
 
-    const provider = resolveProvider(config.sync);
-    const revision = await syncRepository?.getRevision?.();
+    const provider = resolveProvider(config.sync, t);
+    const revision = await syncRepository.getRevision();
     logger.info('sync.started', { provider: config.sync.provider, revision, lastSyncAt: config.sync.lastSyncAt });
     const remoteSnapshot = await provider.readSnapshot(config.sync);
     logger.info('sync.remote_loaded', {
@@ -280,17 +260,9 @@ export const createSyncService = ({
       remoteTombstones: remoteSnapshot?.tombstones.length ?? 0,
       remoteLastSyncAt: remoteSnapshot?.lastSyncAt ?? null,
     });
-    let nextSnapshot: SyncSnapshot;
-    if (syncRepository?.mergeSnapshot && revision !== undefined) {
-      nextSnapshot = await syncRepository.mergeSnapshot(
-        (localSnapshot) => mergeSyncSnapshots({ localSnapshot, remoteSnapshot, now }), revision,
-      );
-    } else {
-      const localSnapshot = await buildSnapshot(config);
-      const mergedSnapshot = mergeSyncSnapshots({ localSnapshot, remoteSnapshot, now });
-      if (syncRepository) await syncRepository.applyMergedSnapshot(mergedSnapshot);
-      nextSnapshot = syncRepository ? await buildSnapshot() : mergedSnapshot;
-    }
+    const nextSnapshot = await syncRepository.mergeSnapshot(
+      (localSnapshot) => mergeSyncSnapshots({ localSnapshot, remoteSnapshot, now }), revision,
+    );
     const lastSyncAt = now();
     const finalSnapshot = {
       ...nextSnapshot,
@@ -305,12 +277,10 @@ export const createSyncService = ({
     };
     const baseResult = await provider.syncNow(config.sync, finalSnapshot);
 
-    if (syncRepository) {
-      await syncRepository.markSyncCompleted({
-        snapshotVersion: finalSnapshot.snapshotVersion,
-        lastSyncAt,
-      });
-    }
+    await syncRepository.markSyncCompleted({
+      snapshotVersion: finalSnapshot.snapshotVersion,
+      lastSyncAt,
+    });
 
     return {
       ...baseResult,
@@ -322,8 +292,9 @@ export const createSyncService = ({
 
   return {
     /** 测试当前同步配置。 */
-    async testConnection(sync: ExtensionConfig['sync']) {
-      ensureSyncEnabled(sync);
+    async testConnection(sync: ExtensionConfig['sync'], language: ExtensionConfig['basic']['language'] = 'zh-CN') {
+      const t = createSyncTranslator(language);
+      ensureSyncEnabled(sync, t);
 
       const activeTestProvider = resolveTestProvider();
       if (activeTestProvider) {
@@ -331,7 +302,7 @@ export const createSyncService = ({
       }
 
       try {
-        const result = sync.provider === 'gist' ? await gistProvider.testConnection(sync) : await webdavProvider.testConnection(sync);
+        const result = await resolveProvider(sync, t).testConnection(sync);
         logger.info('sync.connection_tested', { provider: sync.provider, ok: result.ok });
         return result;
       } catch (error) {

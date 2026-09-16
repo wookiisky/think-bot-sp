@@ -1,15 +1,51 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createDefaultConfig } from '../../../src/domain/config/config-schema';
+import { createDefaultConfig, modelConfigSchema } from '../../../src/domain/config/config-schema';
+import { createSidebarSessionRegistry } from '../../../src/services/runtime-messaging/sidebar-session-registry';
 import { createSidebarAutoTriggerService } from '../../../src/services/sidebar-auto-trigger/sidebar-auto-trigger-service';
+import { createControlledSidebarSession } from '../../helpers/controlled-sidebar-session';
 
 describe('sidebar-auto-trigger-service', () => {
+  it('自动触发的附加分支可以独立停止，删除等待分支持久化收尾', async () => {
+    const registry = createSidebarSessionRegistry();
+    const coordinator = createControlledSidebarSession('auto-main');
+    const branch = createControlledSidebarSession('auto-other');
+    const service = createSidebarAutoTriggerService({
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      configRepository: { getConfig: async () => createDefaultConfig({
+        models: [modelConfigSchema.parse({ id: 'model', name: 'model', provider: 'openai-compatible', enabled: true,
+          model: 'model', baseUrl: 'https://example.com', apiKey: 'test', deployment: '', tools: [],
+          thinkingBudget: null, supportsImages: true, order: 0, deletedAt: null })],
+        quickInputs: [{ id: 'summary', name: 'summary', prompt: 'summarize',
+          autoTrigger: true, modelId: 'model', parallelModelIds: ['other'], order: 0, deletedAt: null }],
+      }) },
+      pageRepository: { getPage: async () => null, setPromptTabState: vi.fn().mockResolvedValue(undefined) },
+      conversationRepository: { getConversation: async () => null, getLoadingState: async () => null },
+      chatDispatchService: { dispatchChat: async () => ({ ...coordinator, branchSessions: [branch] }) },
+      sessionRegistry: registry,
+    });
+    const normalizedUrl = 'https://example.com/article';
+    await service.handleExtractionCompleted({ browserTabId: 1, pageUrl: normalizedUrl, normalizedUrl, pageContent: 'body' });
+    const scope = { normalizedUrl, promptTabId: 'summary', branchId: branch.branchId };
+    expect(registry.cancelBranchSession(scope)).toBe(true);
+    expect(branch.cancel).toHaveBeenCalledOnce();
+    expect(coordinator.cancel).not.toHaveBeenCalled();
+    let removed = false;
+    const deletion = registry.cancelBranchSessionAndWait(scope).then((result) => { removed = true; return result; });
+    await Promise.resolve();
+    expect(removed).toBe(false);
+    branch.finish();
+    await expect(deletion).resolves.toBe(true);
+    coordinator.finish();
+  });
+
   it('提取成功后会自动触发符合条件的 quickInput，并在完成后写回 done', async () => {
     const setIncludePageContent = vi.fn().mockResolvedValue(undefined);
     const setPromptTabState = vi.fn().mockResolvedValue(undefined);
-    const register = vi.fn();
+    const registerTurn = vi.fn();
     const dispatchChat = vi.fn();
     const session = {
+      branchSessions: [],
       sessionId: 'session-auto-1',
       messageId: 'assistant-auto-1',
       cancel: vi.fn(),
@@ -93,7 +129,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat: dispatchChat.mockResolvedValue(session),
       },
       sessionRegistry: {
-        register,
+        registerTurn,
       },
       now: () => 100,
     });
@@ -129,9 +165,13 @@ describe('sidebar-auto-trigger-service', () => {
       pageContent: '页面正文',
       rollbackOnFailure: true,
     });
-    expect(register).toHaveBeenCalledWith(session, {
-      normalizedUrl: 'https://example.com/article',
-      promptTabId: 'quick-summary',
+    expect(registerTurn).toHaveBeenCalledWith({
+      coordinator: session,
+      branchSessions: [],
+      scope: {
+        normalizedUrl: 'https://example.com/article',
+        promptTabId: 'quick-summary',
+      },
     });
     expect(setPromptTabState).toHaveBeenNthCalledWith(2, {
       normalizedUrl: 'https://example.com/article',
@@ -144,6 +184,7 @@ describe('sidebar-auto-trigger-service', () => {
   it('完成收敛时缺少目标 promptTab 状态也会安全写回 done', async () => {
     const setPromptTabState = vi.fn().mockResolvedValue(undefined);
     const session = {
+      branchSessions: [],
       sessionId: 'session-auto-safe',
       messageId: 'assistant-auto-safe',
       cancel: vi.fn(),
@@ -218,7 +259,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat: vi.fn().mockResolvedValue(session),
       },
       sessionRegistry: {
-        register: vi.fn(),
+        registerTurn: vi.fn(),
       },
       now: () => 100,
     });
@@ -242,6 +283,7 @@ describe('sidebar-auto-trigger-service', () => {
   it('会话失败且消息已回滚时，不持久化 auto error 状态', async () => {
     const setPromptTabState = vi.fn().mockResolvedValue(undefined);
     const session = {
+      branchSessions: [],
       sessionId: 'session-auto-rollback',
       messageId: 'assistant-auto-rollback',
       cancel: vi.fn(),
@@ -324,7 +366,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat: vi.fn().mockResolvedValue(session),
       },
       sessionRegistry: {
-        register: vi.fn(),
+        registerTurn: vi.fn(),
       },
       now: () => 100,
     });
@@ -417,7 +459,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat,
       },
       sessionRegistry: {
-        register: vi.fn(),
+        registerTurn: vi.fn(),
       },
     });
 
@@ -510,7 +552,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat,
       },
       sessionRegistry: {
-        register: vi.fn(),
+        registerTurn: vi.fn(),
       },
       now: () => 100,
     });
@@ -594,7 +636,7 @@ describe('sidebar-auto-trigger-service', () => {
         dispatchChat: vi.fn().mockRejectedValue(new Error('dispatch failed')),
       },
       sessionRegistry: {
-        register: vi.fn(),
+        registerTurn: vi.fn(),
       },
       now: () => 100,
     });

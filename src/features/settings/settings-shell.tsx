@@ -55,14 +55,13 @@ type SettingsToast = {
 };
 
 const logger = createLogger('options');
-const localeService = createLocaleService();
+const localeResources = createLocaleService().loadResources();
 
 /** 设置页壳层，负责配置加载、语言预览、缓存统计和快捷输入编辑。 */
 export const SettingsShell = () => {
   const [savedConfig, setSavedConfig] = useState<ExtensionConfig | null>(null);
   const [draftConfig, setDraftConfig] = useState<ExtensionConfig | null>(null);
   const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
-  const [localeResources, setLocaleResources] = useState<Awaited<ReturnType<typeof localeService.loadResources>> | null>(null);
   const [activeSection, setActiveSection] = useState<SettingsSection>('basic');
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,6 +72,8 @@ export const SettingsShell = () => {
   const [loadError, setLoadError] = useState<SettingsViewError | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<FeedbackMessage | null>(null);
   const [toast, setToast] = useState<SettingsToast | null>(null);
+  const language = draftConfig?.basic.language ?? 'zh-CN';
+  const t = (key: string) => localeResources.t(key, language);
   const themePreference = draftConfig?.basic.theme ?? 'system';
   const themeRootAttributes = useDocumentTheme(themePreference);
 
@@ -95,10 +96,9 @@ export const SettingsShell = () => {
 
     const load = async () => {
       try {
-        const [nextConfig, nextCacheStats, nextLocaleResources] = await Promise.all([
+        const [nextConfig, nextCacheStats] = await Promise.all([
           settingsApi.getConfig(),
           settingsApi.getLocalCacheStats(),
-          localeService.loadResources(),
         ]);
 
         if (!active) {
@@ -108,7 +108,6 @@ export const SettingsShell = () => {
         setSavedConfig(nextConfig);
         setDraftConfig(nextConfig);
         setCacheStats(nextCacheStats);
-        setLocaleResources(nextLocaleResources);
         setSelectedModelId(nextConfig.basic.defaultModelId ?? nextConfig.models[0]?.id ?? null);
         logger.info('settings.loaded', {
           modelCount: nextConfig.models.length,
@@ -123,9 +122,9 @@ export const SettingsShell = () => {
           return;
         }
 
-        const message = describeError(error);
+        const message = describeError(error, localeResources.t('settings.feedback.unknownError', 'zh-CN'));
         logger.error('settings.load.failed', { reason: message });
-        setLoadError({ title: '加载失败', message });
+        setLoadError({ title: localeResources.t('settings.feedback.loadFailed', 'zh-CN'), message });
       }
     };
 
@@ -136,20 +135,22 @@ export const SettingsShell = () => {
     };
   }, []);
 
-  if (!savedConfig || !draftConfig || !localeResources || !cacheStats) {
+  if (!savedConfig || !draftConfig || !cacheStats) {
     return (
       <main
         data-theme={themeRootAttributes.dataTheme}
         data-resolved-theme={themeRootAttributes.dataResolvedTheme}
         className={COMPACT_PAGE_SHELL_CLASS}
       >
-        <p className="m-0 text-sm text-foreground">{loadError ? `${loadError.title}：${loadError.message}` : '正在加载设置页…'}</p>
+        <p className="m-0 text-sm text-foreground">
+          {loadError
+            ? t('settings.loadError').replace('{title}', loadError.title).replace('{message}', () => loadError.message)
+            : t('settings.loading')}
+        </p>
       </main>
     );
   }
 
-  const language = draftConfig.basic.language;
-  const t = (key: string) => localeResources.t(key, language);
   const dirty = hasUnsavedChanges(savedConfig, draftConfig);
   const enabledModels = getEnabledCompleteModels(draftConfig);
 
@@ -179,13 +180,13 @@ export const SettingsShell = () => {
       : null;
 
     if (nextDraftConfig.basic.defaultModelId && !defaultModel) {
-      showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
+      showToast('error', t('settings.feedback.defaultModelInvalid'), t('settings.feedback.defaultModelIncomplete'));
       logger.warn('settings.save.blocked', { reason: 'default_model_missing', defaultModelId: nextDraftConfig.basic.defaultModelId });
       return null;
     }
 
     if (defaultModel && !isModelConfigComplete(defaultModel)) {
-      showToast('error', '默认模型校验失败', '默认模型配置不完整，无法保存');
+      showToast('error', t('settings.feedback.defaultModelInvalid'), t('settings.feedback.defaultModelIncomplete'));
       logger.warn('settings.save.blocked', { reason: 'default_model_incomplete', defaultModelId: defaultModel.id });
       return null;
     }
@@ -214,9 +215,9 @@ export const SettingsShell = () => {
       setToast(null);
       return nextConfig;
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.save.failed', { reason: message });
-      showToast('error', '保存失败', message);
+      showToast('error', t('settings.feedback.saveFailed'), message);
       return null;
     } finally {
       setSaving(false);
@@ -231,17 +232,17 @@ export const SettingsShell = () => {
       setDraftConfig(response.config);
       setSyncFeedback({
         tone: 'success',
-        message: `已同步 ${response.result.snapshotBytes} B`,
+        message: t('settings.feedback.synced').replace('{bytes}', String(response.result.snapshotBytes)),
       });
       setToast(null);
       return response;
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
+      const message = describeError(error, t('settings.feedback.unknownError'));
       setSyncFeedback({
         tone: 'error',
         message,
       });
-      showToast('error', '同步失败', message);
+      showToast('error', t('settings.feedback.syncFailed'), message);
       return null;
     } finally {
       setSyncing(false);
@@ -264,9 +265,9 @@ export const SettingsShell = () => {
       setToast(null);
       setSyncFeedback(null);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.import.failed', { reason: message });
-      showToast('error', '导入失败', message);
+      showToast('error', t('settings.feedback.importFailed'), message);
     }
   };
 
@@ -281,9 +282,9 @@ export const SettingsShell = () => {
       logger.info('settings.export.completed', { filename, bytes: payload.length });
       setToast(null);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.export.failed', { reason: message });
-      showToast('error', '导出失败', message);
+      showToast('error', t('settings.feedback.exportFailed'), message);
     }
   };
 
@@ -294,9 +295,9 @@ export const SettingsShell = () => {
       logger.info('settings.cache.cleared');
       setToast(null);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.cache.clear_failed', { reason: message });
-      showToast('error', '清理缓存失败', message);
+      showToast('error', t('settings.feedback.clearCacheFailed'), message);
     }
   };
 
@@ -322,9 +323,9 @@ export const SettingsShell = () => {
       }).config : current);
       setToast(null);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.quick_input_templates.import_failed', { reason: message });
-      showToast('error', '导入快捷输入模板失败', message);
+      showToast('error', t('settings.feedback.importTemplatesFailed'), message);
     } finally {
       setImportingQuickInputTemplates(false);
     }
@@ -353,9 +354,9 @@ export const SettingsShell = () => {
       logger.info('settings.reset.completed', { language: nextConfig.basic.language, theme: nextConfig.basic.theme });
       setToast(null);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.reset.failed', { reason: message });
-      showToast('error', '恢复默认失败', message);
+      showToast('error', t('settings.feedback.resetFailed'), message);
     } finally {
       setSaving(false);
     }
@@ -364,19 +365,19 @@ export const SettingsShell = () => {
   const handleTestSyncConnection = async () => {
     setTestingSync(true);
     try {
-      const result = await settingsApi.testSyncConnection(draftConfig.sync);
+      const result = await settingsApi.testSyncConnection(draftConfig.sync, language);
       setSyncFeedback({
         tone: 'success',
         message: result.message,
       });
       setToast(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
+      const message = describeError(error, t('settings.feedback.unknownError'));
       setSyncFeedback({
         tone: 'error',
         message,
       });
-      showToast('error', '同步连接测试失败', message);
+      showToast('error', t('settings.feedback.syncConnectionFailed'), message);
     } finally {
       setTestingSync(false);
     }
@@ -385,7 +386,7 @@ export const SettingsShell = () => {
   const handleTestModel = async (modelId: string) => {
     const model = draftConfig.models.find((item) => item.id === modelId && item.deletedAt === null);
     if (!model) {
-      showToast('error', '模型测试失败', '未找到要测试的模型');
+      showToast('error', t('settings.feedback.modelTestFailed'), t('settings.feedback.modelNotFound'));
       return;
     }
 
@@ -396,11 +397,12 @@ export const SettingsShell = () => {
         draftConfig.basic.llmRequestTimeoutSeconds,
         resolveModelReasoningEffort(draftConfig.basic, model),
       );
-      showToast('success', '模型测试成功', result.text || `${result.provider} 已返回空文本`);
+      const message = result.text || t('settings.feedback.modelEmptyOutput').replace('{provider}', () => result.provider);
+      showToast('success', t('settings.feedback.modelTestSuccess'), message);
     } catch (error) {
-      const message = describeError(error);
+      const message = describeError(error, t('settings.feedback.unknownError'));
       logger.error('settings.model_test.failed', { modelId, provider: model.provider, reason: message });
-      showToast('error', '模型测试失败', message);
+      showToast('error', t('settings.feedback.modelTestFailed'), message);
     } finally {
       setTestingModelId((current) => (current === modelId ? null : current));
     }

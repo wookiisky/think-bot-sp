@@ -1,10 +1,13 @@
 import { getEnabledCompleteModels, type ExtensionConfig } from '../../domain/config/config-schema';
 import { describeError, type Logger } from '../logger/logger';
+import type { createSidebarSessionRegistry, SidebarSession } from '../runtime-messaging/sidebar-session-registry';
 
 /** debug 可选，兼容只提供三档的测试夹具。 */
 type AutoTriggerLogger = Pick<Logger, 'info' | 'warn' | 'error'> & Partial<Pick<Logger, 'debug'>>;
 
 type AutoTriggerSession = {
+  /** 自动创建的附加分支，与整轮协调器一起注册。 */
+  branchSessions: Array<SidebarSession & { branchId: string }>;
   /** 本次流式会话 id。 */
   sessionId: string;
   /** 当前助手消息 id。 */
@@ -89,10 +92,7 @@ type SidebarAutoTriggerDeps = {
     }) => Promise<AutoTriggerSession>;
   };
   /** 活跃会话注册表。 */
-  sessionRegistry: {
-    /** 注册活跃会话。 */
-    register: (_session: AutoTriggerSession, _scope: { normalizedUrl: string; promptTabId: string }) => void;
-  };
+  sessionRegistry: Pick<ReturnType<typeof createSidebarSessionRegistry>, 'registerTurn'>;
   /** 当前时间。 */
   now?: () => number;
 };
@@ -204,9 +204,10 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             pageContent: input.pageContent,
             rollbackOnFailure: true,
           });
-          deps.sessionRegistry.register(session, {
-            normalizedUrl: input.normalizedUrl,
-            promptTabId: quickInput.id,
+          deps.sessionRegistry.registerTurn({
+            coordinator: session,
+            branchSessions: session.branchSessions,
+            scope: { normalizedUrl: input.normalizedUrl, promptTabId: quickInput.id },
           });
           deps.logger.info('auto_trigger.started', {
             browserTabId: input.browserTabId,

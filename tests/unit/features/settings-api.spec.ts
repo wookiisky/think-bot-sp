@@ -97,6 +97,9 @@ describe('settingsApi', () => {
       message: 'ok',
     });
 
+    await settingsApi.testSyncConnection(createDefaultConfig().sync, 'en');
+    expect(sendMessage).toHaveBeenLastCalledWith({ type: 'TEST_SYNC_CONNECTION', sync: createDefaultConfig().sync, language: 'en' }, expect.any(Function));
+
     await expect(
       settingsApi.syncNow(
         createDefaultConfig({

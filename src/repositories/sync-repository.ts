@@ -21,30 +21,6 @@ import {
 
 type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 
-type ConfigRepository = {
-  /** 读取当前配置。 */
-  getConfig(): Promise<ExtensionConfig>;
-};
-
-type PageRepository = {
-  /** 读取全部页面。 */
-  getAllPages(): Promise<
-    Array<{
-      normalizedUrl: string;
-      updatedAt: number;
-    }>
-  >;
-};
-
-type ConversationRepository = {
-  /** 读取全部会话。 */
-  getAllConversations(): Promise<
-    Array<{
-      normalizedUrl: string;
-    }>
-  >;
-};
-
 /** 同步仓储，负责快照导出和 tombstone 维护。 */
 export const createSyncRepository = ({
   storage,
@@ -52,12 +28,6 @@ export const createSyncRepository = ({
 }: {
   /** 本地存储适配器。 */
   storage: ChromeLocalAdapter;
-  /** 配置仓储。 */
-  configRepository: ConfigRepository;
-  /** 页面仓储。 */
-  pageRepository: PageRepository;
-  /** 会话仓储。 */
-  conversationRepository: ConversationRepository;
   /** 当前时间。 */
   now?: () => number;
 }) => createStorageRepository(storage, (storage) => {

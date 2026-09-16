@@ -18,9 +18,6 @@ describe('sync-repository', () => {
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
     const syncRepository = createSyncRepository({
-      configRepository,
-      pageRepository,
-      conversationRepository,
       storage: adapter,
     });
 
@@ -90,9 +87,6 @@ describe('sync-repository', () => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
     const syncRepository = createSyncRepository({
-      configRepository: createConfigRepository(adapter),
-      pageRepository: createPageRepository(adapter),
-      conversationRepository: createConversationRepository(adapter),
       storage: adapter,
     });
 
@@ -124,9 +118,6 @@ describe('sync-repository', () => {
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
     const syncRepository = createSyncRepository({
-      configRepository,
-      pageRepository,
-      conversationRepository,
       storage: adapter,
     });
 
@@ -259,10 +250,9 @@ describe('sync-repository', () => {
   it.each(['set', 'remove'] as const)('preserves recoverable data when snapshot %s fails', async (operation) => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
-    const configRepository = createConfigRepository(adapter);
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
-    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const syncRepository = createSyncRepository({ storage: adapter });
     const deletedUrl = 'https://example.com/deleted';
     const keptUrl = 'https://example.com/kept';
     await pageRepository.savePage(buildPageRecord({ url: deletedUrl, now: 100 }));
@@ -291,10 +281,9 @@ describe('sync-repository', () => {
   it.each([199, 200, 201])('exports only conversations created after the clear boundary (createdAt: %s)', async (createdAt) => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
-    const configRepository = createConfigRepository(adapter);
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
-    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const syncRepository = createSyncRepository({ storage: adapter });
     const url = 'https://example.com/clear';
     await pageRepository.savePage(buildPageRecord({ url, now: 100 }));
     await pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
@@ -305,10 +294,9 @@ describe('sync-repository', () => {
   it('keeps cleared tab history hidden after cleanup fails and retries cleanup after restart', async () => {
     const storage = createFakeStorageArea();
     const adapter = createChromeLocalAdapter(storage);
-    const configRepository = createConfigRepository(adapter);
     const pageRepository = createPageRepository(adapter);
     const conversationRepository = createConversationRepository(adapter);
-    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const syncRepository = createSyncRepository({ storage: adapter });
     const url = 'https://example.com/clear';
     await pageRepository.savePage(buildPageRecord({ url, now: 100 }));
     await conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'old', content: 'old', images: [], now: 100 });
@@ -323,7 +311,7 @@ describe('sync-repository', () => {
     await restartedStorage.set(storage.dump());
     const restartedAdapter = createChromeLocalAdapter(restartedStorage);
     const restartedConversationRepository = createConversationRepository(restartedAdapter);
-    const restartedRepository = createSyncRepository({ storage: restartedAdapter, configRepository, pageRepository, conversationRepository: restartedConversationRepository });
+    const restartedRepository = createSyncRepository({ storage: restartedAdapter });
     expect(await restartedConversationRepository.getConversation(url, 'chat')).not.toBeNull();
     const retrySnapshot = await restartedRepository.buildSnapshot();
     expect(retrySnapshot.conversations).toEqual([]);

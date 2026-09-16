@@ -157,6 +157,34 @@ describe('shared stream lifecycle', () => {
     expect(conversation?.messages.find((message) => message.id === session.messageId)).toMatchObject({ content: 'first buffered', status: 'cancelled' });
   });
 
+  it.each(['send', 'edit', 'retry'] as const)('%s waits for loading persistence before starting any network stream', async (operation) => {
+    const { repository, service, streamText } = createFixture({ parallel: true });
+    const original = await service.dispatchChat(request);
+    await original.done;
+    streamText.mockClear();
+    let finishSaving!: () => void;
+    let savingStarted!: () => void;
+    const gate = new Promise<void>((resolve) => { finishSaving = resolve; });
+    const started = new Promise<void>((resolve) => { savingStarted = resolve; });
+    const save = repository.saveLoadingState;
+    vi.spyOn(repository, 'saveLoadingState').mockImplementation(async (loading) => {
+      savingStarted();
+      await gate;
+      return save(loading);
+    });
+    const pending = operation === 'send'
+      ? service.dispatchChat(request)
+      : operation === 'edit'
+        ? service.editUserMessage({ ...scope, messageId: original.userMessageId!, content: 'edited', pageContent: '' })
+        : service.retryUserMessage({ ...scope, messageId: original.userMessageId!, pageContent: '' });
+    await started;
+    expect(streamText).not.toHaveBeenCalled();
+    finishSaving();
+    const session = await pending;
+    await session.done;
+    expect(streamText).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['send', 'edit', 'retry'] as const)('%s compensates all placeholders when loading setup fails', async (operation) => {
     vi.useFakeTimers();
     const { repository, service, streamText } = createFixture({ parallel: true });

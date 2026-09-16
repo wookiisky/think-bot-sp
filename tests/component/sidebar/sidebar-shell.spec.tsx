@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { SidebarShell } from '../../../src/features/sidebar/sidebar-shell';
+import { createWorkspaceCommandRaceApi } from '../../helpers/workspace-command-race-api';
 
 type PortMessageListener = (event: unknown) => void;
 
@@ -170,6 +171,26 @@ describe('SidebarShell', () => {
     expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
     expect(await screen.findByText('提取内容')).toBeVisible();
     expect(screen.queryByText('浏览器标签')).toBeNull();
+  });
+
+  it.each([
+    { tabId: 7, pageUrl: 'https://example.com/next' },
+    { tabId: 8, pageUrl: 'https://example.com/article' },
+  ])('切换到 $tabId / $pageUrl 后，等待恢复期间立即隐藏旧页面并禁用输入', async (nextPage) => {
+    const fixture = createWorkspaceCommandRaceApi();
+    const { rerender } = render(<SidebarShell api={fixture.api} tabId={7} pageUrl={fixture.pageUrl} />);
+    expect(await screen.findByText('正文')).toBeVisible();
+    expect(screen.getByText('旧问题')).toBeVisible();
+    expect(screen.getByLabelText('聊天输入')).toBeEnabled();
+    fixture.api.getSidebarBootstrap.mockReturnValueOnce(new Promise(() => {}));
+
+    rerender(<SidebarShell api={fixture.api} {...nextPage} />);
+
+    expect(screen.queryByText('正文')).toBeNull();
+    expect(screen.queryByText('旧问题')).toBeNull();
+    expect(screen.queryByText('旧回答')).toBeNull();
+    expect(screen.getByLabelText('聊天输入')).toBeDisabled();
+    expect(screen.getByRole('tab', { name: '聊天' })).toBeVisible();
   });
 
   it('配置为 dark 时在根节点应用深色主题', async () => {

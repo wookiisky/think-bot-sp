@@ -67,10 +67,11 @@ export const settingsApi = {
   },
 
   /** 测试同步连接。 */
-  async testSyncConnection(sync: ExtensionConfig['sync']) {
+  async testSyncConnection(sync: ExtensionConfig['sync'], language?: ExtensionConfig['basic']['language']) {
     const response = await requestConfig<RuntimeResponse<{ result: { provider: string; ok: true; message: string } }>>({
       type: 'TEST_SYNC_CONNECTION',
       sync,
+      ...(language ? { language } : {}),
     });
     return response.result;
   },

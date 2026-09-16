@@ -53,9 +53,6 @@ export default defineBackground(() => {
   const conversationRepository = createConversationRepository(storage);
   const syncRepository = createSyncRepository({
     storage,
-    configRepository,
-    pageRepository,
-    conversationRepository,
   });
   const recentErrorRepository = createRecentErrorRepository(storage);
   const syncService = createSyncService({
