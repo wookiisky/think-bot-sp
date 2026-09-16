@@ -38,7 +38,7 @@
 - side panel bootstrap 阶段完成 URL 匹配并返回阻断结果。
 - 命中则发送 `BLACKLIST_DETECTED` 或在 bootstrap 结果中标记 `blocked`。
 - 用户确认继续并发送 `CONFIRM_BLACKLIST_CONTINUE` 后才放行后续流程。
-- 放行令牌只保存在当前 service worker 内存中，按 `browserTab + normalizedUrl` 组合键隔离。
+- 放行令牌保存在 `chrome.storage.session`（浏览器会话级、不持久化、不同步），按 `browserTab + normalizedUrl` 组合键隔离；service worker 空闲重启后不会要求用户重新确认。
 - 默认规则当前覆盖 Google / Bing / 百度搜索结果页，命中后默认阻断。
 
 ## 6. 错误与异常处理
@@ -65,7 +65,7 @@
 - 命中黑名单时不能直接开始提取或自动触发。
 - 默认规则恢复不能覆盖用户新增规则。
 - 域名规则必须按“精确域名或子域名”匹配，不能用字符串 `includes` 误伤。
-- 黑名单放行不能写入持久化存储，也不能跨 `browserTab` 复用。
+- 黑名单放行不能写入 `chrome.storage.local` 等持久化存储，也不能跨 `browserTab` 复用；只允许放在随浏览器会话消失的 `chrome.storage.session`。
 
 ## 10. 测试要求
 

@@ -63,6 +63,9 @@ type WorkspaceSendInput = Omit<Parameters<WorkspaceTransport['sendChat']>[0], 'p
 const getReplyErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message.trim() ? error.message : fallback;
 
+/** 控制器对外暴露的视图与操作集合。 */
+export type WorkspaceController = ReturnType<typeof useWorkspaceController>;
+
 /** 共享消息、草稿、流生命周期和聊天操作；页面提取与历史列表由外层负责。 */
 export const useWorkspaceController = ({ pageKey, transport, t, onToast, initialPromptTabs = [] }: WorkspaceControllerOptions) => {
   const isCurrentScope = usePageScope(pageKey);
@@ -161,6 +164,28 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
   /** 终态会话不允许较晚的命令响应重新打开 loading。 */
   const hasTerminalSession = (sessionId: string) => terminalSessionIds.has(sessionId);
 
+  /** 同时更新标签的活跃会话与恢复目标；命令响应、失败与清空都走这里。 */
+  const markSession = (promptTabId: string, session: { sessionId: string | null; messageId: string | null }) => {
+    setActiveSessionIds((current) => (current[promptTabId] === session.sessionId ? current : { ...current, [promptTabId]: session.sessionId }));
+    setRestoreMessageIds((current) => (current[promptTabId] === session.messageId ? current : { ...current, [promptTabId]: session.messageId }));
+  };
+
+  /** 命令响应若晚于该会话的终态事件到达，不能把它重新打开为 loading。 */
+  const markSessionUnlessTerminal = (promptTabId: string, session: { sessionId: string; messageId: string }) => {
+    if (!hasTerminalSession(session.sessionId)) markSession(promptTabId, session);
+  };
+
+  /** 统一的命令骨架：切页后不写回、失败时只提示一次。 */
+  const runCommand = async (errorKey: string, run: (currentTransport: WorkspaceTransport) => Promise<void>) => {
+    if (!transport || !isCurrentPage()) return;
+    try {
+      await run(transport);
+    } catch {
+      if (!isCurrentPage()) return;
+      pushToast('error', t(errorKey));
+    }
+  };
+
   useEffect(() => {
     if (!ready || !transport) return;
     const subscriptionIds = JSON.parse(promptTabSubscriptionKey) as string[];
@@ -227,16 +252,7 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
       const response = await transport.sendChat(request);
       if (!isCurrentPage()) return;
       const sessionAlreadyTerminal = hasTerminalSession(response.payload.sessionId);
-      if (!sessionAlreadyTerminal) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
+      if (!sessionAlreadyTerminal) markSession(promptTabId, response.payload);
       setIncludePageContent(input.includePageContent);
       setPromptTabMessages(promptTabId, (current) => {
         const persistedUserMessageId = response.payload.userMessageId;
@@ -284,14 +300,7 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
       const errorMessage = getReplyErrorMessage(error, t('workspace.notice.sendFailed'));
       const assistantMessageId = `local-assistant:${promptTabId}:${Date.now()}`;
       const branchId = `${assistantMessageId}:primary`;
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
+      markSession(promptTabId, { sessionId: null, messageId: null });
       setPromptTabMessages(promptTabId, (current) => [
         ...current,
         {
@@ -320,62 +329,27 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
   };
 
   /** 编辑用户消息后，裁剪其后的结果并立刻重发。 */
-  const handleEditUserMessage = async (promptTabId: string, messageId: string, text: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      const response = await transport.editUserMessage({
-        promptTabId,
-        messageId,
-        text,
-      });
+  const handleEditUserMessage = (promptTabId: string, messageId: string, text: string) =>
+    runCommand('workspace.notice.editFailed', async (currentTransport) => {
+      const response = await currentTransport.editUserMessage({ promptTabId, messageId, text });
       if (!isCurrentPage()) return;
       setPromptTabEditing(promptTabId, null);
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
+      markSessionUnlessTerminal(promptTabId, response.payload);
       setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
         kind: 'user', targetMessageId: messageId, response: response.payload, editedText: text,
       }));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.editFailed'));
-    }
-  };
+    });
 
   /** 重试用户消息，裁剪其后的结果并重新生成当前轮。 */
-  const handleRetryUserMessage = async (promptTabId: string, messageId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      const response = await transport.retryUserMessage({
-        promptTabId,
-        messageId,
-      });
+  const handleRetryUserMessage = (promptTabId: string, messageId: string) =>
+    runCommand('workspace.notice.retryFailed', async (currentTransport) => {
+      const response = await currentTransport.retryUserMessage({ promptTabId, messageId });
       if (!isCurrentPage()) return;
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
+      markSessionUnlessTerminal(promptTabId, response.payload);
       setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
         kind: 'user', targetMessageId: messageId, response: response.payload,
       }));
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.retryFailed'));
-    }
-  };
+    });
 
   /** 重试目标助手分支。 */
   const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
@@ -388,16 +362,7 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
         branchId,
       });
       if (!isCurrentPage()) return;
-      if (!hasTerminalSession(response.payload.sessionId)) {
-        setActiveSessionIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.sessionId,
-        }));
-        setRestoreMessageIds((current) => ({
-          ...current,
-          [promptTabId]: response.payload.messageId,
-        }));
-      }
+      markSessionUnlessTerminal(promptTabId, response.payload);
       const hasStreamEvent = streamedSessionIds.has(response.payload.sessionId);
       setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
         kind: 'assistant', targetMessageId: messageId, response: response.payload, hasStreamEvent,
@@ -414,65 +379,37 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
   };
 
   /** 切换当前轮继续对话使用的主分支。 */
-  const handleSelectAssistantBranch = async (promptTabId: string, messageId: string, branchId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      await transport.selectAssistantBranch({
-        promptTabId,
-        messageId,
-        branchId,
-      });
+  const handleSelectAssistantBranch = (promptTabId: string, messageId: string, branchId: string) =>
+    runCommand('workspace.notice.selectPrimaryBranchFailed', async (currentTransport) => {
+      await currentTransport.selectAssistantBranch({ promptTabId, messageId, branchId });
       if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         current.map((message) =>
           message.id === messageId && message.role === 'assistant'
-            ? syncAssistantMessageState({
-                ...message,
-                selectedBranchId: branchId,
-              })
+            ? syncAssistantMessageState({ ...message, selectedBranchId: branchId })
             : message,
         ),
       );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.selectPrimaryBranchFailed'));
-    }
-  };
+    });
 
   /** 停止当前标签会话。 */
   const handleStop = async (promptTabId: string, sessionId: string | null) => {
-    if (!transport || !isCurrentPage()) return;
-    if (!sessionId) {
-      return;
-    }
-
-    await transport.stopSession({
-      promptTabId,
-      sessionId,
+    if (!sessionId) return;
+    await runCommand('workspace.notice.stopFailed', async (currentTransport) => {
+      await currentTransport.stopSession({ promptTabId, sessionId });
     });
-    if (!transport || !isCurrentPage()) return;
   };
 
   /** 清空当前标签会话，不影响页面提取内容与其他标签。 */
-  const handleClearTabConversation = async (promptTabId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      await transport.clearTabConversation({
-        promptTabId,
-      });
+  const handleClearTabConversation = (promptTabId: string) =>
+    runCommand('workspace.notice.clearTabFailed', async (currentTransport) => {
+      await currentTransport.clearTabConversation({ promptTabId });
       if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, () => []);
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: null,
-      }));
+      markSession(promptTabId, { sessionId: null, messageId: null });
       setPromptTabEditing(promptTabId, null);
       pushToast('success', t('workspace.notice.clearTabSuccess'));
-      if (transport.clearTabResetsTrigger) setPromptTabs((current) =>
+      if (currentTransport.clearTabResetsTrigger) setPromptTabs((current) =>
         current.map((promptTab) =>
           promptTab.id === promptTabId
             ? {
@@ -490,11 +427,7 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
             : promptTab,
         ),
       );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.clearTabFailed'));
-    }
-  };
+    });
 
   /** 导出当前标签会话，空会话时直接拦截。 */
   const handleExport = async (promptTabId: string) => {
@@ -506,95 +439,54 @@ export const useWorkspaceController = ({ pageKey, transport, t, onToast, initial
       return;
     }
 
-    try {
-      const exported = await transport.exportConversation({
-        promptTabId,
-      });
+    await runCommand('workspace.notice.exportFailed', async (currentTransport) => {
+      const exported = await currentTransport.exportConversation({ promptTabId });
       if (!isCurrentPage()) return;
       downloadTextFile({
         filename: exported.payload.filename,
         content: exported.payload.content,
         mimeType: exported.payload.mimeType,
       });
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.exportFailed'));
-    }
+    });
   };
 
   /** 针对既有助手消息继续新增分支。 */
-  const handleExpandBranches = async (promptTabId: string, messageId: string, modelId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      const response = await transport.expandMessageBranches({
-        promptTabId,
-        messageId,
-        modelId,
-      });
+  const handleExpandBranches = (promptTabId: string, messageId: string, modelId: string) =>
+    runCommand('workspace.notice.expandBranchFailed', async (currentTransport) => {
+      const response = await currentTransport.expandMessageBranches({ promptTabId, messageId, modelId });
       if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         appendAssistantBranches(
           current,
           messageId,
-          response.payload.branches.map((branch) => ({
-            id: branch.branchId,
-            modelId: branch.modelId,
-            modelLabel: branch.modelLabel,
-          })),
+          response.payload.branches.map((branch) => ({ id: branch.branchId, modelId: branch.modelId, modelLabel: branch.modelLabel })),
         ),
       );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.expandBranchFailed'));
-    }
-  };
+    });
 
   /** 停止单个分支流。 */
-  const handleStopBranch = async (promptTabId: string, branchId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      await transport.stopBranch({
-        promptTabId,
-        branchId,
-      });
-      if (!isCurrentPage()) return;
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.stopBranchFailed'));
-    }
-  };
+  const handleStopBranch = (promptTabId: string, branchId: string) =>
+    runCommand('workspace.notice.stopBranchFailed', async (currentTransport) => {
+      await currentTransport.stopBranch({ promptTabId, branchId });
+    });
 
   /** 删除单个分支，并同时移除本地显示。 */
-  const handleDeleteBranch = async (promptTabId: string, messageId: string, branchId: string) => {
-    if (!transport || !isCurrentPage()) return;
-    try {
-      await transport.deleteBranch({
-        promptTabId,
-        messageId,
-        branchId,
-      });
+  const handleDeleteBranch = (promptTabId: string, messageId: string, branchId: string) =>
+    runCommand('workspace.notice.deleteBranchFailed', async (currentTransport) => {
+      await currentTransport.deleteBranch({ promptTabId, messageId, branchId });
       if (!isCurrentPage()) return;
       setPromptTabMessages(promptTabId, (current) =>
         current.flatMap((message) => {
           if (message.id !== messageId || message.role !== 'assistant') {
             return [message];
           }
-          if (transport.deleteLastBranchRemovesMessage && message.branches.length <= 1) {
+          if (currentTransport.deleteLastBranchRemovesMessage && message.branches.length <= 1) {
             return [];
           }
-          return [
-            syncAssistantMessageState({
-              ...message,
-              branches: message.branches.filter((branch) => branch.id !== branchId),
-            }),
-          ];
+          return [syncAssistantMessageState({ ...message, branches: message.branches.filter((branch) => branch.id !== branchId) })];
         }),
       );
-    } catch {
-      if (!isCurrentPage()) return;
-      pushToast('error', t('workspace.notice.deleteBranchFailed'));
-    }
-  };
+    });
 
   /** 选择一个标签，不向外暴露底层 React setter。 */
   const selectPromptTab = (promptTabId: string) => setActivePromptTabId(promptTabId);

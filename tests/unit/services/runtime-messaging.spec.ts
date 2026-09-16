@@ -1480,12 +1480,8 @@ describe('runtime-messaging', () => {
     });
   });
 
-  it('port bus 会按 promptTab 路由事件，并保留注册与断连广播', () => {
-    const events: Array<{ type: string; portName?: string }> = [];
+  it('port bus 会按 promptTab 路由事件，并在 port 断开后停止投递', () => {
     const bus = createPortBus();
-    bus.subscribe((event) => {
-      events.push(event);
-    });
 
     const firstDisconnectListeners: Array<() => void> = [];
     const secondDisconnectListeners: Array<() => void> = [];
@@ -1528,6 +1524,8 @@ describe('runtime-messaging', () => {
 
     const firstPortId = bus.register(port as never);
     const secondPortId = bus.register(secondPort as never);
+    expect(firstPortId).not.toBe(secondPortId);
+    expect(bus.size()).toBe(2);
     bus.bindPromptTab(firstPortId, {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
@@ -1536,26 +1534,9 @@ describe('runtime-messaging', () => {
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'quick-1',
     });
-    expect(events).toContainEqual({ type: 'PORT_REGISTERED', portName: 'sidepanel' });
 
-    bus.publishToPromptTab(
-      {
-        normalizedUrl: 'https://example.com/article',
-        promptTabId: 'chat',
-      },
-      {
-        type: 'RESTORE_LOADING',
-        normalizedUrl: 'https://example.com/article',
-        promptTabId: 'chat',
-        sessionId: 'session-1',
-        messageId: 'assistant-1',
-        content: '部分回答',
-        startedAt: 1000,
-        branchStates: [],
-      },
-    );
-    expect(port.postMessage).toHaveBeenCalledWith({
-      type: 'RESTORE_LOADING',
+    const restoreEvent = {
+      type: 'RESTORE_LOADING' as const,
       normalizedUrl: 'https://example.com/article',
       promptTabId: 'chat',
       sessionId: 'session-1',
@@ -1563,18 +1544,19 @@ describe('runtime-messaging', () => {
       content: '部分回答',
       startedAt: 1000,
       branchStates: [],
-    });
+    };
+    bus.publishToPromptTab({ normalizedUrl: 'https://example.com/article', promptTabId: 'chat' }, restoreEvent);
+    expect(port.postMessage).toHaveBeenCalledWith(restoreEvent);
     expect(secondPort.postMessage).not.toHaveBeenCalled();
 
-    bus.disconnect(firstPortId);
-    expect(port.disconnect).toHaveBeenCalledTimes(1);
-    expect(events).toContainEqual({ type: 'PORT_DISCONNECTED', portName: 'sidepanel' });
-
-    const recoveredPortId = bus.recover(port as never);
-    expect(recoveredPortId).not.toBe(firstPortId);
-    expect(events).toContainEqual({ type: 'PORT_RECOVERED', portName: 'sidepanel' });
     firstDisconnectListeners[0]?.();
+    expect(bus.size()).toBe(1);
+    bus.publishToPromptTab({ normalizedUrl: 'https://example.com/article', promptTabId: 'chat' }, restoreEvent);
+    expect(port.postMessage).toHaveBeenCalledTimes(1);
+
+    expect(bus.bindPromptTab('missing-port', { normalizedUrl: 'https://example.com/article', promptTabId: 'chat' })).toBe(false);
     secondDisconnectListeners[0]?.();
+    expect(bus.size()).toBe(0);
   });
 
   it('port bus 会在订阅晚到时补发最近失败事件，并在新会话开始后清理旧失败', () => {

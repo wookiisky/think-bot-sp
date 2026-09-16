@@ -203,6 +203,7 @@ workspace.notice.sendFailed: Failed to send. Please retry.
 workspace.notice.editFailed: Failed to edit. Please retry.
 workspace.notice.retryFailed: Failed to retry. Please retry.
 workspace.notice.expandBranchFailed: Failed to add a branch. Please retry.
+workspace.notice.stopFailed: Failed to stop the response. Please retry.
 workspace.notice.stopBranchFailed: Failed to stop the branch. Please retry.
 workspace.notice.deleteBranchFailed: Failed to delete the branch. Please retry.
 workspace.notice.selectPrimaryBranchFailed: Failed to switch the primary branch. Please retry.

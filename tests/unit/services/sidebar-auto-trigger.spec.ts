@@ -663,4 +663,86 @@ describe('sidebar-auto-trigger-service', () => {
       autoTriggerStatus: 'idle',
     });
   });
+
+  it('标记 running 之前的存储失败不会抛出，也不会尝试回退状态', async () => {
+    const setPromptTabState = vi.fn().mockRejectedValue(new Error('storage unavailable'));
+    const dispatchChat = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const service = createSidebarAutoTriggerService({
+      logger,
+      configRepository: {
+        getConfig: vi.fn().mockResolvedValue(
+          createDefaultConfig({
+            basic: {
+              defaultModelId: 'model-1',
+            },
+            models: [
+              modelConfigSchema.parse({
+                id: 'model-1',
+                name: '主模型',
+                provider: 'openai-compatible',
+                enabled: true,
+                model: 'gpt-4.1-mini',
+                baseUrl: 'https://api.example.com',
+                apiKey: 'token',
+                deployment: '',
+                tools: [],
+                thinkingBudget: null,
+                supportsImages: true,
+                order: 0,
+                deletedAt: null,
+              }),
+            ],
+            quickInputs: [
+              {
+                id: 'quick-summary',
+                name: '总结',
+                prompt: '请总结当前页面',
+                autoTrigger: true,
+                modelId: 'model-1',
+                parallelModelIds: [],
+                order: 0,
+                deletedAt: null,
+              },
+            ],
+          }),
+        ),
+      },
+      pageRepository: {
+        getPage: vi.fn().mockResolvedValue(null),
+        setPromptTabState,
+      },
+      conversationRepository: {
+        getConversation: vi.fn().mockResolvedValue(null),
+        getLoadingState: vi.fn().mockResolvedValue(null),
+      },
+      chatDispatchService: {
+        dispatchChat,
+      },
+      sessionRegistry: {
+        registerTurn: vi.fn(),
+      },
+      now: () => 100,
+    });
+
+    await expect(
+      service.handleExtractionCompleted({
+        browserTabId: 7,
+        pageUrl: 'https://example.com/article',
+        normalizedUrl: 'https://example.com/article',
+        pageContent: '页面正文',
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(dispatchChat).not.toHaveBeenCalled();
+    expect(setPromptTabState).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('auto_trigger.failed', expect.objectContaining({
+      promptTab: 'quick-summary',
+      reason: 'storage unavailable',
+    }));
+  });
 });

@@ -11,6 +11,7 @@ import { createRecentErrorRepository } from '../src/repositories/recent-error-re
 import { createSyncRepository } from '../src/repositories/sync-repository';
 import { createBrowserEntryService } from '../src/services/browser-entry/browser-entry';
 import { createBrowserEntryPanelState } from '../src/services/browser-entry/browser-panel-state';
+import { createBlacklistBypassState } from '../src/services/blacklist/blacklist-bypass-state';
 import { createBlacklistService } from '../src/services/blacklist/blacklist-service';
 import type { PageSource } from '../src/services/extraction/page-source';
 import { createContentSource } from '../src/services/extraction/content-source';
@@ -28,13 +29,7 @@ import { createLoadingStateReconciler } from '../src/services/runtime-messaging/
 import { createPortBus } from '../src/services/runtime-messaging/port-bus';
 import { createServiceWorkerKeepalive } from '../src/services/runtime-messaging/service-worker-keepalive';
 import { createSidebarCommandHandler, isSidebarCommandMessage } from '../src/services/runtime-messaging/sidebar-commands';
-import {
-  sidebarConfirmBlacklistContinueCommandSchema,
-  sidebarPortClientMessageSchema,
-  sidebarPortEventSchema,
-  sidebarReExtractContentCommandSchema,
-  sidebarSwitchExtractionMethodCommandSchema,
-} from '../src/services/runtime-messaging/sidebar-contract';
+import { sidebarPortClientMessageSchema, sidebarPortEventSchema, type SidebarPortEvent } from '../src/services/runtime-messaging/sidebar-contract';
 import { createSidebarSessionRegistry } from '../src/services/runtime-messaging/sidebar-session-registry';
 import { assertConversationsPageSender, isConversationsPageSender, isSidebarPageSender } from '../src/services/runtime-messaging/sender';
 import { createSidebarAutoTriggerService } from '../src/services/sidebar-auto-trigger/sidebar-auto-trigger-service';
@@ -73,21 +68,15 @@ export default defineBackground(() => {
     logger: logger.child('keepalive'),
     ping: () => chrome.runtime.getPlatformInfo(),
   });
+  /** port 事件只在 port-bus 边界校验一次，避免每个 chunk 重复 parse。 */
+  const publishToPromptTab = (event: SidebarPortEvent) => {
+    portBus.publishToPromptTab({ normalizedUrl: event.normalizedUrl, promptTabId: event.promptTabId }, event);
+  };
   const loadingStateReconciler = createLoadingStateReconciler({
     logger: logger.child('loading'),
     conversationRepository,
     sessionRegistry,
-    portBus: {
-      publishToPromptTab(event) {
-        portBus.publishToPromptTab(
-          {
-            normalizedUrl: event.normalizedUrl,
-            promptTabId: event.promptTabId,
-          },
-          sidebarPortEventSchema.parse(event),
-        );
-      },
-    },
+    portBus: { publishToPromptTab },
   });
   // worker 重启后内存里的会话已不存在，先把 storage 中遗留的 loading 收敛为失败态。
   const startupReconciliation = loadingStateReconciler
@@ -107,17 +96,7 @@ export default defineBackground(() => {
       resolveProviderModel,
     },
     conversationRepository,
-    portBus: {
-      publishToPromptTab(event) {
-        portBus.publishToPromptTab(
-          {
-            normalizedUrl: event.normalizedUrl,
-            promptTabId: event.promptTabId,
-          },
-          sidebarPortEventSchema.parse(event),
-        );
-      },
-    },
+    portBus: { publishToPromptTab },
     streamText: async (input: {
       model: LanguageModel;
       maxOutputTokens?: number;
@@ -244,17 +223,13 @@ export default defineBackground(() => {
       });
     });
   };
-  const bypassStore = new Map<string, number>();
-  /** 生成当前标签页的黑名单放行 key。 */
-  const toBypassKey = (browserTabId: number, normalizedUrl: string) => `${browserTabId}:${normalizedUrl}`;
-  /** 清理某个标签页已有的黑名单放行令牌。 */
+  // 放行令牌放在 storage.session：不持久化、不同步，但能跨 service worker 空闲重启保留。
+  const blacklistBypass = createBlacklistBypassState(chrome.storage.session);
+  /** 清理某个标签页的放行令牌，失败只记日志。 */
   const clearBypassForTab = (browserTabId: number) => {
-    const prefix = `${browserTabId}:`;
-    for (const key of Array.from(bypassStore.keys())) {
-      if (key.startsWith(prefix)) {
-        bypassStore.delete(key);
-      }
-    }
+    void blacklistBypass.clearTab(browserTabId).catch((error: unknown) => {
+      logger.warn('blacklist.bypass.clear_failed', { browserTabId, reason: describeError(error) });
+    });
   };
   const browserEntry = createBrowserEntryService({
     logger: logger.child('entry'),
@@ -326,20 +301,33 @@ export default defineBackground(() => {
     sessionRegistry,
     configRepository,
     syncRepository,
+    extractionLogger,
+    blacklistBypass,
+    autoTrigger: sidebarAutoTriggerService,
+    extractionService: {
+      extractPage: async (input) => {
+        const config = await configRepository.getConfig();
+        return extractionService.extractPage({
+          ...input,
+          jinaApiKey: config.basic.jinaApiKey,
+          jinaResponseTemplate: config.basic.jinaResponseTemplate,
+        });
+      },
+    },
     blacklistRepository: {
       isBlocked: async ({ browserTabId, normalizedUrl }) => {
         const config = await configRepository.getConfig();
         const service = createBlacklistService({
           rules: config.blacklist,
         });
-        return service.checkUrl(normalizedUrl).blocked && !bypassStore.has(toBypassKey(browserTabId, normalizedUrl));
+        return service.checkUrl(normalizedUrl).blocked && !(await blacklistBypass.has(browserTabId, normalizedUrl));
       },
       getMatchedRuleId: async ({ browserTabId, normalizedUrl }) => {
         const config = await configRepository.getConfig();
         const service = createBlacklistService({
           rules: config.blacklist,
         });
-        return bypassStore.has(toBypassKey(browserTabId, normalizedUrl)) ? null : service.checkUrl(normalizedUrl).matchedRuleId;
+        return (await blacklistBypass.has(browserTabId, normalizedUrl)) ? null : service.checkUrl(normalizedUrl).matchedRuleId;
       },
     },
   });
@@ -459,40 +447,44 @@ export default defineBackground(() => {
     });
 
     port.onDisconnect.addListener(() => {
-      portBus.unregister(portId);
       portLogger.info('port.disconnected', { portId });
     });
   });
 
+  /** 入口事件是 fire-and-forget，未捕获的 rejection 只记日志。 */
+  const runEntryHandler = (event: string, task: Promise<unknown>) => {
+    void task.catch((error: unknown) => {
+      logger.error('entry.handler.failed', { event, reason: describeError(error) });
+    });
+  };
+
   chrome.runtime.onInstalled.addListener((details: { reason: string }) => {
-    void browserEntry.handleInstalled(details);
+    runEntryHandler('installed', browserEntry.handleInstalled(details));
   });
 
   browserEntry.registerContextMenu();
 
   chrome.contextMenus.onClicked.addListener((info: { menuItemId: string | number }) => {
-    void browserEntry.handleContextMenuClick(info);
+    runEntryHandler('context_menu', browserEntry.handleContextMenuClick(info));
   });
 
   chrome.tabs.onActivated.addListener((activeInfo) => {
-    for (const key of Array.from(bypassStore.keys())) {
-      if (!key.startsWith(`${activeInfo.tabId}:`)) {
-        bypassStore.delete(key);
-      }
-    }
-    void browserEntry.handleTabActivated(activeInfo);
+    void blacklistBypass.retainOnlyTab(activeInfo.tabId).catch((error: unknown) => {
+      logger.warn('blacklist.bypass.clear_failed', { browserTabId: activeInfo.tabId, reason: describeError(error) });
+    });
+    runEntryHandler('tab_activated', browserEntry.handleTabActivated(activeInfo));
   });
 
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tabId && changeInfo.url) {
       clearBypassForTab(tabId);
     }
-    void browserEntry.handleTabUpdated(tabId, changeInfo, tab);
+    runEntryHandler('tab_updated', browserEntry.handleTabUpdated(tabId, changeInfo, tab));
   });
 
   chrome.tabs.onRemoved.addListener((tabId) => {
     clearBypassForTab(tabId);
-    void browserEntry.handleTabRemoved(tabId);
+    runEntryHandler('tab_removed', browserEntry.handleTabRemoved(tabId));
   });
 
   if (chrome.action?.onClicked) {
@@ -527,128 +519,6 @@ export default defineBackground(() => {
         id: (sender as { id?: string | null }).id ?? null,
         url: (sender as { url?: string | null }).url ?? null,
       };
-
-      if (message.type === 'CONFIRM_BLACKLIST_CONTINUE') {
-        const command = sidebarConfirmBlacklistContinueCommandSchema.parse(message);
-        const normalizedUrl = normalizePageUrl(command.pageUrl);
-        bypassStore.set(toBypassKey(command.tabId, normalizedUrl), Date.now());
-        commandLogger.info('blacklist.bypass_confirmed', {
-          browserTabId: command.tabId,
-          normalizedUrl,
-        });
-        sendResponse({
-          type: 'CONFIRM_BLACKLIST_CONTINUE_SUCCESS',
-          payload: {
-            allowed: true,
-          },
-        });
-        return true;
-      }
-
-      if (message.type === 'RE_EXTRACT_CONTENT') {
-        const command = sidebarReExtractContentCommandSchema.parse(message);
-        const extractionStartedAt = Date.now();
-        void configRepository
-          .getConfig()
-          .then((config) =>
-            extractionService.extractPage({
-              tabId: command.tabId,
-              pageUrl: command.pageUrl,
-              method: command.method,
-              jinaApiKey: config.basic.jinaApiKey,
-              jinaResponseTemplate: config.basic.jinaResponseTemplate,
-            }),
-          )
-          .then((result) => {
-            const shouldRunAutoTrigger = command.source === 'panel_bootstrap' || command.source === 'blacklist_continue';
-            extractionLogger.info('extraction.completed', {
-              browserTabId: command.tabId,
-              normalizedUrl: result.normalizedUrl,
-              method: result.extractionMethod,
-              source: command.source,
-              contentLength: result.content.length,
-              durationMs: Date.now() - extractionStartedAt,
-              autoTrigger: shouldRunAutoTrigger,
-            });
-            sendResponse({
-              type: 'RE_EXTRACT_CONTENT_SUCCESS',
-              payload: result,
-            });
-            if (shouldRunAutoTrigger) {
-              void sidebarAutoTriggerService.handleExtractionCompleted({
-                browserTabId: command.tabId,
-                pageUrl: result.url,
-                normalizedUrl: result.normalizedUrl,
-                pageContent: result.content,
-              });
-            }
-          })
-          .catch((error: unknown) => {
-            const reason = describeError(error);
-            extractionLogger.error('extraction.failed', {
-              browserTabId: command.tabId,
-              normalizedUrl: normalizePageUrl(command.pageUrl),
-              method: command.method,
-              source: command.source,
-              durationMs: Date.now() - extractionStartedAt,
-              reason,
-            });
-            recordRecentError({
-              source: 'sidebar',
-              operation: 'RE_EXTRACT_CONTENT',
-              message: reason,
-            });
-            sendResponse({ error: reason });
-          });
-        return true;
-      }
-
-      if (message.type === 'SWITCH_EXTRACTION_METHOD') {
-        const command = sidebarSwitchExtractionMethodCommandSchema.parse(message);
-        const normalizedUrl = normalizePageUrl(command.pageUrl);
-        if (!isSidebarPageSender(senderInfo, chrome.runtime.id)) {
-          sendResponse({ error: 'invalid sidebar sender' });
-          return true;
-        }
-        void pageRepository
-          .selectExtractionCache({
-            normalizedUrl,
-            method: command.method,
-          })
-          .then((result) => {
-            extractionLogger.info('extraction.method_switched', {
-              browserTabId: command.tabId,
-              normalizedUrl,
-              method: command.method,
-              hasCachedContent: result.hasCachedContent,
-            });
-            sendResponse({
-              type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
-              payload: result.hasCachedContent
-                ? {
-                    hasCachedContent: true,
-                    method: command.method,
-                    content: result.content,
-                    extractionMethod: result.extractionMethod,
-                  }
-                : {
-                    hasCachedContent: false,
-                    method: command.method,
-                  },
-            });
-          })
-          .catch((error: unknown) => {
-            const reason = describeError(error);
-            extractionLogger.error('extraction.method_switch_failed', {
-              browserTabId: command.tabId,
-              normalizedUrl,
-              method: command.method,
-              reason,
-            });
-            sendResponse({ error: reason });
-          });
-        return true;
-      }
 
       const runtimeId = chrome.runtime.id;
       const commandHandler = isSidebarPageSender(senderInfo, runtimeId)

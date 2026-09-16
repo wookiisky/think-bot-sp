@@ -49,18 +49,9 @@ const isPromptTabRestartEvent = (event: SidebarPortEvent) => event.type === 'CHA
 
 /** sidebar 长连接 port 总线。 */
 export const createPortBus = () => {
-  const listeners = new Set<(event: SidebarPortEvent) => void>();
   const ports = new Map<string, SidebarPortRecord>();
   const recentFailureEvents = new Map<string, RecentFailureRecord[]>();
   let nextPortId = 0;
-
-  /** 广播内部生命周期事件。 */
-  const emit = (event: SidebarPortEvent) => {
-    const parsed = sidebarPortEventSchema.parse(event);
-    for (const listener of listeners) {
-      listener(parsed);
-    }
-  };
 
   /** 读取当前唯一 port 标识。 */
   const createPortId = (port: SidebarPort) => {
@@ -120,17 +111,9 @@ export const createPortBus = () => {
   };
 
   return {
-    /** 注册内部监听者。 */
-    subscribe(listener: (event: SidebarPortEvent) => void) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-
-    /** 注册新 port 连接，返回内部标识。 */
+    /** 注册新 port 连接，返回内部标识；断开时自动从路由表移除。 */
     register(port: SidebarPort) {
-      const portName = sidebarPortNameSchema.parse(port.name);
+      sidebarPortNameSchema.parse(port.name);
       const portId = createPortId(port);
       ports.set(portId, {
         port,
@@ -138,21 +121,9 @@ export const createPortBus = () => {
       });
 
       port.onDisconnect.addListener(() => {
-        if (!ports.has(portId)) {
-          return;
-        }
-
         ports.delete(portId);
-        emit({
-          type: 'PORT_DISCONNECTED',
-          portName,
-        });
       });
 
-      emit({
-        type: 'PORT_REGISTERED',
-        portName,
-      });
       return portId;
     },
 
@@ -168,46 +139,9 @@ export const createPortBus = () => {
       return true;
     },
 
-    /** 注销指定连接。 */
-    unregister(portId: string) {
-      return ports.delete(portId);
-    },
-
-    /** 主动断开指定连接。 */
-    disconnect(portId: string) {
-      const record = ports.get(portId);
-      if (!record) {
-        return false;
-      }
-
-      const portName = sidebarPortNameSchema.parse(record.port.name);
-      ports.delete(portId);
-      record.port.disconnect();
-      emit({
-        type: 'PORT_DISCONNECTED',
-        portName,
-      });
-      return true;
-    },
-
-    /** 恢复一个连接实例并返回新的内部标识。 */
-    recover(port: SidebarPort) {
-      const portName = sidebarPortNameSchema.parse(port.name);
-      const portId = createPortId(port);
-      ports.set(portId, {
-        port,
-        scope: null,
-      });
-      emit({
-        type: 'PORT_RECOVERED',
-        portName,
-      });
-      return portId;
-    },
-
-    /** 读取已注册的连接实例。 */
-    getPort(portId: string) {
-      return ports.get(portId)?.port ?? null;
+    /** 当前仍在路由表中的连接数，供测试与诊断使用。 */
+    size() {
+      return ports.size;
     },
 
     /** 向指定 promptTab 广播流式事件。 */

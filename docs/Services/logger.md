@@ -99,6 +99,7 @@
 | `entry.action.missing_tab` | warn | `url` |
 | `entry.action.failed` | error | `browserTabId`、`source`、`reason` |
 | `entry.action.unavailable` | warn | |
+| `entry.handler.failed` | error | `event`、`reason`；`onInstalled / contextMenus / tabs.*` 监听器里 fire-and-forget 入口任务的未捕获异常 |
 | `entry.action_behavior.synced` | debug | `openPanelOnActionClick` |
 | `entry.action_behavior.unavailable` / `.failed` | warn | `reason` |
 | `entry.tabs_query.unavailable` | warn | |
@@ -121,6 +122,8 @@
 | `page.info.loaded` | info | `hasPage`、`extractionMethod`、`contentLength`、`conversationCount`、`loadingCount`、`blockedByBlacklist`、`shouldExtract` |
 | `blacklist.detected` | info | `matchedRuleId` |
 | `blacklist.bypass_confirmed` | info | `browserTabId`、`normalizedUrl` |
+| `blacklist.bypass.clear_failed` | warn | `browserTabId`、`reason` |
+| `auto_trigger.unhandled` | error | `browserTabId`、`normalizedUrl`、`reason`；`RE_EXTRACT_CONTENT` 成功后编排自动触发时的未捕获异常 |
 | `chat.send.accepted` | info | `sessionId`、`messageId`、`modelId`、`textLength`、`imageCount`、`includePageContent`、`pageContentLength`、`branchCount` |
 | `chat.edit.accepted` / `chat.retry.accepted` / `chat.user_retry.accepted` | info | `targetMessageId`、`sessionId`、`messageId` |
 | `chat.cancel.requested` / `branch.cancel.requested` | info | `sessionId` 或 `branchId`、`stopped` |
@@ -168,6 +171,7 @@
 | `chat.stream.cancelled` | info | `durationMs`、`flushCount`、`contentLength` |
 | `chat.stream.failed` | error | `reason`、`provider`、`modelId`、`durationMs`、`timedOut`、`persisted`、`rolledBack` |
 | `chat.rollback.completed` | info | `userMessageId` |
+| `branch.skipped.no_images` | warn | `promptTab`、`modelId`；本轮带图片但并行模型不支持图片，跳过该分支 |
 | `chat.rollback.failed` | error | `reason` |
 | `chat.loading.cleanup_failed` / `branch.loading.cleanup_failed` | warn | `reason` |
 
@@ -182,6 +186,7 @@
 | `auto_trigger.started` | info | `promptTab`、`sessionId`、`messageId`、`modelId` |
 | `auto_trigger.finalize_failed` | warn | `sessionId`、`reason` |
 | `auto_trigger.failed` | error | `promptTab`、`modelId`、`reason` |
+| `auto_trigger.reset_failed` | warn | `promptTab`、`reason`；调度失败后把 `autoTriggerStatus` 回退为 `idle` 也失败 |
 
 ### background/sync 与 background/model_test
 

@@ -9,7 +9,10 @@ import {
   sidebarClearPageContextCommandSchema,
   sidebarCommandEnvelopeSchema,
   sidebarCommandTypeValues,
+  sidebarConfirmBlacklistContinueCommandSchema,
   sidebarExportConversationCommandSchema,
+  sidebarReExtractContentCommandSchema,
+  sidebarSwitchExtractionMethodCommandSchema,
   sidebarRetryMessageCommandSchema,
   sidebarRetryUserMessageCommandSchema,
   sidebarSelectAssistantBranchCommandSchema,
@@ -20,6 +23,8 @@ import {
   type SidebarConversationRecord,
   type SidebarLoadingStateRecord,
   type SidebarPageRecord,
+  type SidebarResponse,
+  type SidebarResponseFor,
 } from './sidebar-contract';
 import { deletePageWithPolicy } from './page-delete';
 import type { createSidebarSessionRegistry, SidebarSession } from './sidebar-session-registry';
@@ -67,6 +72,62 @@ type PageRepository = {
   }) => Promise<SidebarPageRecord | null>;
   /** 清理页面级数据。 */
   deletePage?: (normalizedUrl: string) => Promise<void>;
+  /** 切换页面当前提取方法并读取已有缓存。 */
+  selectExtractionCache?: (input: {
+    /** 归一化页面 URL。 */
+    normalizedUrl: string;
+    /** 目标提取方法。 */
+    method: ExtractionMethod;
+  }) => Promise<
+    | { hasCachedContent: false }
+    | { hasCachedContent: true; content: string; extractionMethod: ExtractionMethod }
+  >;
+};
+
+type ExtractionMethod = 'readability' | 'jina';
+
+type ExtractionService = {
+  /** 按指定方法重新提取页面并写入缓存。 */
+  extractPage: (input: {
+    /** 浏览器标签页 id。 */
+    tabId: number;
+    /** 页面 URL。 */
+    pageUrl: string;
+    /** 提取方法。 */
+    method: ExtractionMethod;
+  }) => Promise<{
+    /** 归一化页面 URL。 */
+    normalizedUrl: string;
+    /** 页面原始 URL。 */
+    url: string;
+    /** 页面标题。 */
+    title: string;
+    /** 页面 favicon。 */
+    faviconUrl: string;
+    /** 正文内容。 */
+    content: string;
+    /** 实际使用的提取方法。 */
+    extractionMethod: ExtractionMethod;
+  }>;
+};
+
+type BlacklistBypass = {
+  /** 为当前 browserTab + normalizedUrl 发放放行令牌。 */
+  grant: (browserTabId: number, normalizedUrl: string) => Promise<void>;
+};
+
+type AutoTriggerService = {
+  /** 提取完成后编排自动触发。 */
+  handleExtractionCompleted: (input: {
+    /** 浏览器标签页 id。 */
+    browserTabId: number;
+    /** 页面原始 URL。 */
+    pageUrl: string;
+    /** 归一化页面 URL。 */
+    normalizedUrl: string;
+    /** 页面正文。 */
+    pageContent: string;
+  }) => Promise<void>;
 };
 
 type ConfigRepository = {
@@ -223,7 +284,7 @@ type ConversationExporter = {
     normalizedUrl: string;
     /** promptTab 稳定 id。 */
     promptTabId: string;
-  }) => Promise<unknown>;
+  }) => Promise<SidebarResponseFor<'EXPORT_CONVERSATION_SUCCESS'>>;
 };
 
 type SidebarHandlerContext = {
@@ -246,6 +307,10 @@ export const createSidebarCommandHandler = ({
   logger,
   configRepository,
   syncRepository,
+  extractionService,
+  blacklistBypass,
+  autoTrigger,
+  extractionLogger,
   assertPageSender = assertSidebarPageSender,
   now = () => Date.now(),
 }: {
@@ -259,6 +324,11 @@ export const createSidebarCommandHandler = ({
   logger?: SidebarCommandLogger;
   configRepository?: ConfigRepository;
   syncRepository?: SyncRepository;
+  extractionService?: ExtractionService;
+  blacklistBypass?: BlacklistBypass;
+  autoTrigger?: AutoTriggerService;
+  /** 提取相关事件使用独立 scope，与 `Services/logger.md` 的 `background/extraction` 约定一致。 */
+  extractionLogger?: SidebarCommandLogger;
   assertPageSender?: (sender: SidebarMessageSender, runtimeId: string) => void;
   now?: () => number;
 }) => {
@@ -268,7 +338,8 @@ export const createSidebarCommandHandler = ({
     error: () => undefined,
   };
 
-  return async (input: unknown, context: SidebarHandlerContext) => {
+  // 返回类型钉在契约的响应 union 上：任何 case 少字段、拼错字段名都会在编译期暴露。
+  return async (input: unknown, context: SidebarHandlerContext): Promise<SidebarResponse> => {
     if (!isSidebarCommandMessage(input)) {
       const type = typeof input === 'object' && input !== null && 'type' in input ? String((input as { type: unknown }).type) : 'unknown';
       throw new Error(`unsupported command: ${type}`);
@@ -337,7 +408,7 @@ export const createSidebarCommandHandler = ({
           throw new Error('unsupported command: SEND_CHAT');
         }
         const normalizedUrl = normalizePageUrl(command.pageUrl);
-        const now = Date.now();
+        const initializedAt = now();
         const page =
           (await pageRepository.setIncludePageContent?.({
             normalizedUrl,
@@ -350,7 +421,7 @@ export const createSidebarCommandHandler = ({
             normalizedUrl,
             url: command.pageUrl,
             promptTabId: command.promptTabId,
-            initializedAt: now,
+            initializedAt,
             autoTriggerStatus: promptTabState?.autoTriggerStatus === 'error' ? 'idle' : promptTabState?.autoTriggerStatus ?? 'idle',
           });
         }
@@ -395,9 +466,9 @@ export const createSidebarCommandHandler = ({
             sessionId: session.sessionId,
             userMessageId: session.userMessageId ?? null,
             messageId: session.messageId,
-            branchId: session.branchId ?? '',
-            modelId: session.modelId ?? command.modelId,
-            modelLabel: session.modelLabel ?? '',
+            branchId: session.branchId,
+            modelId: session.modelId,
+            modelLabel: session.modelLabel,
             branches,
           },
         };
@@ -441,9 +512,9 @@ export const createSidebarCommandHandler = ({
           payload: {
             editedMessageId: command.messageId,
             messageId: session.messageId,
-            branchId: session.branchId ?? '',
-            modelId: session.modelId ?? '',
-            modelLabel: session.modelLabel ?? '',
+            branchId: session.branchId,
+            modelId: session.modelId,
+            modelLabel: session.modelLabel,
             sessionId: session.sessionId,
             branches,
           },
@@ -488,9 +559,9 @@ export const createSidebarCommandHandler = ({
           payload: {
             retriedMessageId: command.messageId,
             messageId: session.messageId,
-            branchId: session.branchId ?? '',
-            modelId: session.modelId ?? '',
-            modelLabel: session.modelLabel ?? '',
+            branchId: session.branchId,
+            modelId: session.modelId,
+            modelLabel: session.modelLabel,
             sessionId: session.sessionId,
             branches,
           },
@@ -535,6 +606,8 @@ export const createSidebarCommandHandler = ({
           payload: {
             messageId: session.messageId,
             branchId: session.branchId,
+            modelId: session.modelId,
+            modelLabel: session.modelLabel,
             sessionId: session.sessionId,
           },
         };
@@ -564,7 +637,7 @@ export const createSidebarCommandHandler = ({
           promptTabId: command.promptTabId,
           messageId: command.messageId,
           branchId: command.branchId,
-          now: Date.now(),
+          now: now(),
         });
         commandLogger.info('branch.primary.selected', {
           browserTabId: command.tabId,
@@ -691,7 +764,7 @@ export const createSidebarCommandHandler = ({
           promptTabId: command.promptTabId,
           messageId: command.messageId,
           branchId: command.branchId,
-          now: Date.now(),
+          now: now(),
         });
         await conversationRepository.removeBranchLoadingState(normalizedUrl, command.promptTabId, command.branchId);
         commandLogger.info('branch.delete.completed', {
@@ -767,7 +840,7 @@ export const createSidebarCommandHandler = ({
           initializedAt: null,
           lastAutoTriggerAt: null,
           autoTriggerStatus: 'idle',
-          lastClearedAt: Date.now(),
+          lastClearedAt: now(),
         });
         commandLogger.info('prompt_tab.clear.completed', {
           browserTabId: command.tabId,
@@ -808,10 +881,124 @@ export const createSidebarCommandHandler = ({
         });
         return result;
       }
-      case 'CONFIRM_BLACKLIST_CONTINUE':
-      case 'SWITCH_EXTRACTION_METHOD':
-      case 'RE_EXTRACT_CONTENT':
-        throw new Error(`unsupported command: ${input.type}`);
+      case 'CONFIRM_BLACKLIST_CONTINUE': {
+        const command = sidebarConfirmBlacklistContinueCommandSchema.parse(input);
+        assertPageSender(context.sender, runtime.id);
+        if (!blacklistBypass) {
+          throw new Error('unsupported command: CONFIRM_BLACKLIST_CONTINUE');
+        }
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        await blacklistBypass.grant(command.tabId, normalizedUrl);
+        commandLogger.info('blacklist.bypass_confirmed', {
+          browserTabId: command.tabId,
+          normalizedUrl,
+        });
+        return {
+          type: 'CONFIRM_BLACKLIST_CONTINUE_SUCCESS' as const,
+          payload: {
+            allowed: true as const,
+          },
+        };
+      }
+      case 'SWITCH_EXTRACTION_METHOD': {
+        const command = sidebarSwitchExtractionMethodCommandSchema.parse(input);
+        assertPageSender(context.sender, runtime.id);
+        if (!pageRepository.selectExtractionCache) {
+          throw new Error('unsupported command: SWITCH_EXTRACTION_METHOD');
+        }
+        const normalizedUrl = normalizePageUrl(command.pageUrl);
+        const eventLogger = extractionLogger ?? commandLogger;
+        try {
+          const result = await pageRepository.selectExtractionCache({ normalizedUrl, method: command.method });
+          eventLogger.info('extraction.method_switched', {
+            browserTabId: command.tabId,
+            normalizedUrl,
+            method: command.method,
+            hasCachedContent: result.hasCachedContent,
+          });
+          const response: SidebarResponseFor<'SWITCH_EXTRACTION_METHOD_SUCCESS'> = {
+            type: 'SWITCH_EXTRACTION_METHOD_SUCCESS',
+            payload: result.hasCachedContent
+              ? {
+                  hasCachedContent: true,
+                  method: command.method,
+                  content: result.content,
+                  extractionMethod: result.extractionMethod,
+                }
+              : {
+                  hasCachedContent: false,
+                  method: command.method,
+                },
+          };
+          return response;
+        } catch (error) {
+          eventLogger.error('extraction.method_switch_failed', {
+            browserTabId: command.tabId,
+            normalizedUrl,
+            method: command.method,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+      }
+      case 'RE_EXTRACT_CONTENT': {
+        const command = sidebarReExtractContentCommandSchema.parse(input);
+        assertPageSender(context.sender, runtime.id);
+        if (!extractionService) {
+          throw new Error('unsupported command: RE_EXTRACT_CONTENT');
+        }
+        const eventLogger = extractionLogger ?? commandLogger;
+        const extractionStartedAt = now();
+        // 只有侧边栏打开流程中的提取成功后才编排自动触发；手动重提取不顺带触发其他 promptTab。
+        const shouldRunAutoTrigger = command.source === 'panel_bootstrap' || command.source === 'blacklist_continue';
+        let result: Awaited<ReturnType<ExtractionService['extractPage']>>;
+        try {
+          result = await extractionService.extractPage({
+            tabId: command.tabId,
+            pageUrl: command.pageUrl,
+            method: command.method,
+          });
+        } catch (error) {
+          eventLogger.error('extraction.failed', {
+            browserTabId: command.tabId,
+            normalizedUrl: normalizePageUrl(command.pageUrl),
+            method: command.method,
+            source: command.source,
+            durationMs: now() - extractionStartedAt,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+        eventLogger.info('extraction.completed', {
+          browserTabId: command.tabId,
+          normalizedUrl: result.normalizedUrl,
+          method: result.extractionMethod,
+          source: command.source,
+          contentLength: result.content.length,
+          durationMs: now() - extractionStartedAt,
+          autoTrigger: shouldRunAutoTrigger,
+        });
+        if (shouldRunAutoTrigger && autoTrigger) {
+          void autoTrigger
+            .handleExtractionCompleted({
+              browserTabId: command.tabId,
+              pageUrl: result.url,
+              normalizedUrl: result.normalizedUrl,
+              pageContent: result.content,
+            })
+            .catch((error: unknown) => {
+              commandLogger.error('auto_trigger.unhandled', {
+                browserTabId: command.tabId,
+                normalizedUrl: result.normalizedUrl,
+                reason: error instanceof Error ? error.message : String(error),
+              });
+            });
+        }
+        return {
+          type: 'RE_EXTRACT_CONTENT_SUCCESS' as const,
+          payload: result,
+        };
+      }
       default:
         throw new Error(`unsupported command: ${(input as { type: string }).type}`);
     }

@@ -179,21 +179,23 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
         }
 
         const triggerAt = now();
-        await deps.pageRepository.setIncludePageContent?.({
-          normalizedUrl: input.normalizedUrl,
-          url: input.pageUrl,
-          includePageContent: true,
-        });
-        await deps.pageRepository.setPromptTabState({
-          normalizedUrl: input.normalizedUrl,
-          url: input.pageUrl,
-          promptTabId: quickInput.id,
-          initializedAt: triggerAt,
-          lastAutoTriggerAt: triggerAt,
-          autoTriggerStatus: 'running',
-        });
-
+        // 标记 running 之后的任何失败都必须回退为 idle，所以前置写入也放进同一个 try。
+        let markedRunning = false;
         try {
+          await deps.pageRepository.setIncludePageContent?.({
+            normalizedUrl: input.normalizedUrl,
+            url: input.pageUrl,
+            includePageContent: true,
+          });
+          await deps.pageRepository.setPromptTabState({
+            normalizedUrl: input.normalizedUrl,
+            url: input.pageUrl,
+            promptTabId: quickInput.id,
+            initializedAt: triggerAt,
+            lastAutoTriggerAt: triggerAt,
+            autoTriggerStatus: 'running',
+          });
+          markedRunning = true;
           const session = await deps.chatDispatchService.dispatchChat({
             normalizedUrl: input.normalizedUrl,
             promptTabId: quickInput.id,
@@ -257,12 +259,23 @@ export const createSidebarAutoTriggerService = (deps: SidebarAutoTriggerDeps) =>
             });
         } catch (error: unknown) {
           const reason = describeError(error);
-          await deps.pageRepository.setPromptTabState({
-            normalizedUrl: input.normalizedUrl,
-            url: input.pageUrl,
-            promptTabId: quickInput.id,
-            autoTriggerStatus: 'idle',
-          });
+          if (markedRunning) {
+            try {
+              await deps.pageRepository.setPromptTabState({
+                normalizedUrl: input.normalizedUrl,
+                url: input.pageUrl,
+                promptTabId: quickInput.id,
+                autoTriggerStatus: 'idle',
+              });
+            } catch (resetError: unknown) {
+              deps.logger.warn('auto_trigger.reset_failed', {
+                browserTabId: input.browserTabId,
+                normalizedUrl: input.normalizedUrl,
+                promptTab: quickInput.id,
+                reason: describeError(resetError),
+              });
+            }
+          }
           deps.logger.error('auto_trigger.failed', {
             browserTabId: input.browserTabId,
             normalizedUrl: input.normalizedUrl,

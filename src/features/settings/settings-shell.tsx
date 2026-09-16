@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { cn } from '../../lib/utils';
 import type { ExtensionConfig } from '../../domain/config/config-schema';
@@ -135,6 +135,12 @@ export const SettingsShell = () => {
     };
   }, []);
 
+  // 全量 JSON 比对成本不低，只在配置引用变化时重算，而不是每次按键都跑。
+  const dirty = useMemo(
+    () => (savedConfig && draftConfig ? hasUnsavedChanges(savedConfig, draftConfig) : false),
+    [savedConfig, draftConfig],
+  );
+
   if (!savedConfig || !draftConfig || !cacheStats) {
     return (
       <main
@@ -151,7 +157,6 @@ export const SettingsShell = () => {
     );
   }
 
-  const dirty = hasUnsavedChanges(savedConfig, draftConfig);
   const enabledModels = getEnabledCompleteModels(draftConfig);
 
   const updateDraftConfig = (next: ExtensionConfig) => {
