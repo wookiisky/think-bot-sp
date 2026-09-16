@@ -124,6 +124,37 @@ describe('loading-state reconciler', () => {
     ]);
   });
 
+  it('分支持久化失败时保留恢复标记，只广播成功写入的分支，重试后完成恢复', async () => {
+    const { reconciler, repository, publishToPromptTab } = createHarness();
+    await seedLoadingConversation(repository);
+    vi.spyOn(repository, 'failAssistantBranch').mockRejectedValueOnce(new Error('storage failed'));
+
+    await expect(reconciler.reconcilePromptTab(normalizedUrl, promptTabId)).resolves.toBe('failed');
+    expect(await repository.getLoadingState(normalizedUrl, promptTabId)).not.toBeNull();
+    expect(publishToPromptTab.mock.calls.map(([event]) => event.type)).toEqual(['BRANCH_STREAM_FAILED']);
+    expect((await repository.getConversation(normalizedUrl, promptTabId))!.messages[1]!.branches[0]!.status).toBe('loading');
+
+    await expect(reconciler.reconcilePromptTab(normalizedUrl, promptTabId)).resolves.toBe('reconciled');
+    expect(await repository.getLoadingState(normalizedUrl, promptTabId)).toBeNull();
+    expect(publishToPromptTab.mock.calls.map(([event]) => event.type)).toEqual([
+      'BRANCH_STREAM_FAILED', 'CHAT_STREAM_FAILED', 'LOADING_STATE_UPDATE',
+    ]);
+  });
+
+  it('删除标记失败不报告恢复完成，reconcileAll 只计入完成项且允许重试', async () => {
+    const { reconciler, repository, publishToPromptTab } = createHarness();
+    await seedLoadingConversation(repository);
+    vi.spyOn(repository, 'removeLoadingState').mockRejectedValueOnce(new Error('storage failed'));
+
+    await expect(reconciler.reconcileAll()).resolves.toBe(0);
+    expect(await repository.getLoadingState(normalizedUrl, promptTabId)).not.toBeNull();
+    expect(publishToPromptTab.mock.calls.map(([event]) => event.type)).toEqual([
+      'CHAT_STREAM_FAILED', 'BRANCH_STREAM_FAILED',
+    ]);
+    await expect(reconciler.reconcileAll()).resolves.toBe(1);
+    expect(await repository.getLoadingState(normalizedUrl, promptTabId)).toBeNull();
+  });
+
   it('会话缺失时仍会清理 loading 记录并广播终态', async () => {
     const { reconciler, repository, publishToPromptTab } = createHarness();
     await repository.saveLoadingState({

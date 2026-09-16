@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -899,6 +899,60 @@ describe('SettingsShell', () => {
     });
     expect(await screen.findByRole('heading', { name: '设置' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '语言' })).toHaveTextContent('中文');
+  });
+
+  it.each(['success', 'failure'] as const)('同步期间切换分栏仍禁用编辑，结束后恢复：%s', async (outcome) => {
+    const config = createDefaultConfig();
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+    mocks.saveConfig.mockResolvedValueOnce(config);
+    let finish!: () => void;
+    mocks.syncNow.mockReturnValueOnce(new Promise((resolve, reject) => {
+      finish = () => outcome === 'success'
+        ? resolve({ config, result: { provider: 'gist', lastSyncAt: 300, snapshotBytes: 512 } })
+        : reject(new Error('sync failed'));
+    }));
+    render(<SettingsShell />);
+    await screen.findByRole('heading', { name: '设置' });
+    fireEvent.click(screen.getByRole('button', { name: '保存并同步' }));
+    await waitFor(() => expect(mocks.syncNow).toHaveBeenCalledOnce());
+
+    expect(screen.getByLabelText('System Prompt')).toBeDisabled();
+    fireEvent.click(screen.getByRole('tab', { name: '展示配置' }));
+    expect(screen.getByLabelText('一级标题字号')).toBeDisabled();
+    fireEvent.click(screen.getByRole('tab', { name: '云同步' }));
+    expect(screen.getByLabelText('启用同步')).toBeDisabled();
+    fireEvent.click(screen.getByRole('tab', { name: '基础设置' }));
+    await act(async () => finish());
+    expect(screen.getByLabelText('System Prompt')).toBeEnabled();
+    expect(screen.getByRole('button', { name: '保存' })).toBeEnabled();
+  });
+
+  it('导入远端模板时保留等待期间在其他分栏编辑的草稿', async () => {
+    const config = createDefaultConfig({ quickInputs: [] });
+    mocks.getConfig.mockResolvedValueOnce(config);
+    mocks.getLocalCacheStats.mockResolvedValueOnce({ pageCount: 0, entryCount: 0, bytes: 0 });
+    let finish!: (value: Response) => void;
+    vi.spyOn(globalThis, 'fetch').mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<SettingsShell />);
+    await screen.findByRole('heading', { name: '设置' });
+    await user.click(screen.getByRole('tab', { name: '快捷输入' }));
+    await user.click(screen.getByRole('button', { name: '导入远端模板' }));
+    await user.click(screen.getByRole('button', { name: '导入' }));
+    await user.click(screen.getByRole('tab', { name: '基础设置' }));
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '保存并同步' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('System Prompt'), { target: { value: '请求期间的新草稿' } });
+    await act(async () => finish({
+      ok: true,
+      text: async () => JSON.stringify([{ name: '远端总结', prompt: '请总结远端页面' }]),
+    } as Response));
+
+    expect(screen.getByLabelText('System Prompt')).toHaveValue('请求期间的新草稿');
+    expect(screen.getByRole('button', { name: '保存' })).toBeEnabled();
+    await user.click(screen.getByRole('tab', { name: '快捷输入' }));
+    expect(await screen.findByText('远端总结')).toBeInTheDocument();
   });
 
   it('保存并同步会先保存再同步，并回写反馈', async () => {

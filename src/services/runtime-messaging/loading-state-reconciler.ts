@@ -109,7 +109,7 @@ type ReconcilerDeps = {
     /** 收敛某个分支为失败态。 */
     failAssistantBranch: (_input: FailInput) => Promise<unknown>;
     /** 删除 loading 记录。 */
-    removeLoadingState: (_normalizedUrl: string, _promptTabId: string) => Promise<unknown>;
+    removeLoadingState: (_normalizedUrl: string, _promptTabId: string, _expectedSessionId?: string) => Promise<unknown>;
   };
   /** 活跃会话注册表。 */
   sessionRegistry: {
@@ -128,7 +128,7 @@ type ReconcilerDeps = {
 };
 
 /** 单个 promptTab 的收敛结果。 */
-export type ReconcileOutcome = 'idle' | 'active' | 'reconciled';
+export type ReconcileOutcome = 'idle' | 'active' | 'reconciled' | 'failed';
 
 /** 已持久化的 loading 在当前 worker 内无对应会话即为孤儿。 */
 const isOrphaned = (loadingState: LoadingStateLike | null, deps: ReconcilerDeps): loadingState is LoadingStateLike => {
@@ -166,6 +166,7 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
     const startedAtByBranch = new Map(loadingState.branchStates.map((branch) => [branch.branchId, branch.startedAt]));
     const failedAt = now();
     let failedBranchCount = 0;
+    let persistenceFailed = false;
     const conversation = await deps.conversationRepository.getConversation(normalizedUrl, promptTabId);
 
     for (const message of conversation?.messages ?? []) {
@@ -192,6 +193,7 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
             now: failedAt,
           });
         } catch (error) {
+          persistenceFailed = true;
           logger.warn('loading.reconcile.branch_failed', {
             normalizedUrl,
             promptTab: promptTabId,
@@ -199,6 +201,7 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
             branchId: branch.id,
             reason: describeError(error),
           });
+          continue;
         }
         failedBranchCount += 1;
         publishSafely({
@@ -214,14 +217,19 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
       }
     }
 
+    // 任一分支尚未落库时保留标记，后续恢复只需继续处理仍在 loading 的分支。
+    if (persistenceFailed) {
+      return false;
+    }
     try {
-      await deps.conversationRepository.removeLoadingState(normalizedUrl, promptTabId);
+      await deps.conversationRepository.removeLoadingState(normalizedUrl, promptTabId, sessionId);
     } catch (error) {
       logger.warn('loading.reconcile.cleanup_failed', {
         normalizedUrl,
         promptTab: promptTabId,
         reason: describeError(error),
       });
+      return false;
     }
     publishSafely({ type: 'LOADING_STATE_UPDATE', normalizedUrl, promptTabId, sessionId, status: 'error' });
     logger.warn('loading.reconcile.orphan_converged', {
@@ -232,10 +240,11 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
       startedAt: loadingState.startedAt,
       staleMs: loadingState.startedAt === null ? null : Math.max(0, failedAt - loadingState.startedAt),
     });
+    return true;
   };
 
   return {
-    /** 检查单个 promptTab：无 loading 返回 idle，会话仍活跃返回 active，孤儿则收敛后返回 reconciled。 */
+    /** 检查单个标签；恢复失败返回 failed 并保留标记，成功返回 reconciled。 */
     async reconcilePromptTab(normalizedUrl: string, promptTabId: string): Promise<ReconcileOutcome> {
       const loadingState = await deps.conversationRepository.getLoadingState(normalizedUrl, promptTabId);
       if (!hasActiveLoading(loadingState)) {
@@ -244,8 +253,7 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
       if (!isOrphaned(loadingState, deps)) {
         return 'active';
       }
-      await reconcileLoadingState(loadingState);
-      return 'reconciled';
+      return await reconcileLoadingState(loadingState) ? 'reconciled' : 'failed';
     },
 
     /** worker 启动时扫描全部 loading 记录，收敛所有孤儿；返回收敛条数。 */
@@ -258,8 +266,9 @@ export const createLoadingStateReconciler = (deps: ReconcilerDeps) => {
         if (!isOrphaned(latest, deps) || latest.sessionId !== snapshot.sessionId) {
           continue;
         }
-        await reconcileLoadingState(latest);
-        reconciled += 1;
+        if (await reconcileLoadingState(latest)) {
+          reconciled += 1;
+        }
       }
       return reconciled;
     },

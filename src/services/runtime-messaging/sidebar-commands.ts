@@ -483,6 +483,10 @@ export const createSidebarCommandHandler = ({
 
         const normalizedUrl = normalizePageUrl(command.pageUrl);
         const page = await pageRepository.getPage(normalizedUrl);
+        await sessionRegistry.cancelPromptTabSessions({
+          normalizedUrl,
+          promptTabId: command.promptTabId,
+        });
         const session = await chatDispatchService.retryUserMessage({
           normalizedUrl,
           promptTabId: command.promptTabId,

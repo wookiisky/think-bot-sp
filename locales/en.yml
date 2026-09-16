@@ -151,6 +151,7 @@ workspace.includePageContent: Include Page Content
 workspace.chatInput: Chat Input
 workspace.resizeComposer: Resize Composer
 workspace.addImage: Add Image
+workspace.notice.imageReadFailed: Could not read the image. Please select the file again.
 workspace.removeImage: Remove Image
 workspace.selectedImage: Selected Image
 workspace.send: Send

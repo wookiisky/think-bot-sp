@@ -106,6 +106,71 @@ describe('sync and local mutations', () => {
     expect(await context.conversationRepository.getConversation(url, 'chat')).toBeNull();
   });
 
+  it.each([false, true])('keeps completed tab clears across sync (restart: %s)', async (restart) => {
+    const context = await setup();
+    await context.conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'old', content: 'old', images: [], now: 100 });
+    await context.conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'other', messageId: 'other', content: 'keep', images: [], now: 100 });
+    const remote = await context.syncRepository.buildSnapshot();
+    await context.conversationRepository.clearPromptTabData(url, 'chat');
+    await context.pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
+    // A later edit to another tab must not erase the earlier clear marker.
+    remote.pages[0] = { ...remote.pages[0]!, updatedAt: Date.now() + 1000, expiresAt: Date.now() + 2000 };
+    if (restart) {
+      const saved = context.storage.dump();
+      const restartedStorage = createFakeStorageArea();
+      await restartedStorage.set(saved);
+      const adapter = createChromeLocalAdapter(restartedStorage);
+      context.syncRepository = createSyncRepository({ storage: adapter, configRepository: context.configRepository, pageRepository: context.pageRepository, conversationRepository: context.conversationRepository });
+      context.service = createSyncService({ syncRepository: context.syncRepository, fetchImpl: context.fetchImpl as typeof fetch });
+    }
+    context.remote.resolve(remote);
+    await context.service.syncNow(context.config);
+    expect(context.uploaded()?.conversations.map((conversation) => conversation.promptTabId)).toEqual(['other']);
+    expect(context.uploaded()?.pages[0]?.promptTabStates).toContainEqual(expect.objectContaining({ promptTabId: 'chat', lastClearedAt: 200 }));
+    expect((await context.syncRepository.buildSnapshot()).conversations.map((conversation) => conversation.promptTabId)).toEqual(['other']);
+  });
+
+  it('keeps new chat after clear even if an old remote chat was updated later', async () => {
+    const context = await setup();
+    await context.conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'old', content: 'old', images: [], now: 100 });
+    const remote = await context.syncRepository.buildSnapshot();
+    remote.conversations[0]!.updatedAt = 500;
+    await context.conversationRepository.clearPromptTabData(url, 'chat');
+    await context.pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
+    await context.conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'new', content: 'new', images: [], now: 300 });
+    context.remote.resolve(remote);
+    await context.service.syncNow(context.config);
+    expect((await context.conversationRepository.getConversation(url, 'chat'))?.messages.map((message) => message.id)).toEqual(['new']);
+    expect(context.uploaded()?.conversations[0]?.messages.map((message) => message.id)).toEqual(['new']);
+  });
+
+  it.each([false, true])('applies remote tab clears while preserving active local requests (active: %s)', async (active) => {
+    const context = await setup();
+    const target = { normalizedUrl: url, promptTabId: 'chat', messageId: 'assistant' };
+    await context.conversationRepository.appendAssistantMessage({
+      ...target, now: 100, selectedBranchId: 'branch',
+      initialBranches: [{ id: 'branch', modelId: 'model', modelLabel: 'Model', isPrimary: true }],
+    });
+    await context.pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
+    const remote = await context.syncRepository.buildSnapshot();
+    await context.pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: null });
+    if (active) {
+      await context.conversationRepository.saveLoadingState(createLoadingState({ normalizedUrl: url, promptTabId: 'chat', sessionId: 'old-session', now: 100 }));
+    }
+    context.remote.resolve(remote);
+    await context.service.syncNow(context.config);
+    if (active) {
+      await context.conversationRepository.appendAssistantChunk({ ...target, chunk: 'continued', now: 300 });
+      expect((await context.conversationRepository.getConversation(url, 'chat'))?.messages[0]?.content).toBe('continued');
+      expect(await context.conversationRepository.getLoadingState(url, 'chat')).not.toBeNull();
+      expect(context.uploaded()?.conversations).toHaveLength(1);
+    } else {
+      expect(await context.conversationRepository.getConversation(url, 'chat')).toBeNull();
+      expect(context.uploaded()?.conversations).toEqual([]);
+      expect((await context.pageRepository.getPage(url))?.promptTabStates).toContainEqual(expect.objectContaining({ promptTabId: 'chat', lastClearedAt: 200 }));
+    }
+  });
+
   it.each([false, true])('preserves an active assistant and subsequent chunks (remote deletes page: %s)', async (deleted) => {
     const context = await setup();
     await context.conversationRepository.appendAssistantMessage({

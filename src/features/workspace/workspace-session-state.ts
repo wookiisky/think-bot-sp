@@ -15,6 +15,11 @@ export const getWorkspaceSessionUpdate = (event: SidebarPortEvent): WorkspaceSes
     case 'CHAT_STREAM_CHUNK':
     case 'RESTORE_LOADING':
       return { activeSessionId: event.sessionId, restoreMessageId: event.messageId };
+    case 'BRANCH_STREAM_STARTED':
+      return { startedSessionId: event.sessionId };
+    case 'BRANCH_STREAM_FINISHED':
+    case 'BRANCH_STREAM_FAILED':
+    case 'BRANCH_STREAM_CANCELLED':
     case 'CHAT_STREAM_FINISHED':
       return { terminalSessionId: event.sessionId };
     case 'CHAT_STREAM_FAILED':

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,9 +25,60 @@ const t = (key: string) => translations[key] ?? key;
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('ChatInput', () => {
+  /** 创建上传测试所需的受控输入属性。 */
+  const uploadProps = () => ({
+    disabled: false, sending: false, text: '', images: [], includePageContent: true,
+    selectedModelId: 'model-1', models: [{ id: 'model-1', name: '主模型', supportsImages: true }],
+    t, onSelectModel: vi.fn(), onTextChange: vi.fn(), onImagesChange: vi.fn(),
+    onIncludePageContentChange: vi.fn(), onSend: vi.fn(), onClear: vi.fn(), onExport: vi.fn(),
+  });
+
+  it('读取图片后复位文件控件，允许再次选择同一文件', async () => {
+    const props = uploadProps();
+    const user = userEvent.setup();
+    render(<ChatInput {...props} />);
+    const input = screen.getByLabelText('添加图片') as HTMLInputElement;
+    const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+    await user.upload(input, file);
+    await waitFor(() => expect(props.onImagesChange).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(input.value).toBe(''));
+    await user.upload(input, file);
+    await waitFor(() => expect(props.onImagesChange).toHaveBeenCalledTimes(2));
+    expect(props.onImagesChange).toHaveBeenLastCalledWith([expect.stringMatching(/^data:image\/png;base64,/)]);
+  });
+
+  it.each(['error', 'abort'])('读取失败时保留已有图片、显示错误并允许重新上传：%s', async (eventType) => {
+    const props = { ...uploadProps(), images: ['data:image/png;base64,existing'] };
+    const user = userEvent.setup();
+    vi.spyOn(FileReader.prototype, 'readAsDataURL').mockImplementationOnce(function (this: FileReader) {
+      queueMicrotask(() => this.dispatchEvent(new ProgressEvent(eventType)));
+    });
+    render(<ChatInput {...props} />);
+    const input = screen.getByLabelText('添加图片') as HTMLInputElement;
+    const file = new File(['image'], 'photo.png', { type: 'image/png' });
+
+    await user.upload(input, file);
+    expect(await screen.findByRole('alert')).toHaveTextContent('workspace.notice.imageReadFailed');
+    expect(props.onImagesChange).not.toHaveBeenCalled();
+    expect(input.value).toBe('');
+    await user.upload(input, file);
+    await waitFor(() => expect(props.onImagesChange).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('关闭文件选择器且没有选择文件时不修改图片', () => {
+    const props = uploadProps();
+    render(<ChatInput {...props} />);
+    fireEvent.change(screen.getByLabelText('添加图片'), { target: { files: [] } });
+    expect(props.onImagesChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('页面正文开关用明确样式区分开启和关闭态', () => {
     const baseProps = {
       disabled: false,

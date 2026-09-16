@@ -313,11 +313,13 @@ export const SettingsShell = () => {
     setImportingQuickInputTemplates(true);
     try {
       const templates = await fetchQuickInputTemplates({ url: normalizedTemplateUrl });
-      const result = appendQuickInputTemplates({
-        config: draftConfig,
+      const importedAt = Date.now();
+      // 模板只追加到最新草稿，保留网络等待期间的编辑。
+      setDraftConfig((current) => current ? appendQuickInputTemplates({
+        config: current,
         templates,
-      });
-      setDraftConfig(result.config);
+        now: () => importedAt,
+      }).config : current);
       setToast(null);
     } catch (error) {
       const message = describeError(error);
@@ -329,7 +331,7 @@ export const SettingsShell = () => {
   };
 
   const handleSaveAndSync = async () => {
-    if (saving || syncing) {
+    if (saving || syncing || importingQuickInputTemplates) {
       return;
     }
 
@@ -452,7 +454,7 @@ export const SettingsShell = () => {
 
             <div className="min-w-0 justify-self-stretch lg:col-start-3 lg:justify-self-end">
               <SettingsActions
-                disabled={saving || syncing}
+                disabled={saving || syncing || importingQuickInputTemplates}
                 onSave={handleSave}
                 onSaveAndSync={handleSaveAndSync}
                 onReset={handleReset}
@@ -473,7 +475,7 @@ export const SettingsShell = () => {
                 config={draftConfig}
                 defaultModels={enabledModels}
                 cacheStats={cacheStats}
-                disabled={saving}
+                disabled={saving || syncing}
                 onChange={updateDraftConfig}
                 onClearCache={handleClearCache}
                 t={t}
@@ -489,7 +491,7 @@ export const SettingsShell = () => {
               >
                 <QuickInputsPanel
                   config={draftConfig}
-                  disabled={saving}
+                  disabled={saving || syncing}
                   importingTemplates={importingQuickInputTemplates}
                   defaultImportTemplateUrl={DEFAULT_QUICK_INPUT_TEMPLATE_URL}
                   onChange={updateDraftConfig}
@@ -503,7 +505,7 @@ export const SettingsShell = () => {
               <LanguageModelsPanel
                 config={draftConfig}
                 selectedModelId={selectedModelId}
-                disabled={saving}
+                disabled={saving || syncing}
                 onSelectModel={setSelectedModelId}
                 onChange={updateDraftConfig}
                 onTestModel={(model) => void handleTestModel(model.id)}
@@ -515,7 +517,7 @@ export const SettingsShell = () => {
             {activeSection === 'display' ? (
               <DisplaySettingsPanel
                 config={draftConfig}
-                disabled={saving}
+                disabled={saving || syncing}
                 onChange={updateDraftConfig}
                 t={t}
               />
@@ -524,7 +526,7 @@ export const SettingsShell = () => {
             {activeSection === 'sync' ? (
               <CloudSyncPanel
                 config={draftConfig}
-                disabled={saving}
+                disabled={saving || syncing || importingQuickInputTemplates}
                 testing={testingSync}
                 syncing={syncing}
                 feedback={syncFeedback}

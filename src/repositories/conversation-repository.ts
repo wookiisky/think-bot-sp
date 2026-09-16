@@ -259,8 +259,12 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       return readLoadingState(normalizedUrl, promptTabId);
     },
 
-    /** 删除单个 loading 状态。 */
-    async removeLoadingState(normalizedUrl: string, promptTabId: string) {
+    /** 仅清理所属会话的 loading；省略会话 id 时用于显式清理整个标签。 */
+    async removeLoadingState(normalizedUrl: string, promptTabId: string, expectedSessionId?: string) {
+      const current = await readLoadingState(normalizedUrl, promptTabId);
+      if (!current || (expectedSessionId !== undefined && current.sessionId !== expectedSessionId)) {
+        return;
+      }
       await storage.remove(getLoadingKey(normalizedUrl, promptTabId));
     },
 
@@ -268,6 +272,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
     async markLoadingStateStarted({
       normalizedUrl,
       promptTabId,
+      expectedSessionId,
       startedAt,
       now,
     }: {
@@ -275,13 +280,15 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
       normalizedUrl: string;
       /** promptTab 稳定 id。 */
       promptTabId: string;
+      /** 仅允许所属会话更新开始时间。 */
+      expectedSessionId?: string;
       /** 大模型调用开始时间。 */
       startedAt: number;
       /** 当前更新时间。 */
       now: number;
     }) {
       const current = await readLoadingState(normalizedUrl, promptTabId);
-      if (!current) {
+      if (!current || (expectedSessionId !== undefined && current.sessionId !== expectedSessionId)) {
         return null;
       }
 

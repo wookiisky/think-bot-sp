@@ -68,6 +68,25 @@ describe('shared stream lifecycle', () => {
     expect(events.at(-1)).toMatchObject({ type: 'LOADING_STATE_UPDATE', status: 'done' });
   });
 
+  it('旧请求完成时保留已接管标签的新请求 loading', async () => {
+    const { repository, service, streamText } = createFixture();
+    let releaseStream: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => { releaseStream = resolve; });
+    streamText.mockImplementation(async () => ({ textStream: (async function* () {
+      await gate;
+      yield 'answer';
+    })() }));
+    const session = await service.dispatchChat(request);
+    const loading = await repository.getLoadingState(scope.normalizedUrl, scope.promptTabId);
+    await repository.saveLoadingState({ ...loading, sessionId: 'session-new', startedAt: null });
+    releaseStream();
+
+    await expect(session.done).resolves.toMatchObject({ status: 'done' });
+    await expect(repository.getLoadingState(scope.normalizedUrl, scope.promptTabId)).resolves.toMatchObject({
+      sessionId: 'session-new', startedAt: null,
+    });
+  });
+
   it('branch cleanup failures do not skip the main loading cleanup or terminal event', async () => {
     vi.useFakeTimers();
     const { repository, service, events } = createFixture({ parallel: true });

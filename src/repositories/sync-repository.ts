@@ -2,6 +2,7 @@ import { createStorageRepository } from './chrome-local-adapter';
 import { applySystemConfigSeeds, createDefaultConfig, extensionConfigSchema } from '../domain/config/config-schema';
 import type { ExtensionConfig } from '../domain/config/config-schema';
 import { createDefaultSyncState, syncSnapshotSchema, syncStateSchema } from '../domain/sync/sync-snapshot-schema';
+import { isSyncConversationVisible } from '../domain/sync/sync-record-state';
 import type { SyncSnapshot, SyncState } from '../domain/sync/sync-snapshot-schema';
 import { hasActiveLoading, loadingStateRecordSchema } from '../domain/loading/loading-state-schema';
 import { pageRecordSchema } from '../domain/page/page-schema';
@@ -143,7 +144,7 @@ export const createSyncRepository = ({
         config: preserveAll || changedKeys.has(CONFIG_STORAGE_KEY) ? local.config : merged.config,
         pages: preserveAll ? local.pages : [...nextPages.values()],
         conversations: preserveAll ? local.conversations : [...nextConversations.values()]
-          .filter((conversation) => nextPages.has(conversation.normalizedUrl)),
+          .filter((conversation) => isSyncConversationVisible(conversation, nextPages.get(conversation.normalizedUrl))),
       });
       await repository.applyMergedSnapshot(snapshot, all);
       return { ...snapshot, config: applySystemConfigSeeds(snapshot.config), snapshotVersion: snapshot.snapshotVersion + 1 };
@@ -209,8 +210,8 @@ export const createSyncRepository = ({
         const deletedAt = tombstoneMap.get(page.normalizedUrl) ?? null;
         return deletedAt === null || page.updatedAt > deletedAt;
       });
-      const visiblePageUrlSet = new Set(visiblePages.map((page) => page.normalizedUrl));
-      const visibleConversations = conversations.filter((conversation) => visiblePageUrlSet.has(conversation.normalizedUrl));
+      const visiblePagesByUrl = new Map(visiblePages.map((page) => [page.normalizedUrl, page]));
+      const visibleConversations = conversations.filter((conversation) => isSyncConversationVisible(conversation, visiblePagesByUrl.get(conversation.normalizedUrl)));
 
       return syncSnapshotSchema.parse({
         schemaVersion: syncState.schemaVersion,
@@ -278,10 +279,7 @@ export const createSyncRepository = ({
         return false;
       });
 
-      if (removableKeys.length > 0) {
-        await storage.remove(removableKeys);
-      }
-
+      // 队列只保证串行，不提供回滚：先保存新值和删除标记，避免写入失败丢失旧数据。
       await storage.set({
         [CONFIG_STORAGE_KEY]: nextConfig,
         ...nextPageEntries,
@@ -293,6 +291,10 @@ export const createSyncRepository = ({
           lastSyncAt: nextLastSyncAt,
         }),
       });
+      // 清理失败继续向上报错；删除标记阻止残留记录再次导出，后续同步会重试清理。
+      if (removableKeys.length > 0) {
+        await storage.remove(removableKeys);
+      }
     },
 
     /** 在同步成功后刷新本地同步状态。 */

@@ -343,15 +343,16 @@ type ChatDispatchServiceDeps = {
   conversationRepository: {
     /** 保存 loading 状态。 */
     saveLoadingState: (_value: unknown) => Promise<unknown>;
-      /** 删除 loading 状态。 */
-      removeLoadingState: (_normalizedUrl: string, _promptTabId: string) => Promise<void>;
-      /** 标记主请求的大模型调用开始时间。 */
-      markLoadingStateStarted: (_input: {
-        normalizedUrl: string;
-        promptTabId: string;
-        startedAt: number;
-        now: number;
-      }) => Promise<unknown>;
+    /** 删除 loading 状态。 */
+    removeLoadingState: (_normalizedUrl: string, _promptTabId: string, _expectedSessionId?: string) => Promise<void>;
+    /** 标记主请求的大模型调用开始时间。 */
+    markLoadingStateStarted: (_input: {
+      normalizedUrl: string;
+      promptTabId: string;
+      expectedSessionId?: string;
+      startedAt: number;
+      now: number;
+    }) => Promise<unknown>;
     /** 追加用户消息。 */
     appendUserMessage: (_input: {
       /** 归一化页面 URL。 */
@@ -988,7 +989,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
       try {
         const startedAt = now();
         if (input.primary) {
-          await deps.conversationRepository.markLoadingStateStarted({ ...scope, startedAt, now: startedAt });
+          await deps.conversationRepository.markLoadingStateStarted({ ...scope, expectedSessionId: sessionId, startedAt, now: startedAt });
         } else {
           await deps.conversationRepository.upsertBranchLoadingState({
             ...scope, sessionId, modelId: input.model.id, status: 'loading', startedAt, now: now(),
@@ -1182,7 +1183,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
         })),
       ]);
       try {
-        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
+        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId, input.sessionId);
       } catch {
         // 保留最初的启动错误；此时尚未创建任何网络请求和定时器。
       }
@@ -1253,7 +1254,7 @@ export const createChatDispatchService = (deps: ChatDispatchServiceDeps) => {
           persisted: false,
         });
       try {
-        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId);
+        await deps.conversationRepository.removeLoadingState(input.normalizedUrl, input.promptTabId, input.sessionId);
       } catch (error) {
         logger.warn('chat.loading.cleanup_failed', {
           normalizedUrl: input.normalizedUrl,

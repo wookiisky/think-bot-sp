@@ -99,6 +99,25 @@ describe('conversation-repository', () => {
     });
   });
 
+  it('旧会话的开始时间写入和清理不会影响新会话，所属会话可正常清理', async () => {
+    const repo = createConversationRepository(createChromeLocalAdapter(createFakeStorageArea()));
+    await repo.saveLoadingState({
+      id: 'loading:https://example.com/a:chat', normalizedUrl: 'https://example.com/a', promptTabId: 'chat',
+      sessionId: 'session-new', promptTabStatus: 'loading', startedAt: null,
+      branchStates: [], resumeTarget: null, cancelRequested: false, updatedAt: 1,
+    });
+    await repo.markLoadingStateStarted({
+      normalizedUrl: 'https://example.com/a', promptTabId: 'chat',
+      expectedSessionId: 'session-old', startedAt: 10, now: 10,
+    });
+    await repo.removeLoadingState('https://example.com/a', 'chat', 'session-old');
+    await expect(repo.getLoadingState('https://example.com/a', 'chat')).resolves.toMatchObject({
+      sessionId: 'session-new', startedAt: null,
+    });
+    await repo.removeLoadingState('https://example.com/a', 'chat', 'session-new');
+    await expect(repo.getLoadingState('https://example.com/a', 'chat')).resolves.toBeNull();
+  });
+
   it('记录主请求和分支请求的大模型调用开始时间', async () => {
     const storage = createFakeStorageArea();
     const repo = createConversationRepository(createChromeLocalAdapter(storage));

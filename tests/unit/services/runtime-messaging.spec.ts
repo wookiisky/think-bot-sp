@@ -929,6 +929,38 @@ describe('runtime-messaging', () => {
     });
   });
 
+  it('重试用户消息前取消旧会话，并等待其持久化与清理全部完成', async () => {
+    const sessionRegistry = createSidebarSessionRegistry();
+    let completeOldSession: () => void = () => undefined;
+    const cancel = vi.fn();
+    sessionRegistry.register({
+      sessionId: 'session-old', messageId: 'assistant-old', cancel,
+      done: new Promise<void>((resolve) => { completeOldSession = resolve; }),
+    }, { normalizedUrl: 'https://example.com/article', promptTabId: 'chat' });
+    const retryUserMessage = vi.fn().mockResolvedValue({
+      sessionId: 'session-new', messageId: 'assistant-new', cancel: vi.fn(), done: Promise.resolve(),
+    });
+    const handler = createSidebarCommandHandler({
+      runtime: { id: 'ext-id' },
+      pageRepository: { getPage: vi.fn().mockResolvedValue(null) },
+      conversationRepository: { listPageConversations: vi.fn(), listPageLoadingStates: vi.fn() },
+      sessionRegistry,
+      blacklistRepository: { isBlocked: vi.fn(), getMatchedRuleId: vi.fn() },
+      chatDispatchService: {
+        dispatchChat: vi.fn(), editUserMessage: vi.fn(), retryUserMessage, retryMessage: vi.fn(), expandBranches: vi.fn(),
+      },
+    });
+    const pending = handler({
+      type: 'RETRY_USER_MESSAGE', tabId: 7, pageUrl: 'https://example.com/article',
+      promptTabId: 'chat', messageId: 'user-1',
+    }, { sender: { id: 'ext-id', url: 'chrome-extension://ext-id/sidebar.html' } });
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    expect(retryUserMessage).not.toHaveBeenCalled();
+    completeOldSession();
+    await expect(pending).resolves.toMatchObject({ type: 'RETRY_USER_MESSAGE_SUCCESS' });
+    expect(retryUserMessage).toHaveBeenCalledOnce();
+  });
+
   it('编辑与重试命令会路由到调度服务并注册新会话', async () => {
     const editUserMessage = vi.fn().mockResolvedValue({
       sessionId: 'session-edit',

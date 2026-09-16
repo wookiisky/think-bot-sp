@@ -151,6 +151,7 @@ workspace.includePageContent: 包含页面内容
 workspace.chatInput: 聊天输入
 workspace.resizeComposer: 调整输入区高度
 workspace.addImage: 添加图片
+workspace.notice.imageReadFailed: 图片读取失败，请重新选择文件
 workspace.removeImage: 移除图片
 workspace.selectedImage: 已选图片
 workspace.send: 发送

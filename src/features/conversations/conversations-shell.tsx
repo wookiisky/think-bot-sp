@@ -47,7 +47,6 @@ import {
   buildRestoreMessageIdMap,
   findBranchPreviewDetail,
   getPromptTabStatusKind,
-  omitMessageDisplayContent,
   toModelOptions,
   toOptimisticUserContent,
   type ChatMessageState,
@@ -61,6 +60,7 @@ import {
 import { usePageScope } from '../workspace/use-page-scope';
 import { subscribeStreamPort } from '../workspace/stream-port-subscription';
 import { reduceWorkspaceEvent } from '../workspace/workspace-stream-state';
+import { mergeWorkspaceCommandResult } from '../workspace/workspace-command-state';
 import { getWorkspaceSessionUpdate } from '../workspace/workspace-session-state';
 import { BranchPreviewOverlay } from '../workspace/branch-preview-overlay';
 import {
@@ -191,6 +191,14 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const [configLoaded, setConfigLoaded] = useState(false);
   const themeRootAttributes = useDocumentTheme(themePreference);
   const terminalSessionIdsRef = useRef<Set<string>>(new Set());
+  /** 只在助手重试命令等待响应期间记录流进度；所有待决命令结束后释放。 */
+  const streamedSessionIdsRef = useRef<Set<string>>(new Set());
+  const pendingAssistantRetriesRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    terminalSessionIdsRef.current.clear();
+    streamedSessionIdsRef.current.clear();
+  }, [selectedPageUrl]);
   /** 恢复 loading 时判断是否已超过请求超时；后台的定时器可能随 worker 一起消失过。 */
   const llmRequestTimeoutSecondsRef = useRef(DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS);
   const t = useMemo(() => createWorkspaceTranslator(localeResources, localeCode), [localeResources, localeCode]);
@@ -546,6 +554,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       }
       const promptTabId = payload.promptTabId;
 
+      const retryEvent = 'branchId' in payload && 'sessionId' in payload && pendingAssistantRetriesRef.current.has(payload.branchId)
+        ? payload : null;
+      const isFirstRetryEvent = retryEvent !== null && !streamedSessionIdsRef.current.has(retryEvent.sessionId);
+      if (retryEvent) streamedSessionIdsRef.current.add(retryEvent.sessionId);
       const sessionUpdate = getWorkspaceSessionUpdate(payload);
       if (sessionUpdate?.terminalSessionId) markSessionTerminal(sessionUpdate.terminalSessionId);
       if (sessionUpdate?.startedSessionId) markSessionActive(sessionUpdate.startedSessionId);
@@ -557,7 +569,10 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         setRestoreMessageIds((current) => current[promptTabId] === sessionUpdate.restoreMessageId
           ? current : { ...current, [promptTabId]: sessionUpdate.restoreMessageId ?? null });
       }
-      setPromptTabMessages(promptTabId, (current) => reduceWorkspaceEvent(current, payload, {
+      setPromptTabMessages(promptTabId, (current) => reduceWorkspaceEvent(
+        isFirstRetryEvent && retryEvent ? mergeWorkspaceCommandResult(current, {
+          kind: 'assistant', targetMessageId: retryEvent.messageId, response: retryEvent, hasStreamEvent: false,
+        }) : current, payload, {
         primaryBranch: t('workspace.status.primaryBranch'),
         branch: t('workspace.status.branch'),
         error: t('workspace.status.error'),
@@ -812,54 +827,19 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
       });
       if (!isCurrentPage()) return;
       setPromptTabEditing(promptTabId, null);
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.sessionId,
+      if (!hasTerminalSession(response.payload.sessionId)) {
+        setActiveSessionIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.sessionId,
+        }));
+        setRestoreMessageIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.messageId,
+        }));
+      }
+      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
+        kind: 'user', targetMessageId: messageId, response: response.payload, editedText: text,
       }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.messageId,
-      }));
-      setPromptTabMessages(promptTabId, (current) => {
-        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'user');
-        if (targetIndex < 0) {
-          return current;
-        }
-        return appendAssistantBranches(
-          [
-            ...current.slice(0, targetIndex + 1).map((message) =>
-              message.id === messageId
-                ? {
-                    ...omitMessageDisplayContent(message),
-                    content: text,
-                  }
-                : message,
-            ),
-            {
-              id: response.payload.messageId,
-              role: 'assistant',
-              content: '',
-              status: 'loading',
-              errorMessage: null,
-              branches: [],
-              selectedBranchId: response.payload.branchId,
-            },
-          ],
-          response.payload.messageId,
-          (response.payload.branches ?? [
-            {
-              branchId: response.payload.branchId,
-              modelId: response.payload.modelId,
-              modelLabel: response.payload.modelLabel,
-            },
-          ]).map((branch) => ({
-            id: branch.branchId,
-            modelId: branch.modelId,
-            modelLabel: branch.modelLabel,
-            isPrimary: branch.branchId === response.payload.branchId,
-          })),
-        );
-      });
     } catch {
       if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.editFailed'));
@@ -877,47 +857,19 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         messageId,
       });
       if (!isCurrentPage()) return;
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.sessionId,
+      if (!hasTerminalSession(response.payload.sessionId)) {
+        setActiveSessionIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.sessionId,
+        }));
+        setRestoreMessageIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.messageId,
+        }));
+      }
+      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
+        kind: 'user', targetMessageId: messageId, response: response.payload,
       }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.messageId,
-      }));
-      setPromptTabMessages(promptTabId, (current) => {
-        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'user');
-        if (targetIndex < 0) {
-          return current;
-        }
-        return appendAssistantBranches(
-          [
-            ...current.slice(0, targetIndex + 1),
-            {
-              id: response.payload.messageId,
-              role: 'assistant',
-              content: '',
-              status: 'loading',
-              errorMessage: null,
-              branches: [],
-              selectedBranchId: response.payload.branchId,
-            },
-          ],
-          response.payload.messageId,
-          (response.payload.branches ?? [
-            {
-              branchId: response.payload.branchId,
-              modelId: response.payload.modelId,
-              modelLabel: response.payload.modelLabel,
-            },
-          ]).map((branch) => ({
-            id: branch.branchId,
-            modelId: branch.modelId,
-            modelLabel: branch.modelLabel,
-            isPrimary: branch.branchId === response.payload.branchId,
-          })),
-        );
-      });
     } catch {
       if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.retryFailed'));
@@ -928,6 +880,7 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
   const handleRetryMessage = async (promptTabId: string, messageId: string, branchId: string) => {
     if (!isCurrentPage() || !selectedPage) return;
 
+    pendingAssistantRetriesRef.current.set(branchId, (pendingAssistantRetriesRef.current.get(branchId) ?? 0) + 1);
     try {
       const response = await api.retryMessage({
         pageUrl: selectedPage.url,
@@ -936,42 +889,28 @@ export const ConversationsShell = ({ api }: ConversationsShellProps) => {
         branchId,
       });
       if (!isCurrentPage()) return;
-      setActiveSessionIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.sessionId,
+      if (!hasTerminalSession(response.payload.sessionId)) {
+        setActiveSessionIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.sessionId,
+        }));
+        setRestoreMessageIds((current) => ({
+          ...current,
+          [promptTabId]: response.payload.messageId,
+        }));
+      }
+      const hasStreamEvent = streamedSessionIdsRef.current.has(response.payload.sessionId);
+      setPromptTabMessages(promptTabId, (current) => mergeWorkspaceCommandResult(current, {
+        kind: 'assistant', targetMessageId: messageId, response: response.payload, hasStreamEvent,
       }));
-      setRestoreMessageIds((current) => ({
-        ...current,
-        [promptTabId]: response.payload.messageId,
-      }));
-      setPromptTabMessages(promptTabId, (current) => {
-        const targetIndex = current.findIndex((message) => message.id === messageId && message.role === 'assistant');
-        if (targetIndex < 0) {
-          return current;
-        }
-        return current.slice(0, targetIndex + 1).map((message) =>
-          message.id === messageId && message.role === 'assistant'
-            ? syncAssistantMessageState({
-                ...message,
-                branches: message.branches.map((branch) =>
-                  branch.id === branchId
-                    ? {
-                        ...branch,
-                        content: '',
-                        status: 'loading',
-                        errorMessage: null,
-                        durationMs: null,
-                        startedAt: null,
-                      }
-                    : branch,
-                ),
-              })
-            : message,
-        );
-      });
     } catch {
       if (!isCurrentPage()) return;
       pushToast('error', t('workspace.notice.retryFailed'));
+    } finally {
+      const remaining = (pendingAssistantRetriesRef.current.get(branchId) ?? 1) - 1;
+      if (remaining === 0) pendingAssistantRetriesRef.current.delete(branchId);
+      else pendingAssistantRetriesRef.current.set(branchId, remaining);
+      if (pendingAssistantRetriesRef.current.size === 0) streamedSessionIdsRef.current.clear();
     }
   };
 

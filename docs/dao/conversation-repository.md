@@ -32,7 +32,9 @@
 ## 4. 事务边界与并发约束
 
 - 启动流式时会话创建与 loading 创建必须成对出现。
-- 流式完成、取消、错误后必须清理 loading。
+- 流式完成、取消、错误后必须清理 loading；调度器和恢复器清理时传入 `expectedSessionId`，仓储在同一存储队列内检查归属，避免旧请求删除新请求状态。主请求开始时间更新同样检查会话归属。
+- 用户消息重试前先取消该标签的全部活跃会话，并等待流式持久化和清理完成，再创建新一轮。
+- 孤儿 loading 恢复只广播已成功持久化的分支终态；任一分支写入或标记删除失败时返回 `failed` 并保留恢复入口，下一次调用继续恢复。
 - setup 若在助手占位消息创建后失败，仓储需要支持把该助手消息补偿为 `error`，避免残留 `loading`。
 - `failAssistantMessage` / `failAssistantBranch` 只负责收敛终态；Provider 原始错误文本应由实时事件展示，仓储可写入 `errorMessage: null` 避免持久化错误详情。
 - `finishAssistantMessage / failAssistantMessage / finishAssistantBranch / failAssistantBranch` 接收 `durationMs: number | null`；未进入模型调用阶段的失败写 `null`，不伪造成 `0`。

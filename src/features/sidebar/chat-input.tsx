@@ -84,6 +84,7 @@ export const ChatInput = ({
 }: ChatInputProps) => {
   const [textareaHeight, setTextareaHeight] = useState<number>(SINGLE_LINE_HEIGHT);
   const [isComposing, setIsComposing] = useState(false);
+  const [imageReadFailed, setImageReadFailed] = useState(false);
   const [resizeSession, setResizeSession] = useState<{
     /** 拖拽开始时的鼠标纵坐标。 */
     startY: number;
@@ -148,6 +149,7 @@ export const ChatInput = ({
       />
 
       <div data-testid="chat-input-panel" className="flex flex-col gap-1">
+        {imageReadFailed ? <p role="alert" className="m-0 text-xs text-destructive">{t('workspace.notice.imageReadFailed')}</p> : null}
         {images.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {images.map((image, index) => (
@@ -226,16 +228,21 @@ export const ChatInput = ({
                   className="sr-only"
                   disabled={disabled || !supportsImages}
                   onChange={(event) => {
-                    const files = Array.from(event.target.files ?? []);
+                    const input = event.currentTarget;
+                    const files = Array.from(input.files ?? []);
                     if (files.length === 0) {
                       return;
                     }
+                    setImageReadFailed(false);
                     void Promise.all(files.map((file) => fileToDataUrl(file)))
                       .then((dataUrls) => {
                         onImagesChange([...images, ...dataUrls]);
                       })
+                      .catch(() => {
+                        setImageReadFailed(true);
+                      })
                       .finally(() => {
-                        event.currentTarget.value = '';
+                        input.value = '';
                       });
                   }}
                 />
@@ -337,6 +344,7 @@ const fileToDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onerror = () => reject(reader.error);
+    reader.onabort = () => reject(reader.error);
     reader.readAsDataURL(file);
   });

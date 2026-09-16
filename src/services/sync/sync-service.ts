@@ -7,6 +7,7 @@ import {
 } from '../../domain/page/page-schema';
 import type { ExtractionCaches, PageRecord } from '../../domain/page/page-schema';
 import { SYNC_SNAPSHOT_SCHEMA_VERSION } from '../../shared/schema-version';
+import { isSyncConversationVisible, mergePromptTabClearHistory } from '../../domain/sync/sync-record-state';
 import type { SyncSnapshot, SyncTombstone } from '../../domain/sync/sync-snapshot-schema';
 import { createGistSyncProvider } from './gist-sync-provider';
 import { createWebdavSyncProvider } from './webdav-sync-provider';
@@ -139,6 +140,7 @@ const mergePageRecords = (localPages: PageRecord[], remotePages: PageRecord[]) =
     return pageRecordSchema.parse(
       rebuildPageContentFromExtractionCache({
         ...basePage,
+        promptTabStates: mergePromptTabClearHistory(basePage, basePage === localPage ? remotePage : localPage),
         extractionCaches: mergeExtractionCaches(localPage, remotePage),
       }),
     );
@@ -174,13 +176,14 @@ const mergeSyncSnapshots = ({
       return deletedAt == null || page.updatedAt > deletedAt;
     })
     .sort((left, right) => left.normalizedUrl.localeCompare(right.normalizedUrl));
-  const visiblePageSet = new Set(mergedPages.map((page) => page.normalizedUrl));
+  const visiblePages = new Map(mergedPages.map((page) => [page.normalizedUrl, page]));
+  const isVisible = (conversation: SyncSnapshot['conversations'][number]) =>
+    isSyncConversationVisible(conversation, visiblePages.get(conversation.normalizedUrl));
   const mergedConversations = mergeRecordsByUpdatedAt(
-    localSnapshot.conversations,
-    remoteSnapshot.conversations,
+    localSnapshot.conversations.filter(isVisible),
+    remoteSnapshot.conversations.filter(isVisible),
     (conversation) => conversation.id,
   )
-    .filter((conversation) => visiblePageSet.has(conversation.normalizedUrl))
     .sort((left, right) => left.id.localeCompare(right.id));
   const mergedLastSyncAt = resolveLatestTimestamp(
     localSnapshot.lastSyncAt,

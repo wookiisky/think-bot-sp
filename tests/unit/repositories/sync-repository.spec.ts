@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createDefaultConfig } from '../../../src/domain/config/config-schema';
 import { buildPageRecord } from '../../../src/domain/page/page-schema';
@@ -256,4 +256,79 @@ describe('sync-repository', () => {
       ],
     });
   });
+  it.each(['set', 'remove'] as const)('preserves recoverable data when snapshot %s fails', async (operation) => {
+    const storage = createFakeStorageArea();
+    const adapter = createChromeLocalAdapter(storage);
+    const configRepository = createConfigRepository(adapter);
+    const pageRepository = createPageRepository(adapter);
+    const conversationRepository = createConversationRepository(adapter);
+    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const deletedUrl = 'https://example.com/deleted';
+    const keptUrl = 'https://example.com/kept';
+    await pageRepository.savePage(buildPageRecord({ url: deletedUrl, now: 100 }));
+    await conversationRepository.appendUserMessage({ normalizedUrl: deletedUrl, promptTabId: 'chat', messageId: 'old', content: 'old', images: [], now: 100 });
+    const before = storage.dump();
+    const snapshot = await syncRepository.buildSnapshot();
+    snapshot.pages = [buildPageRecord({ url: keptUrl, now: 300 })];
+    snapshot.conversations = [];
+    snapshot.tombstones = [{ normalizedUrl: deletedUrl, deletedAt: 200 }];
+    const fault = vi.spyOn(storage, operation).mockRejectedValueOnce(new Error('storage failure'));
+
+    await expect(syncRepository.applyMergedSnapshot(snapshot)).rejects.toThrow('storage failure');
+    if (operation === 'set') {
+      expect(storage.dump()).toEqual(before);
+    } else {
+      expect((await syncRepository.buildSnapshot()).pages.map((page) => page.normalizedUrl)).toEqual([keptUrl]);
+      expect((await syncRepository.buildSnapshot()).conversations).toEqual([]);
+    }
+    fault.mockRestore();
+    await syncRepository.applyMergedSnapshot(snapshot);
+    expect(await pageRepository.getPage(deletedUrl)).toBeNull();
+    expect(await pageRepository.getPage(keptUrl)).not.toBeNull();
+    expect(await conversationRepository.getConversation(deletedUrl, 'chat')).toBeNull();
+  });
+
+  it.each([199, 200, 201])('exports only conversations created after the clear boundary (createdAt: %s)', async (createdAt) => {
+    const storage = createFakeStorageArea();
+    const adapter = createChromeLocalAdapter(storage);
+    const configRepository = createConfigRepository(adapter);
+    const pageRepository = createPageRepository(adapter);
+    const conversationRepository = createConversationRepository(adapter);
+    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const url = 'https://example.com/clear';
+    await pageRepository.savePage(buildPageRecord({ url, now: 100 }));
+    await pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
+    await conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'message', content: 'content', images: [], now: createdAt });
+    expect((await syncRepository.buildSnapshot()).conversations).toHaveLength(createdAt > 200 ? 1 : 0);
+  });
+
+  it('keeps cleared tab history hidden after cleanup fails and retries cleanup after restart', async () => {
+    const storage = createFakeStorageArea();
+    const adapter = createChromeLocalAdapter(storage);
+    const configRepository = createConfigRepository(adapter);
+    const pageRepository = createPageRepository(adapter);
+    const conversationRepository = createConversationRepository(adapter);
+    const syncRepository = createSyncRepository({ storage: adapter, configRepository, pageRepository, conversationRepository });
+    const url = 'https://example.com/clear';
+    await pageRepository.savePage(buildPageRecord({ url, now: 100 }));
+    await conversationRepository.appendUserMessage({ normalizedUrl: url, promptTabId: 'chat', messageId: 'old', content: 'old', images: [], now: 100 });
+    await pageRepository.setPromptTabState({ normalizedUrl: url, url, promptTabId: 'chat', lastClearedAt: 200 });
+    const snapshot = await syncRepository.buildSnapshot();
+    snapshot.conversations = [];
+    const fault = vi.spyOn(storage, 'remove').mockRejectedValueOnce(new Error('cleanup failure'));
+    await expect(syncRepository.applyMergedSnapshot(snapshot)).rejects.toThrow('cleanup failure');
+    fault.mockRestore();
+
+    const restartedStorage = createFakeStorageArea();
+    await restartedStorage.set(storage.dump());
+    const restartedAdapter = createChromeLocalAdapter(restartedStorage);
+    const restartedConversationRepository = createConversationRepository(restartedAdapter);
+    const restartedRepository = createSyncRepository({ storage: restartedAdapter, configRepository, pageRepository, conversationRepository: restartedConversationRepository });
+    expect(await restartedConversationRepository.getConversation(url, 'chat')).not.toBeNull();
+    const retrySnapshot = await restartedRepository.buildSnapshot();
+    expect(retrySnapshot.conversations).toEqual([]);
+    await restartedRepository.applyMergedSnapshot(retrySnapshot);
+    expect(await restartedConversationRepository.getConversation(url, 'chat')).toBeNull();
+  });
+
 });
