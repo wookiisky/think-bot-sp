@@ -1,4 +1,5 @@
-import { createStorageRepository } from './chrome-local-adapter';
+import { createStorageRepository, type ChromeLocalAdapter } from './chrome-local-adapter';
+import { createRecordCache } from './record-cache';
 import { z } from 'zod';
 
 import { conversationRecordSchema } from '../domain/conversation/conversation-schema';
@@ -23,7 +24,6 @@ import {
   buildLoadingStorageKey,
 } from '../shared/storage-keys';
 
-type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 type LoadingStateRecord = z.infer<typeof loadingStateRecordSchema>;
 
 /** 规范化用户消息展示文本，避免把与真实内容相同的值重复落库。 */
@@ -53,25 +53,18 @@ const matchesPageScopedKey = (key: string, prefix: string, normalizedUrl: string
 
 /** 会话仓储，负责 conversation 和 loading 的持久化。 */
 export const createConversationRepository = (storage: ChromeLocalAdapter) => createStorageRepository(storage, (storage) => {
-  /** 读取全部存储。 */
-  const readAll = async () => storage.get<Record<string, unknown>>(null);
+  // 流式 chunk 每 50ms 落一次库；缓存已解析记录后，热路径不再每次 get + parse 整条会话。
+  const conversations = createRecordCache(storage, (value) => conversationRecordSchema.parse(value));
+  const loadingStates = createRecordCache(storage, (value) => loadingStateRecordSchema.parse(value));
   /** 按 key 读取单个 conversation。 */
-  const readConversation = async (normalizedUrl: string, promptTabId: string): Promise<ConversationRecord | null> => {
-    const result = await storage.get<Record<string, unknown>>([getConversationKey(normalizedUrl, promptTabId)]);
-    const value = result[getConversationKey(normalizedUrl, promptTabId)];
-    return value ? conversationRecordSchema.parse(value) : null;
-  };
+  const readConversation = (normalizedUrl: string, promptTabId: string): Promise<ConversationRecord | null> =>
+    conversations.read(getConversationKey(normalizedUrl, promptTabId));
   /** 按 key 读取单个 loading。 */
-  const readLoadingState = async (normalizedUrl: string, promptTabId: string): Promise<LoadingStateRecord | null> => {
-    const result = await storage.get<Record<string, unknown>>([getLoadingKey(normalizedUrl, promptTabId)]);
-    const value = result[getLoadingKey(normalizedUrl, promptTabId)];
-    return value ? loadingStateRecordSchema.parse(value) : null;
-  };
+  const readLoadingState = (normalizedUrl: string, promptTabId: string): Promise<LoadingStateRecord | null> =>
+    loadingStates.read(getLoadingKey(normalizedUrl, promptTabId));
   /** 保存单个 conversation。 */
-  const persistConversation = async (conversation: ConversationRecord) => {
-    await storage.set({ [getConversationKey(conversation.normalizedUrl, conversation.promptTabId)]: conversation });
-    return conversation;
-  };
+  const persistConversation = (conversation: ConversationRecord) =>
+    conversations.write(getConversationKey(conversation.normalizedUrl, conversation.promptTabId), conversation);
   /** 空会话不保留占位记录，避免把“未持久化轮次”误判为已有历史。 */
   const persistConversationOrRemove = async (conversation: ConversationRecord) => {
     if (conversation.messages.length === 0) {
@@ -104,9 +97,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
   return {
     /** 保存会话。 */
     async saveConversation(value: unknown) {
-      const next = conversationRecordSchema.parse(value);
-      await storage.set({ [getConversationKey(next.normalizedUrl, next.promptTabId)]: next });
-      return next;
+      return persistConversation(conversationRecordSchema.parse(value));
     },
 
     /** 读取单个会话。 */
@@ -250,8 +241,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
     /** 保存 loading 状态。 */
     async saveLoadingState(value: unknown) {
       const next = loadingStateRecordSchema.parse(value);
-      await storage.set({ [getLoadingKey(next.normalizedUrl, next.promptTabId)]: next });
-      return next;
+      return loadingStates.write(getLoadingKey(next.normalizedUrl, next.promptTabId), next);
     },
 
     /** 读取单个 loading 状态。 */
@@ -788,8 +778,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
 
     /** 按页面清理 conversation 和 loading。 */
     async clearPageData(normalizedUrl: string) {
-      const all = await readAll();
-      const keys = Object.keys(all).filter(
+      const keys = (await storage.getKeys()).filter(
         (key) =>
           matchesPageScopedKey(key, CONVERSATION_STORAGE_PREFIX, normalizedUrl) ||
           matchesPageScopedKey(key, LOADING_STORAGE_PREFIX, normalizedUrl),
@@ -803,5 +792,7 @@ export const createConversationRepository = (storage: ChromeLocalAdapter) => cre
     async clearPromptTabData(normalizedUrl: string, promptTabId: string) {
       await storage.remove([getConversationKey(normalizedUrl, promptTabId), getLoadingKey(normalizedUrl, promptTabId)]);
     },
-  };
+  };}, {
+  // 纯读方法不排队：侧边栏 bootstrap 与历史页读取不再被流式 chunk 写入阻塞。
+  unlocked: ['getConversation', 'getLoadingState', 'listPageConversations', 'listPageLoadingStates', 'getAllConversations', 'getAllLoadingStates'],
 });

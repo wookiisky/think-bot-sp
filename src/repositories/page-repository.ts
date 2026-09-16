@@ -1,4 +1,5 @@
-import { createStorageRepository } from './chrome-local-adapter';
+import { createStorageRepository, type ChromeLocalAdapter } from './chrome-local-adapter';
+import { createRecordCache } from './record-cache';
 import {
   buildPageRecord,
   hasUsableExtractionCache,
@@ -8,7 +9,6 @@ import {
 import type { ExtractionMethod } from '../domain/page/page-schema';
 import { CONVERSATION_STORAGE_PREFIX, LOADING_STORAGE_PREFIX, PAGE_STORAGE_PREFIX } from '../shared/storage-keys';
 
-type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
 const NINETY_DAYS = 90 * 24 * 60 * 60 * 1000;
 
 const getPageKey = (normalizedUrl: string) => `${PAGE_STORAGE_PREFIX}${normalizedUrl}`;
@@ -43,7 +43,7 @@ const matchesExactLoadingKey = (key: string, normalizedUrl: string): boolean => 
 
 /** 页面仓储，负责页面缓存、统计和级联清理。 */
 export const createPageRepository = (storage: ChromeLocalAdapter) => createStorageRepository(storage, (storage) => {
-  const readAll = async () => storage.get<Record<string, unknown>>(null);
+  const pages = createRecordCache(storage, (value) => pageRecordSchema.parse(value));
   const getAllPages = async () => {
     const all = await storage.getByPrefix(PAGE_STORAGE_PREFIX);
     return Object.entries(all)
@@ -63,9 +63,7 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => createStora
 
     /** 读取单个页面记录。 */
     async getPage(normalizedUrl: string) {
-      const result = await storage.get<Record<string, unknown>>([getPageKey(normalizedUrl)]);
-      const value = result[getPageKey(normalizedUrl)];
-      return value ? pageRecordSchema.parse(value) : null;
+      return pages.read(getPageKey(normalizedUrl));
     },
 
     /** 保存提取结果，同时保留页面级运行状态。 */
@@ -283,24 +281,22 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => createStora
 
     /** 统计可回收缓存。 */
     async getCacheStats() {
-      const all = await readAll();
-      const entries = Object.entries(all).filter(([key]) =>
+      // 只枚举 key 并交给原生统计占用，不把 90 天的正文全部搬进内存再序列化。
+      const keys = (await storage.getKeys()).filter((key) =>
         key.startsWith(PAGE_STORAGE_PREFIX) ||
         key.startsWith(CONVERSATION_STORAGE_PREFIX) ||
         key.startsWith(LOADING_STORAGE_PREFIX),
       );
-      const pageCount = entries.filter(([key]) => key.startsWith(PAGE_STORAGE_PREFIX)).length;
       return {
-        pageCount,
-        entryCount: entries.length,
-        bytes: new TextEncoder().encode(JSON.stringify(Object.fromEntries(entries))).byteLength,
+        pageCount: keys.filter((key) => key.startsWith(PAGE_STORAGE_PREFIX)).length,
+        entryCount: keys.length,
+        bytes: await storage.getBytesInUse(keys),
       };
     },
 
     /** 安全清理可回收缓存。 */
     async clearCache() {
-      const all = await readAll();
-      const keys = Object.keys(all).filter((key) =>
+      const keys = (await storage.getKeys()).filter((key) =>
         key.startsWith(PAGE_STORAGE_PREFIX) ||
         key.startsWith(CONVERSATION_STORAGE_PREFIX) ||
         key.startsWith(LOADING_STORAGE_PREFIX),
@@ -313,8 +309,7 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => createStora
 
     /** 级联删除单个页面相关数据。 */
     async deletePage(normalizedUrl: string) {
-      const all = await readAll();
-      const keys = Object.keys(all).filter(
+      const keys = (await storage.getKeys()).filter(
         (key) =>
           key === getPageKey(normalizedUrl) ||
           matchesExactConversationKey(key, normalizedUrl) ||
@@ -324,5 +319,6 @@ export const createPageRepository = (storage: ChromeLocalAdapter) => createStora
         await storage.remove(keys);
       }
     },
-  };
+  };}, {
+  unlocked: ['getPage', 'getAllPages', 'listRecentPages', 'searchPages', 'getCacheStats'],
 });

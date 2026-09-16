@@ -1,4 +1,5 @@
-import { createStorageRepository } from './chrome-local-adapter';
+import { createStorageRepository, type ChromeLocalAdapter } from './chrome-local-adapter';
+import { createRecordCache } from './record-cache';
 import {
   applySystemConfigSeeds,
   createDefaultConfig,
@@ -10,15 +11,11 @@ import { assertBlacklistRulesPersistable } from '../services/blacklist/blacklist
 import { CONFIG_SCHEMA_VERSION } from '../shared/schema-version';
 import { CONFIG_STORAGE_KEY } from '../shared/storage-keys';
 
-type ChromeLocalAdapter = ReturnType<typeof import('./chrome-local-adapter').createChromeLocalAdapter>;
-
 /** 配置仓储，统一收口读取、写入和导入校验。 */
 export const createConfigRepository = (storage: ChromeLocalAdapter) => createStorageRepository(storage, (storage) => {
-  const readConfig = async () => {
-    const result = await storage.get<Record<string, unknown>>([CONFIG_STORAGE_KEY]);
-    const saved = result[CONFIG_STORAGE_KEY];
-    return saved ? applySystemConfigSeeds(extensionConfigSchema.parse(saved)) : createDefaultConfig();
-  };
+  // 配置在一次发送里会被读多次（模型解析、并行分支、黑名单）；按修订号缓存已解析且已补种子的结果。
+  const configCache = createRecordCache(storage, (saved) => applySystemConfigSeeds(extensionConfigSchema.parse(saved)));
+  const readConfig = async () => (await configCache.read(CONFIG_STORAGE_KEY)) ?? createDefaultConfig();
 
   return {
     /** 读取完整配置。 */
@@ -91,5 +88,6 @@ export const createConfigRepository = (storage: ChromeLocalAdapter) => createSto
       const config = await readConfig();
       return config.models.find((model) => model.id === modelId) ?? null;
     },
-  };
+  };}, {
+  unlocked: ['getConfig', 'exportConfig', 'getEnabledCompleteModels', 'getModelById'],
 });

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   CheckIcon,
   ChevronsDownIcon,
@@ -133,10 +133,10 @@ type AssistantBranchRailProps = {
   availableBranchModels: ChatThreadProps['availableBranchModels'];
   /** 是否允许切换主分支。 */
   canSelectAssistantBranch: boolean;
-  /** 当前 hover 的分支目标。 */
-  hoveredBranchTarget: { messageId: string; branchId: string } | null;
-  /** 当前展开模型弹层的目标。 */
-  expandBranchPopoverTarget: { messageId: string; branchId: string } | null;
+  /** 当前消息内 hover 的分支 id。 */
+  activeBranchId: string | null;
+  /** 当前消息内展开模型弹层的分支 id。 */
+  expandPopoverBranchId: string | null;
   /** 分支节点引用。 */
   branchRefs: RefObject<Record<string, HTMLElement | null>>;
   /** 聊天滚动视口引用。 */
@@ -218,7 +218,7 @@ export const ChatThread = (props: ChatThreadProps) => {
   );
 };
 
-/** 侧边栏聊天消息区。 */
+/** 侧边栏聊天消息区。每行是独立的 memo 组件，流式 chunk 与 hover 只重渲染受影响的行。 */
 const ChatThreadContent = memo(function ChatThreadContent({
   messages,
   restoreMessageId: _restoreMessageId,
@@ -247,10 +247,10 @@ const ChatThreadContent = memo(function ChatThreadContent({
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [hoveredBranchTarget, setHoveredBranchTarget] = useState<{ messageId: string; branchId: string } | null>(null);
   const [expandBranchPopoverTarget, setExpandBranchPopoverTarget] = useState<{ messageId: string; branchId: string } | null>(null);
-  const handleOpenBranchPreview = onOpenBranchPreview ?? (() => {});
+  const handleOpenBranchPreview = onOpenBranchPreview ?? ignoreBranchPreview;
 
   /** 复制指定格式的消息内容。 */
-  const handleCopyMessage = async (input: { content: string; mode: MessageCopyMode }) => {
+  const handleCopyMessage = useCallback(async (input: { content: string; mode: MessageCopyMode }) => {
     const nextContent = normalizeMessageCopyContent(input.content, input.mode);
     if (!nextContent.trim()) {
       return;
@@ -268,16 +268,21 @@ const ChatThreadContent = memo(function ChatThreadContent({
         message: input.mode === 'plain' ? t('workspace.notice.copyPlainFailed') : t('workspace.notice.copyMarkdownFailed'),
       });
     }
-  };
+  }, [onToast, t]);
 
   /** 滚动到目标分支顶部或底部。 */
-  const scrollToBranch = (branchId: string, block: 'start' | 'end') => {
+  const scrollToBranch = useCallback((branchId: string, block: 'start' | 'end') => {
     branchRefs.current[branchId]?.scrollIntoView({
       behavior: 'smooth',
       block,
       inline: 'nearest',
     });
-  };
+  }, []);
+
+  /** 鼠标离开或失焦时只清理仍指向自己的 hover，避免误清后来者。 */
+  const handleLeaveMessage = useCallback((messageId: string) => {
+    setHoveredMessageId((current) => (current === messageId ? null : current));
+  }, []);
 
   return (
     <section
@@ -289,156 +294,41 @@ const ChatThreadContent = memo(function ChatThreadContent({
         {messages.length === 0 ? <p className="text-sm text-muted-foreground">{t('workspace.emptyMessages')}</p> : null}
         {messages.map((message, messageIndex) => {
           const isEditing = message.role === 'user' && editingMessageId === message.id;
-          const visibleContent = message.displayContent ?? message.content;
-          const displayBranches = resolveDisplayBranches(message, t('workspace.status.primaryBranch'));
-          const hasAssistantBranches = message.role === 'assistant' && displayBranches.length > 0;
-          const canSelectAssistantBranch = message.role === 'assistant' && messageIndex === messages.length - 1;
-
           return (
-            <div
+            <MessageRow
               key={message.id}
-              data-testid={`chat-message-${message.id}`}
-              data-message-role={message.role}
-              className="group/message relative min-w-0 w-full"
-              onMouseEnter={() => setHoveredMessageId(message.id)}
-              onMouseLeave={() => setHoveredMessageId((current) => (current === message.id ? null : current))}
-              onFocus={() => setHoveredMessageId(message.id)}
-              onBlur={(event) => {
-                const relatedTarget = event.relatedTarget;
-                if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
-                  return;
-                }
-                setHoveredMessageId((current) => (current === message.id ? null : current));
-              }}
-            >
-              <article
-                data-testid={`chat-message-bubble-${message.id}`}
-                className={resolveMessageBubbleClass(message.role, message.status)}
-              >
-                {isEditing ? (
-                  <div className="grid gap-2">
-                    <Textarea
-                      aria-label={t('workspace.editMessageInput')}
-                      value={editingText}
-                      onChange={(event) => onEditingTextChange(event.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <Tooltip content={t('workspace.saveAndResend')}>
-                        <Button
-                          type="button"
-                          size="icon-sm"
-                          aria-label={t('workspace.saveAndResend')}
-                          disabled={editingText.trim().length === 0}
-                          onClick={() => void onSubmitEdit(message.id)}
-                        >
-                          <SaveIcon />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content={t('workspace.cancelEdit')}>
-                        <Button type="button" variant="outline" size="icon-sm" aria-label={t('workspace.cancelEdit')} onClick={onCancelEdit}>
-                          <XIcon />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                  </div>
-                ) : hasAssistantBranches ? null : message.role === 'assistant' ? (
-                  <ChatMarkdown content={visibleContent} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
-                ) : (
-                  <ChatMarkdown content={visibleContent} />
-                )}
-
-                {!hasAssistantBranches && message.status === 'error' && shouldShowErrorDetail(message.content, message.errorMessage) ? (
-                  <p className="mt-1 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p>
-                ) : null}
-                {!hasAssistantBranches && message.status === 'cancelled' ? (
-                  <p className="mt-1 text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
-                ) : null}
-
-                {hasAssistantBranches ? (
-                  <AssistantBranchRail
-                    messageId={message.id}
-                    branches={displayBranches}
-                    selectedBranchId={message.selectedBranchId}
-                    availableBranchModels={availableBranchModels}
-                    canSelectAssistantBranch={canSelectAssistantBranch}
-                    hoveredBranchTarget={hoveredBranchTarget}
-                    expandBranchPopoverTarget={expandBranchPopoverTarget}
-                    branchRefs={branchRefs}
-                    scrollViewportRef={threadViewportRef}
-                    t={t}
-                    assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
-                    assistantBranchColumnWidth={assistantBranchColumnWidth}
-                    onHoverBranch={setHoveredBranchTarget}
-                    onExpandBranchPopoverTarget={setExpandBranchPopoverTarget}
-                    onExpandBranches={onExpandBranches}
-                    onStop={onStop}
-                    onStopBranch={onStopBranch}
-                    onRetryAssistantMessage={onRetryAssistantMessage}
-                    onOpenBranchPreview={handleOpenBranchPreview}
-                    onSelectAssistantBranch={onSelectAssistantBranch}
-                    onScrollToBranch={scrollToBranch}
-                    onCopyMessage={handleCopyMessage}
-                    onDeleteBranch={onDeleteBranch}
-                  />
-                ) : null}
-
-                {!isEditing && message.status !== 'loading' && message.role === 'user' ? (
-                  <FloatingActionBar
-                    testId={`chat-message-actions-${message.id}`}
-                    visible={hoveredMessageId === message.id}
-                    actionCount={USER_MESSAGE_ACTION_COUNT}
-                    buttonSizePx={USER_MESSAGE_ACTION_BUTTON_SIZE_PX}
-                    verticalWrapperClassName="inset-y-0 right-1"
-                    horizontalWrapperClassName="-top-1 right-1"
-                  >
-                      <Tooltip content={t('workspace.editMessage')}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t('workspace.editMessage')}
-                          onClick={() => onStartEdit(message.id, message.content)}
-                        >
-                          <Edit3Icon />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content={t('workspace.retryUserMessage')}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t('workspace.retryUserMessage')}
-                          onClick={() => void onRetryUserMessage(message.id)}
-                        >
-                          <RotateCcwIcon />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content={t('workspace.copyPlainText')}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t('workspace.copyPlainText')}
-                          onClick={() => void handleCopyMessage({ content: message.content, mode: 'plain' })}
-                        >
-                          <CopyIcon />
-                        </Button>
-                      </Tooltip>
-                      <Tooltip content={t('workspace.copyMarkdown')}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={t('workspace.copyMarkdown')}
-                          onClick={() => void handleCopyMessage({ content: message.content, mode: 'markdown' })}
-                        >
-                          <FileCode2Icon />
-                        </Button>
-                      </Tooltip>
-                  </FloatingActionBar>
-                ) : null}
-              </article>
-            </div>
+              message={message}
+              isLast={messageIndex === messages.length - 1}
+              isEditing={isEditing}
+              editingText={isEditing ? editingText : ''}
+              isHovered={hoveredMessageId === message.id}
+              activeBranchId={hoveredBranchTarget?.messageId === message.id ? hoveredBranchTarget.branchId : null}
+              expandPopoverBranchId={expandBranchPopoverTarget?.messageId === message.id ? expandBranchPopoverTarget.branchId : null}
+              availableBranchModels={availableBranchModels}
+              t={t}
+              assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
+              assistantBranchColumnWidth={assistantBranchColumnWidth}
+              branchRefs={branchRefs}
+              scrollViewportRef={threadViewportRef}
+              onEnterMessage={setHoveredMessageId}
+              onLeaveMessage={handleLeaveMessage}
+              onHoverBranch={setHoveredBranchTarget}
+              onExpandBranchPopoverTarget={setExpandBranchPopoverTarget}
+              onStartEdit={onStartEdit}
+              onEditingTextChange={onEditingTextChange}
+              onCancelEdit={onCancelEdit}
+              onSubmitEdit={onSubmitEdit}
+              onRetryUserMessage={onRetryUserMessage}
+              onRetryAssistantMessage={onRetryAssistantMessage}
+              onSelectAssistantBranch={onSelectAssistantBranch}
+              onExpandBranches={onExpandBranches}
+              onStop={onStop}
+              onStopBranch={onStopBranch}
+              onDeleteBranch={onDeleteBranch}
+              onOpenBranchPreview={handleOpenBranchPreview}
+              onScrollToBranch={scrollToBranch}
+              onCopyMessage={handleCopyMessage}
+            />
           );
         })}
       </div>
@@ -446,15 +336,249 @@ const ChatThreadContent = memo(function ChatThreadContent({
   );
 });
 
-/** 助手分支阅读区，包含上下同步滚动条和固定定位按钮栏。 */
-const AssistantBranchRail = ({
+type MessageRowProps = {
+  /** 当前消息。 */
+  message: ChatThreadMessage;
+  /** 是否为最后一条消息；只有最新一轮允许切换主分支。 */
+  isLast: boolean;
+  /** 是否处于编辑态。 */
+  isEditing: boolean;
+  /** 编辑草稿；非编辑行恒为空串，避免按键触发其他行重渲染。 */
+  editingText: string;
+  /** 是否 hover 在本条消息上。 */
+  isHovered: boolean;
+  /** 本条消息内 hover 的分支 id。 */
+  activeBranchId: string | null;
+  /** 本条消息内展开模型弹层的分支 id。 */
+  expandPopoverBranchId: string | null;
+  /** 可用模型列表。 */
+  availableBranchModels: ChatThreadProps['availableBranchModels'];
+  /** 文案翻译函数。 */
+  t: WorkspaceTranslator;
+  /** 助手消息 Markdown 展示配置。 */
+  assistantMarkdownDisplayConfig: AssistantMarkdownDisplayConfig;
+  /** 分支超过两个时每列的最小宽度，单位 px。 */
+  assistantBranchColumnWidth: number;
+  /** 分支节点引用。 */
+  branchRefs: RefObject<Record<string, HTMLElement | null>>;
+  /** 聊天滚动视口引用。 */
+  scrollViewportRef: RefObject<HTMLElement | null>;
+  /** 鼠标进入或聚焦本条消息。 */
+  onEnterMessage: (messageId: string) => void;
+  /** 鼠标离开或失焦本条消息。 */
+  onLeaveMessage: (messageId: string) => void;
+  /** 更新当前 hover 的分支。 */
+  onHoverBranch: AssistantBranchRailProps['onHoverBranch'];
+  /** 更新分支模型弹层目标。 */
+  onExpandBranchPopoverTarget: AssistantBranchRailProps['onExpandBranchPopoverTarget'];
+  /** 定位到分支位置。 */
+  onScrollToBranch: AssistantBranchRailProps['onScrollToBranch'];
+  /** 复制消息内容。 */
+  onCopyMessage: AssistantBranchRailProps['onCopyMessage'];
+  /** 打开分支预览。 */
+  onOpenBranchPreview: AssistantBranchRailProps['onOpenBranchPreview'];
+} & Pick<
+  ChatThreadProps,
+  | 'onStartEdit' | 'onEditingTextChange' | 'onCancelEdit' | 'onSubmitEdit' | 'onRetryUserMessage'
+  | 'onRetryAssistantMessage' | 'onSelectAssistantBranch' | 'onExpandBranches' | 'onStop' | 'onStopBranch' | 'onDeleteBranch'
+>;
+
+/** 单条消息行：用户气泡或助手分支阅读区。 */
+const MessageRow = memo(function MessageRow({
+  message,
+  isLast,
+  isEditing,
+  editingText,
+  isHovered,
+  activeBranchId,
+  expandPopoverBranchId,
+  availableBranchModels,
+  t,
+  assistantMarkdownDisplayConfig,
+  assistantBranchColumnWidth,
+  branchRefs,
+  scrollViewportRef,
+  onEnterMessage,
+  onLeaveMessage,
+  onHoverBranch,
+  onExpandBranchPopoverTarget,
+  onScrollToBranch,
+  onCopyMessage,
+  onOpenBranchPreview,
+  onStartEdit,
+  onEditingTextChange,
+  onCancelEdit,
+  onSubmitEdit,
+  onRetryUserMessage,
+  onRetryAssistantMessage,
+  onSelectAssistantBranch,
+  onExpandBranches,
+  onStop,
+  onStopBranch,
+  onDeleteBranch,
+}: MessageRowProps) {
+  const primaryBranchLabel = t('workspace.status.primaryBranch');
+  const visibleContent = message.displayContent ?? message.content;
+  const displayBranches = useMemo(() => resolveDisplayBranches(message, primaryBranchLabel), [message, primaryBranchLabel]);
+  const hasAssistantBranches = message.role === 'assistant' && displayBranches.length > 0;
+  const canSelectAssistantBranch = message.role === 'assistant' && isLast;
+
+  return (
+    <div
+      data-testid={`chat-message-${message.id}`}
+      data-message-role={message.role}
+      className="group/message relative min-w-0 w-full"
+      onMouseEnter={() => onEnterMessage(message.id)}
+      onMouseLeave={() => onLeaveMessage(message.id)}
+      onFocus={() => onEnterMessage(message.id)}
+      onBlur={(event) => {
+        const relatedTarget = event.relatedTarget;
+        if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+          return;
+        }
+        onLeaveMessage(message.id);
+      }}
+    >
+      <article
+        data-testid={`chat-message-bubble-${message.id}`}
+        className={resolveMessageBubbleClass(message.role, message.status)}
+      >
+        {isEditing ? (
+          <div className="grid gap-2">
+            <Textarea
+              aria-label={t('workspace.editMessageInput')}
+              value={editingText}
+              onChange={(event) => onEditingTextChange(event.target.value)}
+            />
+            <div className="flex gap-2">
+              <Tooltip content={t('workspace.saveAndResend')}>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  aria-label={t('workspace.saveAndResend')}
+                  disabled={editingText.trim().length === 0}
+                  onClick={() => void onSubmitEdit(message.id)}
+                >
+                  <SaveIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('workspace.cancelEdit')}>
+                <Button type="button" variant="outline" size="icon-sm" aria-label={t('workspace.cancelEdit')} onClick={onCancelEdit}>
+                  <XIcon />
+                </Button>
+              </Tooltip>
+            </div>
+          </div>
+        ) : hasAssistantBranches ? null : message.role === 'assistant' ? (
+          <ChatMarkdown content={visibleContent} assistantDisplayConfig={assistantMarkdownDisplayConfig} />
+        ) : (
+          <ChatMarkdown content={visibleContent} />
+        )}
+
+        {!hasAssistantBranches && message.status === 'error' && shouldShowErrorDetail(message.content, message.errorMessage) ? (
+          <p className="mt-1 text-xs text-destructive">{message.errorMessage ?? t('workspace.status.error')}</p>
+        ) : null}
+        {!hasAssistantBranches && message.status === 'cancelled' ? (
+          <p className="mt-1 text-xs text-muted-foreground">{message.errorMessage ?? t('workspace.status.cancelled')}</p>
+        ) : null}
+
+        {hasAssistantBranches ? (
+          <AssistantBranchRail
+            messageId={message.id}
+            branches={displayBranches}
+            selectedBranchId={message.selectedBranchId}
+            availableBranchModels={availableBranchModels}
+            canSelectAssistantBranch={canSelectAssistantBranch}
+            activeBranchId={activeBranchId}
+            expandPopoverBranchId={expandPopoverBranchId}
+            branchRefs={branchRefs}
+            scrollViewportRef={scrollViewportRef}
+            t={t}
+            assistantMarkdownDisplayConfig={assistantMarkdownDisplayConfig}
+            assistantBranchColumnWidth={assistantBranchColumnWidth}
+            onHoverBranch={onHoverBranch}
+            onExpandBranchPopoverTarget={onExpandBranchPopoverTarget}
+            onExpandBranches={onExpandBranches}
+            onStop={onStop}
+            onStopBranch={onStopBranch}
+            onRetryAssistantMessage={onRetryAssistantMessage}
+            onOpenBranchPreview={onOpenBranchPreview}
+            onSelectAssistantBranch={onSelectAssistantBranch}
+            onScrollToBranch={onScrollToBranch}
+            onCopyMessage={onCopyMessage}
+            onDeleteBranch={onDeleteBranch}
+          />
+        ) : null}
+
+        {!isEditing && message.status !== 'loading' && message.role === 'user' ? (
+          <FloatingActionBar
+            testId={`chat-message-actions-${message.id}`}
+            visible={isHovered}
+            actionCount={USER_MESSAGE_ACTION_COUNT}
+            buttonSizePx={USER_MESSAGE_ACTION_BUTTON_SIZE_PX}
+            verticalWrapperClassName="inset-y-0 right-1"
+            horizontalWrapperClassName="-top-1 right-1"
+          >
+              <Tooltip content={t('workspace.editMessage')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('workspace.editMessage')}
+                  onClick={() => onStartEdit(message.id, message.content)}
+                >
+                  <Edit3Icon />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('workspace.retryUserMessage')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('workspace.retryUserMessage')}
+                  onClick={() => void onRetryUserMessage(message.id)}
+                >
+                  <RotateCcwIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('workspace.copyPlainText')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('workspace.copyPlainText')}
+                  onClick={() => void onCopyMessage({ content: message.content, mode: 'plain' })}
+                >
+                  <CopyIcon />
+                </Button>
+              </Tooltip>
+              <Tooltip content={t('workspace.copyMarkdown')}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('workspace.copyMarkdown')}
+                  onClick={() => void onCopyMessage({ content: message.content, mode: 'markdown' })}
+                >
+                  <FileCode2Icon />
+                </Button>
+              </Tooltip>
+          </FloatingActionBar>
+        ) : null}
+      </article>
+    </div>
+  );
+});
+
+/** 助手分支阅读区，包含上下同步滚动条和固定定位按钮栏。只有本条消息的分支数据或 hover 变化时才重渲染。 */
+const AssistantBranchRail = memo(function AssistantBranchRail({
   messageId,
   branches,
   selectedBranchId,
   availableBranchModels,
   canSelectAssistantBranch,
-  hoveredBranchTarget,
-  expandBranchPopoverTarget,
+  activeBranchId,
+  expandPopoverBranchId,
   branchRefs,
   scrollViewportRef,
   t,
@@ -471,14 +595,13 @@ const AssistantBranchRail = ({
   onScrollToBranch,
   onCopyMessage,
   onDeleteBranch,
-}: AssistantBranchRailProps) => {
+}: AssistantBranchRailProps) {
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const bottomScrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const syncingScrollRef = useRef<'top' | 'bottom' | null>(null);
   const [contentWidth, setContentWidth] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const activeBranchId = hoveredBranchTarget?.messageId === messageId ? hoveredBranchTarget.branchId : null;
 
   useEffect(() => {
     const contentElement = contentRef.current;
@@ -606,7 +729,7 @@ const AssistantBranchRail = ({
                       scrollViewportRef={scrollViewportRef}
                     >
                       <PopoverPrimitive.Root
-                        open={expandBranchPopoverTarget?.messageId === messageId && expandBranchPopoverTarget?.branchId === branch.id}
+                        open={expandPopoverBranchId === branch.id}
                         onOpenChange={(open) => onExpandBranchPopoverTarget(open ? { messageId, branchId: branch.id } : null)}
                       >
                         <Tooltip content={t('workspace.expandBranches')}>
@@ -786,7 +909,7 @@ const AssistantBranchRail = ({
       </div>
     </div>
   );
-};
+});
 
 /** 统一根据角色和运行态生成消息气泡样式。 */
 const resolveMessageBubbleClass = (role: 'user' | 'assistant' | 'system', status: 'loading' | 'done' | 'error' | 'cancelled') =>

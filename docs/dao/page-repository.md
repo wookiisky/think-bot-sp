@@ -33,6 +33,9 @@
 
 ## 4. 事务边界与并发约束
 
+- `getPage` 走已解析记录缓存；`deletePage / clearCache / clearPageData / getCacheStats` 只枚举 key（Chrome 130+ 用 `storage.getKeys`，否则退化为整库读取取 key），占用统计交给 `getBytesInUse`，不再把 90 天正文全部搬进内存后 `JSON.stringify`。
+- `getPage / getAllPages / listRecentPages / searchPages / getCacheStats` 为纯读方法，不进入全局写队列。
+
 - 页面记录写入与更新时间更新必须一起完成。
 - 同一存储区域的仓储实例共用写入协调器；读取、修改和保存属于同一次操作，两个标签完成或提取与开关修改并发时不得丢掉独立更新。
 - 页面硬删除必须与会话和 loading 清理保持同一操作序列。

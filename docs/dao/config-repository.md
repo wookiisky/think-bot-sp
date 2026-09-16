@@ -29,6 +29,9 @@
 
 ## 4. 事务边界与并发约束
 
+- 配置读取按存储修订号缓存已解析且已补种子的结果：一次发送里模型解析、并行分支、黑名单判定重复读取配置不再各自 parse 一遍；任何配置写入都会让缓存失效。
+- `getConfig / exportConfig / getEnabledCompleteModels / getModelById` 为纯读方法，不进入全局写队列。
+
 - 配置按单对象原子写入。
 - 保存前必须通过 schema 校验。
 - 每次成功保存、导入或模板并入都必须刷新 `ExtensionConfig.updatedAt`。
