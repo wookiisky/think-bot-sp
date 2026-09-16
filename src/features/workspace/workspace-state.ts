@@ -575,3 +575,17 @@ export const applyLoadingStateToMessages = (
     });
   });
 };
+
+/** 判断标签是否已有可见文本内容。 */
+export const promptTabHasContent = (messages: ChatMessageState[]): boolean =>
+  messages.some((message) => {
+    if ((message.displayContent ?? message.content).trim()) {
+      return true;
+    }
+
+    return message.branches.some((branch) => branch.content.trim().length > 0);
+  });
+
+/** 判断当前 promptTab 是否应直接触发快捷输入请求：快捷标签、无历史、无进行中的会话。 */
+export const shouldTriggerPromptTab = (promptTab: PromptTabDefinition, messages: ChatMessageState[], sessionId: string | null): boolean =>
+  promptTab.id !== CHAT_PROMPT_TAB_ID && Boolean(promptTab.triggerPrompt) && messages.length === 0 && !sessionId;

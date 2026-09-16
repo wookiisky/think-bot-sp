@@ -6,6 +6,7 @@ import type {
   SidebarLoadingStateRecord,
   SidebarPageRecord,
 } from '../../services/runtime-messaging/sidebar-contract';
+import { bindWorkspaceTabId, createWorkspaceCommands, type BoundWorkspaceCommands } from '../workspace/workspace-commands';
 
 type PageListResponse = {
   /** 响应类型。 */
@@ -64,37 +65,8 @@ type GetConfigResponse = {
   config: ExtensionConfig;
 };
 
-type BranchDescriptor = {
-  /** 分支 id。 */
-  branchId: string;
-  /** 分支模型 id。 */
-  modelId: string;
-  /** 分支模型展示名。 */
-  modelLabel: string;
-};
-
-type ConversationsStreamMessageEvent = {
-  /** 监听流式消息。 */
-  addListener: chrome.runtime.Port['onMessage']['addListener'];
-  /** 移除流式消息监听。 */
-  removeListener: chrome.runtime.Port['onMessage']['removeListener'];
-};
-
-type ConversationsStreamPort = {
-  /** 断开流式订阅。 */
-  disconnect: () => void;
-  /** 流式消息事件。 */
-  onMessage: ConversationsStreamMessageEvent;
-  /** 对端断开事件；worker 被回收时触发，用于自动重连。 */
-  onDisconnect?: {
-    /** 监听断开。 */
-    addListener: (_listener: () => void) => void;
-    /** 移除断开监听。 */
-    removeListener: (_listener: () => void) => void;
-  };
-};
-
-type ConversationsApi = {
+/** 历史页专属命令：页面列表、详情、标题、删除与导航。 */
+type ConversationsPageCommands = {
   /** 列出最近页面。 */
   listPages: () => Promise<PageListResponse>;
   /** 搜索页面。 */
@@ -107,128 +79,14 @@ type ConversationsApi = {
   deletePage: (normalizedUrl: string) => Promise<DeletePageResponse>;
   /** 读取配置。 */
   getConfig: () => Promise<GetConfigResponse>;
-  /** 发送消息。 */
-  sendChat: (input: {
-    pageUrl: string;
-    promptTabId: string;
-    modelId: string;
-    text: string;
-    displayText?: string;
-    images: string[];
-    includePageContent: boolean;
-  }) => Promise<{
-    type: 'SEND_CHAT_SUCCESS';
-    payload: {
-      sessionId: string;
-      userMessageId: string | null;
-      messageId: string;
-      branchId: string;
-      modelId: string;
-      modelLabel: string;
-      branches: BranchDescriptor[];
-    };
-  }>;
-  /** 编辑用户消息。 */
-  editUserMessage: (input: { pageUrl: string; promptTabId: string; messageId: string; text: string }) => Promise<{
-    type: 'EDIT_USER_MESSAGE_SUCCESS';
-    payload: {
-      editedMessageId: string;
-      messageId: string;
-      branchId: string;
-      modelId: string;
-      modelLabel: string;
-      sessionId: string;
-      branches: BranchDescriptor[];
-    };
-  }>;
-  /** 重试用户消息。 */
-  retryUserMessage: (input: { pageUrl: string; promptTabId: string; messageId: string }) => Promise<{
-    type: 'RETRY_USER_MESSAGE_SUCCESS';
-    payload: {
-      retriedMessageId: string;
-      messageId: string;
-      branchId: string;
-      modelId: string;
-      modelLabel: string;
-      sessionId: string;
-      branches: BranchDescriptor[];
-    };
-  }>;
-  /** 重试助手消息。 */
-  retryMessage: (input: { pageUrl: string; promptTabId: string; messageId: string; branchId: string }) => Promise<{
-    type: 'RETRY_MESSAGE_SUCCESS';
-    payload: {
-      messageId: string;
-      branchId: string;
-      sessionId: string;
-    };
-  }>;
-  /** 切换当前轮主分支。 */
-  selectAssistantBranch: (input: { pageUrl: string; promptTabId: string; messageId: string; branchId: string }) => Promise<{
-    type: 'SELECT_ASSISTANT_BRANCH_SUCCESS';
-    payload: {
-      messageId: string;
-      branchId: string;
-    };
-  }>;
-  /** 新增分支。 */
-  expandMessageBranches: (input: { pageUrl: string; promptTabId: string; messageId: string; modelId: string }) => Promise<{
-    type: 'EXPAND_MESSAGE_BRANCHES_SUCCESS';
-    payload: {
-      messageId: string;
-      branches: BranchDescriptor[];
-    };
-  }>;
-  /** 停止主会话。 */
-  stopSession: (input: { pageUrl: string; promptTabId: string; sessionId: string }) => Promise<{
-    type: 'STOP_SESSION_SUCCESS';
-    payload: {
-      sessionId: string;
-      stopped: boolean;
-    };
-  }>;
-  /** 停止分支。 */
-  stopBranch: (input: { pageUrl: string; promptTabId: string; branchId: string }) => Promise<{
-    type: 'STOP_BRANCH_SUCCESS';
-    payload: {
-      branchId: string;
-      stopped: boolean;
-    };
-  }>;
-  /** 删除分支。 */
-  deleteBranch: (input: { pageUrl: string; promptTabId: string; messageId: string; branchId: string }) => Promise<{
-    type: 'DELETE_BRANCH_SUCCESS';
-    payload: {
-      messageId: string;
-      branchId: string;
-      deleted: boolean;
-    };
-  }>;
-  /** 清空当前标签会话。 */
-  clearTabConversation: (input: { pageUrl: string; promptTabId: string }) => Promise<{
-    type: 'CLEAR_TAB_CONVERSATION_SUCCESS';
-    payload: {
-      normalizedUrl: string;
-      promptTabId: string;
-      cleared: boolean;
-    };
-  }>;
-  /** 导出当前标签会话。 */
-  exportConversation: (input: { pageUrl: string; promptTabId: string }) => Promise<{
-    type: 'EXPORT_CONVERSATION_SUCCESS';
-    payload: {
-      filename: string;
-      content: string;
-      mimeType: 'text/markdown;charset=utf-8';
-    };
-  }>;
-  /** 建立流式订阅。 */
-  connectStream: (input: { pageUrl: string; promptTabId: string }) => ConversationsStreamPort;
   /** 打开原网页。 */
   openSourcePage: (url: string) => Promise<void>;
   /** 打开设置页。 */
   openSettingsPage: () => Promise<void>;
 };
+
+/** 历史页 API：页面专属命令加上绑定了占位 tabId 的共享会话命令。 */
+type ConversationsApi = ConversationsPageCommands & BoundWorkspaceCommands;
 
 /** conversations 页内部统一使用伪 tabId 发送共享聊天命令。 */
 const CONVERSATIONS_TAB_ID = 0;
@@ -240,134 +98,15 @@ const openTab = async (url: string) => {
 
 /** 创建 conversations 页 API。 */
 export const createConversationsApi = (): ConversationsApi => ({
-  listPages() {
-    return requestRuntimeMessage({
-      type: 'LIST_PAGES',
-    });
-  },
-  searchPages(query) {
-    return requestRuntimeMessage({
-      type: 'SEARCH_PAGES',
-      query,
-    });
-  },
-  getPageDetail(normalizedUrl) {
-    return requestRuntimeMessage({
-      type: 'GET_PAGE_DETAIL',
-      normalizedUrl,
-    });
-  },
-  updatePageTitle(input) {
-    return requestRuntimeMessage({
-      type: 'UPDATE_PAGE_TITLE',
-      ...input,
-    });
-  },
-  deletePage(normalizedUrl) {
-    return requestRuntimeMessage({
-      type: 'DELETE_PAGE',
-      normalizedUrl,
-    });
-  },
-  getConfig() {
-    return requestRuntimeMessage({
-      type: 'GET_CONFIG',
-    });
-  },
-  sendChat(input) {
-    return requestRuntimeMessage({
-      type: 'SEND_CHAT',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  editUserMessage(input) {
-    return requestRuntimeMessage({
-      type: 'EDIT_USER_MESSAGE',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  retryUserMessage(input) {
-    return requestRuntimeMessage({
-      type: 'RETRY_USER_MESSAGE',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  retryMessage(input) {
-    return requestRuntimeMessage({
-      type: 'RETRY_MESSAGE',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  selectAssistantBranch(input) {
-    return requestRuntimeMessage({
-      type: 'SELECT_ASSISTANT_BRANCH',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  expandMessageBranches(input) {
-    return requestRuntimeMessage({
-      type: 'EXPAND_MESSAGE_BRANCHES',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  stopSession(input) {
-    return requestRuntimeMessage({
-      type: 'STOP_SESSION',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  stopBranch(input) {
-    return requestRuntimeMessage({
-      type: 'STOP_BRANCH',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  deleteBranch(input) {
-    return requestRuntimeMessage({
-      type: 'DELETE_BRANCH',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  clearTabConversation(input) {
-    return requestRuntimeMessage({
-      type: 'CLEAR_TAB_CONVERSATION',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  exportConversation(input) {
-    return requestRuntimeMessage({
-      type: 'EXPORT_CONVERSATION',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-  },
-  connectStream(input) {
-    const port = chrome.runtime.connect({
-      name: 'sidepanel',
-    });
-    port.postMessage({
-      type: 'SUBSCRIBE_SIDEBAR_STREAM',
-      tabId: CONVERSATIONS_TAB_ID,
-      ...input,
-    });
-    return port;
-  },
-  openSourcePage(url) {
-    return openTab(url);
-  },
-  openSettingsPage() {
-    return Promise.resolve(chrome.runtime.openOptionsPage());
-  },
+  ...bindWorkspaceTabId(createWorkspaceCommands(), CONVERSATIONS_TAB_ID),
+  listPages: () => requestRuntimeMessage({ type: 'LIST_PAGES' }),
+  searchPages: (query) => requestRuntimeMessage({ type: 'SEARCH_PAGES', query }),
+  getPageDetail: (normalizedUrl) => requestRuntimeMessage({ type: 'GET_PAGE_DETAIL', normalizedUrl }),
+  updatePageTitle: (input) => requestRuntimeMessage({ type: 'UPDATE_PAGE_TITLE', ...input }),
+  deletePage: (normalizedUrl) => requestRuntimeMessage({ type: 'DELETE_PAGE', normalizedUrl }),
+  getConfig: () => requestRuntimeMessage({ type: 'GET_CONFIG' }),
+  openSourcePage: (url) => openTab(url),
+  openSettingsPage: () => Promise.resolve(chrome.runtime.openOptionsPage()),
 });
 
 export type { ConversationsApi };

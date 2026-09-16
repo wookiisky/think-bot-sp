@@ -10,12 +10,12 @@ import { createFakeStorageArea } from '../../../helpers/fake-storage';
 const scope = { normalizedUrl: 'https://example.com/article', promptTabId: 'summary' };
 const request = { ...scope, modelId: 'main', content: 'question', images: [], pageContent: '' };
 
-const createFixture = ({ parallel = false }: { parallel?: boolean } = {}) => {
+const createFixture = ({ parallel = false, supportsImages = {} }: { parallel?: boolean; supportsImages?: Record<string, boolean> } = {}) => {
   const models = ['main', 'other'].map((id) => modelConfigSchema.parse({
     id, name: id, provider: 'openai-compatible', enabled: true, model: id,
     baseUrl: 'https://example.invalid/v1', apiKey: 'dummy', deployment: '',
     tools: [], thinkingBudget: null,
-    supportsImages: false, order: 0, deletedAt: null,
+    supportsImages: supportsImages[id] ?? false, order: 0, deletedAt: null,
   }));
   const config = createDefaultConfig({ models, basic: { parallelModelIds: parallel ? ['other'] : [] } });
   const repository = createConversationRepository(createChromeLocalAdapter(createFakeStorageArea()));
@@ -30,6 +30,7 @@ const createFixture = ({ parallel = false }: { parallel?: boolean } = {}) => {
       sdkModel: createOpenAICompatible({ name: 'test', apiKey: 'dummy', baseURL: model.baseUrl }).chatModel(model.id),
     }),
   };
+  const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
   const service = createChatDispatchService({
     configRepository: {
       getConfig: async () => config,
@@ -39,8 +40,9 @@ const createFixture = ({ parallel = false }: { parallel?: boolean } = {}) => {
     providerRegistry,
     portBus: { publishToPromptTab: (event) => { events.push(event); } },
     streamText,
+    logger,
   });
-  return { repository, service, streamText, events, providerRegistry };
+  return { repository, service, streamText, events, providerRegistry, models, logger };
 };
 
 afterEach(() => vi.useRealTimers());
@@ -50,7 +52,7 @@ describe('shared stream lifecycle', () => {
     const { repository, service, streamText, events } = createFixture();
     const original = await service.dispatchChat(request);
     await original.done;
-    const append = vi.spyOn(repository, 'appendAssistantChunk');
+    const append = vi.spyOn(repository, 'appendAssistantBranchChunk');
     events.length = 0;
     streamText.mockImplementation(async () => ({
       textStream: (async function* () { for (let i = 0; i < 1000; i += 1) yield '段'; })(),
@@ -106,9 +108,12 @@ describe('shared stream lifecycle', () => {
       yield 'partial';
       throw new Error('upstream failed');
     })() }));
-    vi.spyOn(repository, 'failAssistantMessage').mockRejectedValue(new Error('main storage failed'));
-    vi.spyOn(repository, 'failAssistantBranch').mockRejectedValue(new Error('branch storage failed'));
+    let primaryBranchId: string | null = null;
+    vi.spyOn(repository, 'failAssistantBranch').mockImplementation(async ({ branchId }) => {
+      throw new Error(branchId === primaryBranchId ? 'main storage failed' : 'branch storage failed');
+    });
     const session = await service.dispatchChat(request);
+    primaryBranchId = session.branchId;
     const registry = createSidebarSessionRegistry();
     registry.register(session, scope);
     await expect(session.done).resolves.toMatchObject({ status: 'error', persisted: false, errorMessage: 'main storage failed' });
@@ -134,7 +139,7 @@ describe('shared stream lifecycle', () => {
 
   it('does not publish failed writes as chunks or report a finished stream', async () => {
     const { repository, service, events } = createFixture();
-    vi.spyOn(repository, 'appendAssistantChunk').mockRejectedValue(new Error('write failed'));
+    vi.spyOn(repository, 'appendAssistantBranchChunk').mockRejectedValue(new Error('write failed'));
     const session = await service.dispatchChat(request);
     await expect(session.done).resolves.toMatchObject({ status: 'error', errorMessage: 'write failed' });
     expect(events.some((event) => event.type === 'CHAT_STREAM_CHUNK' || event.type === 'CHAT_STREAM_FINISHED')).toBe(false);
@@ -226,6 +231,114 @@ describe('shared stream lifecycle', () => {
     expect(streamText).not.toHaveBeenCalled();
     await expect(repository.getConversation(scope.normalizedUrl, scope.promptTabId)).resolves.toEqual(before);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('primary stream keeps writing to its own branch after the user selects a sibling mid-stream', async () => {
+    const { repository, service, streamText } = createFixture({ parallel: true });
+    let releasePrimary!: () => void;
+    const gate = new Promise<void>((resolve) => { releasePrimary = resolve; });
+    let primaryStarted!: () => void;
+    const started = new Promise<void>((resolve) => { primaryStarted = resolve; });
+    streamText.mockImplementation(async ({ model }) => ({ textStream: (async function* () {
+      if ((model as { modelId: string }).modelId === 'main') {
+        primaryStarted();
+        await gate;
+        yield 'main answer';
+      } else {
+        yield 'other answer';
+      }
+    })() }));
+    const session = await service.dispatchChat(request);
+    await started;
+    const sibling = session.branchSessions[0]!;
+    await sibling.done;
+    await repository.selectAssistantBranch({ ...scope, messageId: session.messageId, branchId: sibling.branchId, now: Date.now() });
+    releasePrimary();
+    await expect(session.done).resolves.toMatchObject({ status: 'done', persisted: true });
+    const message = (await repository.getConversation(scope.normalizedUrl, scope.promptTabId))?.messages.find((item) => item.id === session.messageId);
+    expect(message?.branches.find((branch) => branch.isPrimary)).toMatchObject({ content: 'main answer', status: 'done' });
+    expect(message?.branches.find((branch) => branch.id === sibling.branchId)).toMatchObject({ content: 'other answer', status: 'done' });
+    expect(message?.selectedBranchId).toBe(sibling.branchId);
+  });
+
+  it('drops parallel branches whose model cannot accept images instead of persisting a doomed branch', async () => {
+    const { repository, service, streamText, logger } = createFixture({ parallel: true, supportsImages: { main: true } });
+    const session = await service.dispatchChat({ ...request, images: ['data:image/png;base64,AAA'] });
+    await expect(session.done).resolves.toMatchObject({ status: 'done', persisted: true });
+    expect(streamText).toHaveBeenCalledTimes(1);
+    expect(session.branches).toHaveLength(1);
+    const message = (await repository.getConversation(scope.normalizedUrl, scope.promptTabId))?.messages.find((item) => item.id === session.messageId);
+    expect(message?.branches.map((branch) => branch.modelId)).toEqual(['main']);
+    expect(logger.warn).toHaveBeenCalledWith('branch.skipped.no_images', expect.objectContaining({ modelId: 'other' }));
+  });
+
+  it.each(['edit', 'retry'] as const)('%s rejects replaying persisted images before persistence when the model no longer accepts images', async (operation) => {
+    const { repository, service, streamText, models } = createFixture({ supportsImages: { main: true } });
+    const original = await service.dispatchChat({ ...request, images: ['data:image/png;base64,AAA'] });
+    await original.done;
+    const before = await repository.getConversation(scope.normalizedUrl, scope.promptTabId);
+    streamText.mockClear();
+    models[0]!.supportsImages = false;
+    const start = operation === 'edit'
+      ? service.editUserMessage({ ...scope, messageId: original.userMessageId!, content: 'edited', pageContent: '' })
+      : service.retryUserMessage({ ...scope, messageId: original.userMessageId!, pageContent: '' });
+    await expect(start).rejects.toThrow('model does not support images');
+    expect(streamText).not.toHaveBeenCalled();
+    await expect(repository.getConversation(scope.normalizedUrl, scope.promptTabId)).resolves.toEqual(before);
+  });
+
+  it('rolls the turn back instead of persisting an error turn when loading setup fails under rollbackOnFailure', async () => {
+    const { repository, service, streamText } = createFixture();
+    vi.spyOn(repository, 'saveLoadingState').mockRejectedValue(new Error('setup failed'));
+    const failBranch = vi.spyOn(repository, 'failAssistantBranch');
+    await expect(service.dispatchChat({ ...request, rollbackOnFailure: true })).rejects.toThrow('setup failed');
+    expect(streamText).not.toHaveBeenCalled();
+    expect(failBranch).not.toHaveBeenCalled();
+    await expect(repository.getConversation(scope.normalizedUrl, scope.promptTabId)).resolves.toBeNull();
+    await expect(repository.getLoadingState(scope.normalizedUrl, scope.promptTabId)).resolves.toBeNull();
+  });
+
+  it('marks every placeholder as failed when loading setup and turn rollback both fail', async () => {
+    const { repository, service, streamText } = createFixture({ parallel: true });
+    const setupError = new Error('setup failed');
+    vi.spyOn(repository, 'saveLoadingState').mockRejectedValue(setupError);
+    vi.spyOn(repository, 'rollbackTurnMessages').mockRejectedValue(new Error('rollback failed'));
+    await expect(service.dispatchChat({ ...request, rollbackOnFailure: true })).rejects.toBe(setupError);
+    expect(streamText).not.toHaveBeenCalled();
+    const conversation = await repository.getConversation(scope.normalizedUrl, scope.promptTabId);
+    const assistant = conversation?.messages.find((message) => message.role === 'assistant');
+    expect(assistant?.status).toBe('error');
+    expect(assistant?.branches.map((branch) => branch.status)).toEqual(['error', 'error']);
+    await expect(repository.getLoadingState(scope.normalizedUrl, scope.promptTabId)).resolves.toBeNull();
+  });
+
+  it('preserves the setup error and attempts every branch even when rollback compensation fails', async () => {
+    const { repository, service } = createFixture({ parallel: true });
+    const setupError = new Error('setup failed');
+    vi.spyOn(repository, 'saveLoadingState').mockRejectedValue(setupError);
+    vi.spyOn(repository, 'rollbackTurnMessages').mockRejectedValue(new Error('rollback failed'));
+    const failBranch = vi.spyOn(repository, 'failAssistantBranch').mockRejectedValue(new Error('compensation failed'));
+    await expect(service.dispatchChat({ ...request, rollbackOnFailure: true })).rejects.toBe(setupError);
+    const conversation = await repository.getConversation(scope.normalizedUrl, scope.promptTabId);
+    const assistant = conversation?.messages.find((message) => message.role === 'assistant');
+    expect(failBranch.mock.calls.map(([input]) => input.branchId)).toEqual(assistant?.branches.map((branch) => branch.id));
+    expect(failBranch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['edit', 'retry'] as const)('%s reruns with the primary branch model even after a sibling was selected', async (operation) => {
+    const { repository, service, streamText } = createFixture({ parallel: true });
+    const original = await service.dispatchChat(request);
+    await original.done;
+    const sibling = original.branchSessions[0]!;
+    await repository.selectAssistantBranch({ ...scope, messageId: original.messageId, branchId: sibling.branchId, now: Date.now() });
+    streamText.mockClear();
+    const session = operation === 'edit'
+      ? await service.editUserMessage({ ...scope, messageId: original.userMessageId!, content: 'edited', pageContent: '' })
+      : await service.retryUserMessage({ ...scope, messageId: original.userMessageId!, pageContent: '' });
+    await session.done;
+    expect(session.modelId).toBe('main');
+    // 并行分支先于主分支启动，只断言集合而不断言顺序。
+    expect(new Set(streamText.mock.calls.map(([call]) => (call.model as { modelId: string }).modelId))).toEqual(new Set(['main', 'other']));
   });
 
   it('does not tell clients to remove a turn when its rollback failed', async () => {

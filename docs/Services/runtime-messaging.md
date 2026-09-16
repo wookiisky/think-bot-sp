@@ -13,6 +13,12 @@
 
 ## 3. 能力边界
 
+契约单一来源：
+
+- `sidebar-contract.ts` 同时声明命令 schema、响应 schema（`sidebarResponseSchema`）与 port 事件 schema；流式事件共用 `streamScopeSchema` 定位字段。
+- `createSidebarCommandHandler` 的返回类型钉在 `SidebarResponse` 上，side panel 与 conversations 的 API 层通过 `SidebarCommandInput` / `SidebarResponseFor` 派生请求与响应类型，禁止再手写一份镜像。
+- 两个页面共用的会话命令由 `features/workspace/workspace-commands.ts` 统一生成，历史页用 `bindWorkspaceTabId` 绑定占位 `tabId`。
+
 负责：
 
 - one-shot command 编解码。
@@ -176,7 +182,8 @@ long-lived port 事件：
 - `DELETE_BRANCH` 删除最后一个分支时，会在仓储层一并删除整条助手消息，避免留下空壳记录。
 - `CLEAR_PAGE_CONTEXT` 与 `CLEAR_TAB_CONVERSATION` 必须保持语义分离：前者清理当前页面缓存、页面级状态、会话和 loading，后者只清理当前 `promptTab` 会话与 loading。
 - `CLEAR_PAGE_CONTEXT` 必须先取消当前页面活跃会话并等待其生命周期收敛，再删除页面记录，避免流式尾包把刚清空的页面重新写回。
-- `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态。
+- `CONFIRM_BLACKLIST_CONTINUE` 只放行当前 `browserTab + normalizedUrl` 的当前打开行为，不能持久化为全局白名单或页面长期状态；令牌保存在 `chrome.storage.session`，随浏览器会话消失，但能跨 service worker 空闲重启保留。
+- `CONFIRM_BLACKLIST_CONTINUE`、`SWITCH_EXTRACTION_METHOD`、`RE_EXTRACT_CONTENT` 与其他侧边栏命令一样走 `createSidebarCommandHandler`，统一经过 schema 校验、sender 校验和 `{ error }` 收敛；background 入口不再为它们保留特判分支。
 - extension page 的 API 封装在消费 one-shot command 前，必须先把 background 返回的 `{ error }` 收敛为异常，禁止 UI 组件直接读取未校验的 `payload` 字段。
 
 ## 6. 错误与异常处理

@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { buildConversationKey, conversationRecordSchema } from './conversation-schema';
 
 export type ConversationRecord = z.infer<typeof conversationRecordSchema>;
-type ConversationMessageRecord = ConversationRecord['messages'][number];
-type AssistantMessageRecord = ConversationMessageRecord & { role: 'assistant' };
+export type ConversationMessageRecord = ConversationRecord['messages'][number];
+export type AssistantMessageRecord = ConversationMessageRecord & { role: 'assistant' };
 type UserMessageRecord = ConversationMessageRecord & { role: 'user' };
 type BranchRecord = AssistantMessageRecord['branches'][number];
 export type InitialBranchSeed = {
@@ -93,7 +93,7 @@ export const createLoadingAssistantMessage = ({
 };
 
 /** 解析 assistant 当前选中的主分支。 */
-const getSelectedBranch = (assistantMessage: AssistantMessageRecord): BranchRecord | null => {
+export const getSelectedBranch = (assistantMessage: AssistantMessageRecord): BranchRecord | null => {
   const selectedBranchId = assistantMessage.selectedBranchId ?? assistantMessage.branches[0]?.id ?? null;
   if (!selectedBranchId) {
     return null;

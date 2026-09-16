@@ -73,6 +73,7 @@ Chrome manifest 展示名称固定为 `Think Bot`，描述固定为 `面向深�
 - 浏览器入口与安装生命周期统一由 background 协调，覆盖扩展图标点击、右键菜单和首次安装。
 - Background 通过 typed command/port 向三个 extension pages 暴露能力。
 - 侧边栏和对话管理页共用 `reduceWorkspaceEvent` 与会话状态转换；Shell 负责页面生命周期、订阅和布局，避免维护两套流事件规则。
+- 两个 Shell 还共用 `features/workspace/` 下的 `WorkspaceWorkbench`（标签栏、消息线程、分支预览层、输入区）、`useWorkspaceToast`、`useWorkspaceDisplayConfig`、`useDragResize` 与 `workspace-commands`；Shell 只保留页面专属部分（侧边栏的提取与黑名单流程、历史页的页面列表与详情头）。
 - 调试日志只用于运行时排障，不持久化、不参与同步、也不作为恢复依据。
 - 同步服务只读写新的版本化快照格式，不兼容旧远端结构。
 

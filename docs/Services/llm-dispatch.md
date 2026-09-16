@@ -6,6 +6,16 @@
 
 ## 2. 核心抽象
 
+模块文件划分（`src/services/llm-dispatch/`）：
+
+- `chat-dispatch-service.ts`：五个入口（发送、编辑重发、用户重试、分支重试、新增分支）与 `prepareTurn`；只负责读取会话、决定模型、变更仓储。
+- `turn-session.ts`：整轮启动器，先持久化 loading 再启动主分支与并行分支，收敛后统一发 `LOADING_STATE_UPDATE`。
+- `stream-session.ts`：单条流执行器，负责消费、按显式 `branchId` 持久化、终态收敛与回滚。
+- `turn-plan.ts`：首轮分支计划、图片能力校验、`resolveTurnModelId` 与聚合状态。
+- `prompt-assembly.ts`：系统提示词与页面正文拼装、历史重建、AI SDK 调用参数。
+- `stream-failure.ts`：错误文本提取、超时取消域、按流种类给定失败文案。
+- `dispatch-types.ts`：会话句柄、事件与依赖类型；`ChatStreamEvent` 直接从 `sidebarPortEventSchema` 推导，会话仓储依赖取真实仓储的方法子集。
+
 - `ModelConfig`
 - `ResolvedModelProvider`
 - `ChatRequestContext`
@@ -79,20 +89,20 @@ Provider 适配规则：
 ## 5. 关键流程
 
 1. 读取模型配置和页面上下文。
-2. 校验模型可用性与图片能力；如果图片能力不匹配，则在任何持久化和网络请求之前直接失败。
+2. 校验模型可用性与图片能力，且必须在任何持久化和网络请求之前完成：主模型不支持图片时直接失败；并行模型不支持图片时跳过该分支并记录 `branch.skipped.no_images`，不会为它持久化一个注定 400 的分支。编辑重发、用户重试、分支重试和继续新增分支回放历史图片时应用同一规则。
 3. 若本次请求附带页面正文，则把 `PageRecord.content` 追加到最终 `system prompt` 末尾的 `# Page Content` 段；用户消息正文保持原样。若缓存缺失或开关关闭，则退化为仅发送用户消息。
 4. 先写用户消息、带全部首轮分支摘要的助手占位消息和 loading state。
 5. 根据当前 `promptTab` 解析首轮执行计划：
    - `chat` 只跑当前主模型。
    - 快捷输入跑“当前主模型 + 全局并行模型 + 当前快捷输入额外并行模型”。
-6. 主分支与并行分支使用同一个流执行器；首个非空 chunk 立即保存，后续文本按 50ms 或 8192 字节上限合并。每个批次先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
+6. 主分支与并行分支使用同一个流执行器，并且都按显式 `branchId` 写入自己的分支，不依赖“当前选中分支”解析写入目标；用户在流式期间切换选中分支不会改写正在输出的分支。首个非空 chunk 立即保存，后续文本按 50ms 或 8192 字节上限合并。每个批次先写会话，再推送对应 `CHAT_STREAM_CHUNK / BRANCH_STREAM_CHUNK` 事件。
 7. 各分支独立收敛到 `done / error / cancelled`，并同步助手消息镜像；单分支失败不会影响其他分支和主回答。
 7.0. 每个已进入 `streamText` 的分支都会记录单请求 `startedAt`，STARTED 事件和 loading state 使用同一时间戳；UI 在 loader 右侧以 `mm:ss` 展示实时计时，并在 side panel 重开后延续真实已运行时间。
 7.0.1. 每个已进入 `streamText` 的分支都会记录从发起调用到本地消费完流的 `durationMs`；若在调用前失败则保持 `null`。终态事件携带同一 `durationMs`，UI 可在模型名右侧即时显示秒数。
 7.1. Provider 返回 `APICallError.responseBody` 或 `data` 时，实时失败事件优先携带该原始 API 返回内容，再回退到 SDK 错误消息。
 7.2. 流式失败只把 `error / cancelled` 状态写入会话历史，不把 Provider 原始错误文本持久化；UI 用本次 port 事件把错误详情展示在当前回复中。若当前回复尚无内容，错误文本直接作为本地回复正文展示。
 7.2.1. 若失败事件早于 UI 订阅或早于 `SEND_CHAT` 成功响应，`port-bus` 会短暂补发失败事件，UI 必须把同一 `sessionId` 标记为终态，禁止较晚的命令成功响应把错误回复重新覆盖为 loading。
-7.3. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。
+7.3. 若本轮开启了 `rollbackOnFailure` 且最终为 `error`，则在错误收敛后立即回滚本轮新增的用户消息与助手消息，并把失败事件作为只读展示态发给 UI。loading state 写入失败等 setup 阶段错误同样遵守该语义：开启回滚时整轮回滚，否则把全部分支收敛为 `error`。
 8. 所有首轮分支都收敛后，统一通过 `LOADING_STATE_UPDATE` 结束该轮 loading；清理失败只允许留下残留 loading，不能覆盖主生命周期结果。
 9. 继续新增分支时，前端必须先让用户选择 `modelId`，后台只为这一个模型追加单分支请求。
 10. 手动新增分支的候选模型固定来自“所有启用且配置完整的模型”，包含当前主模型。
